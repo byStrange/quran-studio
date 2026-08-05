@@ -116,19 +116,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-full bg-bg">
       <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-surface/50">
-        <div className="px-5 pb-5 pt-6">
-          <div className="flex items-center gap-2.5">
-            <div className="grid size-8 place-items-center rounded-lg bg-accent text-accent-fg">
-              <BookOpen className="size-4" aria-hidden />
-            </div>
-            <div className="leading-tight">
-              <div className="text-sm font-semibold tracking-tight text-fg">Quran Studio</div>
-              <div className="text-[0.6875rem] text-fg-subtle">Ruku by ruku</div>
-            </div>
-          </div>
-        </div>
-
-        <nav className="flex-1 space-y-0.5 px-3">
+        {/* The brand now lives in the window title bar, so the nav starts here. */}
+        <nav className="flex-1 space-y-0.5 px-3 pt-4">
           {PRIMARY_NAV.map((item) => (
             <NavRow key={item.to} item={item} />
           ))}
