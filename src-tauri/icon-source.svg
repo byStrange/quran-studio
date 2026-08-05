@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#116B52"/>
+      <stop offset="100%" stop-color="#0A4436"/>
+    </linearGradient>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FDFBF6"/>
+      <stop offset="100%" stop-color="#EFE9DC"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
+
+  <!-- Mihrab arch framing the book -->
+  <path d="M512 168c-104 0-188 84-188 188v300h376V356c0-104-84-188-188-188z"
+        fill="none" stroke="#D6B25E" stroke-width="16" opacity="0.55"/>
+
+  <!-- Open book: two pages meeting at a spine -->
+  <g transform="translate(0,44)">
+    <path d="M512 468c-58-42-134-62-212-54-16 2-28 15-28 31v244c0 18 16 32 34 30
+             72-8 142 11 206 51V468z" fill="url(#page)"/>
+    <path d="M512 468c58-42 134-62 212-54 16 2 28 15 28 31v244c0 18-16 32-34 30
+             -72-8-142 11-206 51V468z" fill="url(#page)" opacity="0.92"/>
+    <path d="M512 468v302" stroke="#0A4436" stroke-width="14" stroke-linecap="round" opacity="0.35"/>
+
+    <!-- Text lines -->
+    <g stroke="#0A4436" stroke-width="12" stroke-linecap="round" opacity="0.28">
+      <path d="M340 546h128M340 598h140M340 650h108"/>
+      <path d="M556 546h128M556 598h140M556 650h108"/>
+    </g>
+  </g>
+
+  <!-- Crescent finial above the arch -->
+  <path d="M512 236c-30 0-54 24-54 54s24 54 54 54c10 0 20-3 28-8-18-6-31-24-31-46
+           s13-40 31-46c-8-5-18-8-28-8z" fill="#D6B25E"/>
+</svg>

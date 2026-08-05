@@ -1,0 +1,27 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Secrets — never commit
+.env
+.env.local
+.db-password.tmp
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Seed pipeline caches
+scripts/seed/.cache/
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.log
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/

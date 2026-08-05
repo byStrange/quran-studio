@@ -1,0 +1,140 @@
+# Project Brief: Quran Memorization & Study App (Tauri + Supabase + Ollama Cloud)
+
+You are building a desktop application to help a single developer-user learn and memorize the Quran ruku-by-ruku, with word-by-word vocabulary study, tafsir reading, AI-generated context and summaries, and progress/streak tracking. Build this as a complete, production-quality application — not a prototype. Ask clarifying questions only if something below is genuinely ambiguous; otherwise make sensible engineering decisions and document them in a `DECISIONS.md` file as you go.
+
+## 1. Tech Stack (fixed)
+
+- **Shell**: Tauri (Rust backend, webview frontend)
+- **Frontend**: React + TypeScript, Vite bundler
+- **Styling**: Tailwind CSS + a component library of your choice (e.g. shadcn/ui) — must support a polished, modern dark/light theme, not a default/generic look
+- **Backend-as-a-service**: Supabase (Postgres + Auth + Row Level Security). Each user account has fully isolated data.
+- **AI provider**: Ollama Cloud
+  - Base URL: `https://ollama.com/api` (also has an OpenAI-compatible surface at `https://ollama.com/v1`)
+  - Auth: `Authorization: Bearer $OLLAMA_API_KEY` header. Never hardcode the key — read from env/secure config, and proxy AI calls through a Rust Tauri command so the key never ships in the frontend bundle.
+  - Endpoints: `/api/chat` (preferred, supports message arrays) and `/api/generate`. Use a capable hosted cloud model (e.g. a `*-cloud` suffixed model — confirm current available model names via `/api/tags` at build time rather than hardcoding, since the catalog changes).
+  - All AI-generated content (word explanations, ruku summaries) should be cached in Supabase after first generation — see §5 — so it's generated once globally and reused for every user, not regenerated per request.
+- **UI language**: English only (no i18n system needed for v1).
+- **Audio**: none for v1 — text and tafsir only. Leave a clean extension point (e.g. an `audio_url` column left null) so recitation can be added later without a schema migration.
+
+## 2. Core Concept
+
+The app organizes the Quran into **rukus** (thematic passage groupings, ~558 total across the Quran) instead of pages. Each ruku is a **lesson**. The user works through lessons to memorize the Quran, building vocabulary and understanding as they go.
+
+## 3. Data Sourcing (do this first, before UI work)
+
+You need, for the whole Quran:
+1. Arabic text per ayah
+2. English translation per ayah (a reputable one, e.g. Saheeh International)
+3. Word-by-word breakdown per ayah: each Arabic word + transliteration + literal English gloss
+4. Ruku boundaries (which ayahs belong to which ruku, ruku numbers)
+5. Ibn Kathir tafsir text, mapped to ayah or ayah-range
+
+Recommended approach: use the **Quran Foundation API** (quran.com's official API, `api-docs.quran.foundation`) as the primary source — it exposes verses with word-by-word fields, ruku metadata, and a tafsir endpoint that includes Ibn Kathir. Requires registering for free app credentials (client ID/secret, OAuth client-credentials flow — no end-user login involved).
+
+If ruku metadata or Ibn Kathir coverage is incomplete there, cross-reference/backfill with:
+- `alquran.cloud` API (broad edition coverage, no key required) for translations
+- `quranapi.pages.dev` tafsir endpoint (bundles Ibn Kathir among others) as a fallback/cross-check for tafsir text
+
+**Do not call these APIs live at app runtime for core content.** Write a one-time seed/import script (Node or Python, your choice) that fetches all of the above once and writes it into the Supabase `quran_*` tables (§5). The running app should only read from Supabase for Quran content, never hit third-party Quran APIs directly. This avoids rate limits, works offline-first once synced, and gives you a stable dataset to build against immediately.
+
+Verify licensing/attribution requirements of whichever sources you use and include an "About / Sources" screen in the app crediting them.
+
+## 4. Feature Specification
+
+### 4.1 Ruku Reader (main lesson view)
+- Split-pane layout: Quran text on one side, tafsir panel on the other. Side is user-toggleable (left/right swap), persisted as a user preference.
+- Navigate lesson-by-lesson through rukus (prev/next), and also jump directly to any surah → ruku via a browsable index.
+- Selecting/clicking an ayah opens Ibn Kathir's tafsir for that ayah in the tafsir panel. If Ibn Kathir groups several ayahs into one tafsir entry (common), show the grouped entry and indicate the verse range it covers.
+- Each ayah displays: Arabic text, English translation, and an expandable word-by-word row (see 4.2).
+- A ruku's total lesson view includes an **AI-generated summary** section (see 4.3).
+
+### 4.2 Word-by-Word Vocabulary with AI Context
+- For every word in the ruku, show: Arabic word, transliteration, literal gloss (from the base dataset).
+- Additionally, generate (via Ollama Cloud, cached in Supabase — see §5/§6) a short **contextual explanation**: why this specific word/form is used in this specific ayah — grammatical role, nuance vs. a synonym, or thematic significance. This is per (surah, ayah, word position), generated once, reused for all users.
+- Vocabulary interaction:
+  - Mark any word as "learned" — tracked per user.
+  - A per-user vocabulary dashboard: total unique words encountered, learned, in-progress, with filters by surah/ruku.
+  - Quiz mode: pulls from the user's word pool (e.g. weighted toward "learning"/recently-marked words, spaced-repetition-lite — simplest reasonable v1: don't over-engineer a full SRS algorithm, but do prioritize words not recently answered correctly). Quiz format: show Arabic word, multiple-choice or type-the-meaning; record correct/incorrect per attempt to refine future weighting.
+
+### 4.3 AI Ruku Summary
+- Per ruku, generate once (cached, shared across users) a short summary answering "what should we learn/take away from this ruku" — key themes, lessons, context. Displayed prominently at the top or bottom of the ruku lesson view.
+- Provide a manual "regenerate" action (admin/debug use) in case the cached summary needs refreshing, but normal users just read the cached version.
+
+### 4.4 Memorization Tracking
+- Mark any ayah as "memorized" (per user). 
+- Derive and display: verses memorized (count + list, browsable by surah), surahs fully memorized (all ayahs in a surah marked), overall % of Quran memorized.
+- Ruku-level view shows memorization progress within that ruku (e.g. "6/8 ayahs memorized").
+
+### 4.5 Reading Hours & Streaks
+- Track reading sessions: start/stop (or idle-timeout-based) timer while the user is active in the reader view. Persist accumulated duration per day, per user.
+- Daily/weekly/total reading hours displayed on a stats/dashboard screen.
+- **Streak logic** (implement exactly):
+  - A calendar day (in the user's local timezone — store the user's timezone in their profile) counts toward the streak if the user logged any reading time that day.
+  - Current streak = consecutive counted days up to today/yesterday.
+  - If a day is missed entirely (zero reading time), the streak does **not** immediately reset to zero. Instead it enters a **"grace" / restorable state** for up to **3 days** following the missed day.
+  - To restore the streak during the grace window, the user must complete **at least 1 cumulative hour of reading in a single day** within those 3 days. On success, the streak count continues as if the miss hadn't happened (the missed day itself is recorded as a gap in history, but the streak counter is preserved/continued, not reset to 1).
+  - If the grace window (3 days) passes without a qualifying 1-hour day, the streak resets to 0 (next reading starts a new streak at 1).
+  - Track and display: current streak, longest streak ever, and whether the user is currently "in grace" (with a visible countdown of days remaining to restore).
+  - Design the schema so this logic is computable/auditable from raw daily reading totals (don't just store a single mutable counter with no history — keep a per-day reading-time record as the source of truth, and compute streak state from it, cached/materialized for performance if needed).
+
+### 4.6 Accounts
+- Supabase Auth (email/password at minimum; add OAuth providers if trivial to include, not required).
+- All user-scoped tables protected by Row Level Security — a user can only read/write their own rows. Quran content tables (verses, tafsir, cached AI summaries/explanations) are public-read, write-restricted to a service role (used only by your seed/import scripts and the AI-generation backend job).
+
+## 5. Supabase Schema (starting point — refine as needed)
+
+**Global/shared content (public read, service-role write):**
+- `quran_verses(id, surah_number, ayah_number, ruku_number, juz_number, arabic_text, translation_en)`
+- `quran_words(id, verse_id, position, arabic, transliteration, gloss_en)`
+- `word_ai_context(id, word_id, explanation, model_used, generated_at)` — 1:1 or cached per word
+- `tafsir_ibn_kathir(id, surah_number, ayah_start, ayah_end, content)`
+- `ruku_ai_summary(id, ruku_number, summary, model_used, generated_at)`
+
+**Per-user data (RLS: `user_id = auth.uid()`):**
+- `profiles(user_id, timezone, ui_prefs jsonb, created_at)`
+- `user_word_progress(user_id, word_id, status enum[new,learning,learned], last_reviewed_at, review_count, correct_count)`
+- `quiz_attempts(id, user_id, word_id, correct bool, answered_at)`
+- `memorized_verses(user_id, verse_id, memorized_at)`
+- `daily_reading(user_id, date, seconds_read)` — source of truth for streaks/hours
+- `reading_sessions(id, user_id, started_at, ended_at, ruku_number)` — raw session log, rolls up into `daily_reading`
+- `streak_state(user_id, current_streak, longest_streak, last_counted_date, grace_started_on, grace_expires_on)` — materialized/cached view over `daily_reading`, recomputed on each new reading session write
+
+Add indexes on the obvious lookup columns (surah_number+ayah_number, user_id+date, etc.). Use Postgres functions/triggers or app-layer logic (your call) to keep `streak_state` in sync when `daily_reading` changes.
+
+## 6. AI Generation Jobs
+
+Two categories of AI-generated content, both **cached, not regenerated per request**:
+1. Word context explanations (§4.2) — batch-generate for a ruku the first time any user opens it (or pre-generate for the whole Quran during seeding if cost/time allows — your call, document the tradeoff).
+2. Ruku summaries (§4.3) — same caching approach.
+
+Route both through a single Rust Tauri command (or a small backend function) that calls Ollama Cloud, so the API key stays server/backend-side and never touches the frontend bundle. Design prompts to return structured, concise output (a couple sentences per word explanation; a short paragraph for ruku summaries) — avoid verbose AI filler.
+
+## 7. UI/UX Requirements
+
+- Modern, clean aesthetic — think a well-designed reading/study app, not a default Bootstrap/Material look. Thoughtful typography (a proper Arabic typeface for Quran text, distinct from the UI font), generous whitespace, smooth but restrained transitions/animations.
+- Support both light and dark themes.
+- Key screens: Dashboard (streak/hours/progress overview) → Surah/Ruku browser → Ruku Lesson view (the core split-pane reader) → Vocabulary hub (word list, filters, quiz launcher) → Quiz view → Memorization progress view → Settings (theme, panel side, timezone, account).
+- Responsive to window resizing (desktop app, but users resize windows).
+
+## 8. Build Order (suggested milestones)
+
+1. Supabase project setup: schema (§5), RLS policies, auth.
+2. Seed pipeline: fetch Quran text/translation/word-by-word/ruku boundaries/Ibn Kathir tafsir from chosen source(s), import into Supabase. Verify data integrity (spot-check a few surahs).
+3. Tauri + React scaffold, Supabase client wiring, auth flow (sign up/in/out).
+4. Ruku Reader core: browse surah→ruku, display verses + translation, tafsir panel with ayah-click-to-load.
+5. Word-by-word display + AI context generation pipeline (with caching) + word "mark as learned".
+6. Vocabulary hub + quiz mode.
+7. AI ruku summary generation + display.
+8. Memorization marking + progress views.
+9. Reading session tracking → daily_reading → streak_state logic, dashboard.
+10. Polish pass: theming, empty states, loading states, error handling for AI/network failures, settings screen.
+
+## 9. Non-Functional Notes
+
+- Handle Ollama Cloud/network failures gracefully — cached content should still render; only new/uncached AI generation should show a retry-able loading/error state, never block the reading experience.
+- All timestamps stored in UTC; convert to user's stored timezone for display and streak-day boundaries.
+- Write basic seed-data validation (e.g. every ayah has a ruku_number, no orphaned tafsir rows) as part of the import script.
+
+---
+
+Build this end-to-end. Where this brief underspecifies something, make a reasonable choice consistent with the rest of the spec, note it in `DECISIONS.md`, and continue — don't stall on minor ambiguity.

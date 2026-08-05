@@ -1,0 +1,48 @@
+{
+  "name": "quran-studio",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Ruku-by-ruku Quran memorization and study desktop app",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "app:dev": "tauri dev",
+    "app:build": "tauri build",
+    "seed": "tsx scripts/seed/index.ts",
+    "seed:verify": "tsx scripts/seed/verify.ts",
+    "typecheck": "tsc --noEmit",
+    "test:streak": "tsx scripts/test/streak.ts",
+    "test:smoke": "tsx scripts/test/smoke.ts",
+    "test": "tsx scripts/test/streak.ts && tsx scripts/test/smoke.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.0",
+    "@tanstack/react-query": "^5.101.4",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-opener": "^2.5.4",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "lucide-react": "^1.28.0",
+    "radix-ui": "^1.6.7",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.2",
+    "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.5",
+    "dotenv": "^17.2.3",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.7",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.0"
+  }
+}

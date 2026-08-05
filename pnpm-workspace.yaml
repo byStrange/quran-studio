@@ -1,0 +1,6 @@
+# esbuild is Vite's bundler dependency; its postinstall fetches the platform
+# binary, so the build script has to be allowed.
+allowBuilds:
+  esbuild: true
+minimumReleaseAgeExclude:
+  - tsx@4.23.7
