@@ -7,7 +7,7 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import { supabase } from "./supabase";
-import type { Verse, Word } from "./types";
+import type { VerseContext, Word } from "./types";
 
 export interface AiStatus {
   configured: boolean;
@@ -66,7 +66,7 @@ export async function fetchCachedWordContext(wordId: number): Promise<WordContex
  */
 export async function getWordContext(
   word: Word,
-  verse: Verse,
+  verse: VerseContext,
   options: { force?: boolean } = {},
 ): Promise<WordContext> {
   if (!options.force) {

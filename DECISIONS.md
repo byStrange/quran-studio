@@ -29,12 +29,62 @@ this and would fail the import if it were ever violated.
 It publishes the English Ibn Kathir corpus as one JSON file per surah — 114
 requests rather than 6,236. Verified all 114 surahs are covered.
 
+**Tafsir As-Sa'di was asked for and deliberately not added.** No English
+translation of it exists in any open corpus — quran.com, qul.tarteel.ai and
+`spa5k/tafsir_api` all carry As-Sa'di in Arabic, Russian, Urdu, Turkish,
+Persian, Indonesian and Albanian, but never English, and the IIPH English
+edition is print-only. Shipping the Arabic original, or an English tafsir by
+someone else relabelled as As-Sa'di, would both have been worse than shipping
+Ibn Kathir alone. Revisit if an English edition is ever released openly;
+`tafsir_ibn_kathir` would need to become a multi-source table first.
+
+The requested Saheeh International translation needed no work — the seed has
+always imported quran.com resource id 20, which is that translation.
+
 **Tafsir entries are collapsed into ayah ranges at import time.**
 Ibn Kathir often comments on a run of ayahs at once, and the source repeats the
 identical text against every ayah in that run. The seed detects consecutive
 identical entries and stores one row spanning `ayah_start..ayah_end` (1,902 rows
 instead of ~6,000). The reader looks up the row whose range contains the
 selected ayah and labels the range it covers.
+
+**Tajweed rules are stored as ranges over the existing text, not as a second
+copy of it.**
+quran.com serves a tajweed-annotated mushaf, but it is a different
+digitisation from the `text_uthmani` already in `quran_verses.arabic_text`:
+it writes the dagger alif as U+0672, marks silent letters with a plain sukun
+rather than U+06DF, and spaces waqf signs differently. 4,210 of the 6,236
+verses disagree somewhere.
+
+Storing that text in a second column would have been the easy import, and the
+wrong one — the Arabic would visibly reflow the moment a reader toggled
+colouring on, and there would be two disagreeing strings for the word-by-word
+breakdown, copy-paste and any future search to choose between. So the seed
+diffs the two editions per verse (Myers, since they differ in only a few dozen
+places) and re-expresses each rule as a character range over the canonical
+text. `quran_verses.tajweed` holds `[{r, s, e}]`, ordered and non-overlapping,
+and colouring is a pure overlay: 59,923 spans that change colour and nothing
+else.
+
+Two smaller rules inside that mapping. A diacritic the diff could not pair up
+inherits the rule of the letter beneath it, because a mark left uncoloured
+above a coloured letter reads as a mistake. And a rule interrupted only by
+whitespace the two editions space differently is one rule, not two — but
+nothing wider is bridged, since two `ham_wasl` on neighbouring words are
+genuinely two rules and merging across them would paint the text between.
+
+**The tajweed import refuses to write a partially coloured mushaf.** The seed
+re-derives the rule sequence from its own output and compares it to the source
+before writing: an unknown rule class, or any rule that disappeared in the
+mapping, aborts the import. 5,884 of 6,236 verses reproduce the source
+sequence exactly; the remainder differ only by a run arriving as two adjacent
+runs of the *same* rule, which renders identically because both halves take
+the same colour. No rule is ever lost — that case is a hard failure.
+
+One upstream defect is worth recording: verse 32:3 arrives with a stray `>`
+and an unmatched closing tag. Because the rules are projected onto the
+canonical text rather than that text being used directly, the corruption
+cannot reach the reader; the parser only has to not crash on it.
 
 **Footnote markup is stripped from translations.**
 Saheeh International arrives with `<sup foot_note=…>` markers. There is no
@@ -149,6 +199,47 @@ breaking ties. The brief explicitly warned against over-engineering an SRS.
 Distractors are drawn from other real Quranic glosses, so wrong answers are
 plausible rather than obviously absurd.
 
+**Focus mode is an overlay, not a route.** One ayah at a time, fullscreen, is a
+way of looking at the ruku the reader has already loaded — not a different
+place in the app. Keeping it as a sibling overlay inside `Reader` means the
+queries, the scroll position and the reading timer all survive entering and
+leaving it, and exiting can drop the user back on the exact ayah they were
+reading. A `/read/:ruku/focus/:ayah` route would have remounted the reader and
+restarted the timer on every toggle.
+
+Three smaller choices inside it: the OS window's fullscreen state is owned by
+the component's lifetime, so however the mode ends the window is restored;
+walking past either end of a ruku continues into the neighbouring one rather
+than dead-ending, entering it at whichever edge the reader arrived from; and
+the controls fade out after a few quiet seconds, since chrome that stays put is
+the thing focus mode exists to remove. Text size and the translation toggle are
+kept in `localStorage` rather than `ui_prefs` — they are per-window comfort
+settings, like the split position, not study preferences worth syncing.
+
+**Tajweed colouring is on by default, and is a profile preference rather than
+a per-window one.**
+The brief for it was that some readers cannot recite correctly without the
+colouring; those readers should not have to discover a setting first. It costs
+nothing to everyone else, because it changes colour and nothing else — no
+weight, size or spacing — so it cannot reflow the Arabic or shift the layout.
+It sits in `ui_prefs` next to the tafsir side rather than in `localStorage`
+with focus mode's text size, because which rules you need marked is a property
+of how you read, not of which window you are in; the reader and focus mode
+therefore share one switch.
+
+The colours follow the families used in printed tajweed mushafs and on
+quran.com — madd in blues, ghunnah orange, qalqalah red, ikhfa purple, idgham
+green, silent letters grey — so anyone who already reads a coloured mushaf
+does not have to relearn them. In dark mode lightness can no longer encode
+"stronger madd" once every colour has to sit clear of a near-black surface, so
+the madd family separates on chroma instead.
+
+**The legend names the rules properly.** "Blue means long" would be quicker to
+read and would teach nothing; someone learning to recite is learning that this
+is *madd munfaṣil*, held 2, 4 or 5 counts. It is collapsed by default so it
+costs nothing once known, and grouped by what the rule acts on — prolongation,
+nūn sākinah, mīm sākinah — rather than listed flat.
+
 **"Encountered" vocabulary is derived from reading history**, not from taps —
 every word in any ruku the user has logged a session against. Counting only
 tapped words would make the denominator grow as the user interacts, which is
@@ -161,12 +252,12 @@ backwards.
 Two suites run against the real project:
 
 - `pnpm test:streak` — 7 scenarios pinning the grace/restore rules.
-- `pnpm test:smoke` — 17 checks that sign in with the *publishable* key, the
+- `pnpm test:smoke` — 18 checks that sign in with the *publishable* key, the
   same one the app ships with, and exercise every query and RPC the UI depends
   on. It verifies RLS both ways: a user cannot edit Quran content, and cannot
   see another user's rows.
 
-Both create and delete throwaway users. `pnpm seed:verify` re-runs the 10
+Both create and delete throwaway users. `pnpm seed:verify` re-runs the 13
 import integrity checks at any time.
 
 One bug worth recording: the first version of the import validator reported

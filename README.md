@@ -46,8 +46,8 @@ pnpm seed
 ```
 
 This downloads the full corpus once (~2 minutes) and writes it to Supabase:
-114 surahs, 6,236 verses with translation, 558 rukus, 77,429 words, and 1,902
-tafsir entries. Downloads are cached under `scripts/seed/.cache`, so re-running
+114 surahs, 6,236 verses with translation, 558 rukus, 77,429 words, 1,902
+tafsir entries, and 59,923 tajweed rule spans. Downloads are cached under `scripts/seed/.cache`, so re-running
 is cheap. The import finishes by running 10 integrity checks.
 
 The running app never calls a third-party Quran API — it only reads Supabase.
@@ -76,10 +76,11 @@ pnpm dev         # browser preview — no AI, since that needs the Rust backend
 | `pnpm app:build` | Build a distributable bundle |
 | `pnpm dev` | Frontend only, in a browser |
 | `pnpm seed` | Import all Quran content into Supabase |
-| `pnpm seed:verify` | Re-run the 10 data integrity checks |
+| `pnpm seed:tajweed` | Backfill only the tajweed spans on an existing database |
+| `pnpm seed:verify` | Re-run the 13 data integrity checks |
 | `pnpm test` | Run both test suites |
 | `pnpm test:streak` | Verify the streak/grace rules (7 scenarios) |
-| `pnpm test:smoke` | Verify every query, RPC, and RLS policy (17 checks) |
+| `pnpm test:smoke` | Verify every query, RPC, and RLS policy (18 checks) |
 | `pnpm typecheck` | `tsc --noEmit` |
 
 Tests create and delete throwaway users in your Supabase project.
@@ -125,8 +126,9 @@ the in-app **About** screen for source attribution.
 
 ## Attribution
 
-Quran text, translation, and word-by-word data from the quran.com API
-(Saheeh International translation). Tafsir Ibn Kathir (English, abridged) via
+Quran text, translation, word-by-word data, and tajweed annotations from the
+quran.com API (Saheeh International translation). Tafsir Ibn Kathir (English,
+abridged) via
 the `tafsir_api` project. Amiri Quran and Inter typefaces under the SIL Open
 Font License. Please respect each source's terms if you redistribute this app.
 

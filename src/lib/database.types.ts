@@ -192,6 +192,7 @@ export type Database = {
           page_number: number | null
           ruku_number: number
           surah_number: number
+          tajweed: Json | null
           translation_en: string
         }
         Insert: {
@@ -203,6 +204,7 @@ export type Database = {
           page_number?: number | null
           ruku_number: number
           surah_number: number
+          tajweed?: Json | null
           translation_en: string
         }
         Update: {
@@ -214,6 +216,7 @@ export type Database = {
           page_number?: number | null
           ruku_number?: number
           surah_number?: number
+          tajweed?: Json | null
           translation_en?: string
         }
         Relationships: [

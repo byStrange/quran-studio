@@ -20,6 +20,12 @@ import {
   type Verse,
   type Word,
 } from "./sources.ts";
+import {
+  alignToCanonical,
+  fetchTajweedMarkup,
+  verifyAlignment,
+  type TajweedSpan,
+} from "./tajweed.ts";
 import { log, mapLimit } from "./util.ts";
 import { runValidation } from "./verify.ts";
 
@@ -40,6 +46,47 @@ async function main(): Promise<void> {
   const verses: Verse[] = content.flatMap((c) => c.verses);
   const words: Word[] = content.flatMap((c) => c.words);
   log("verses", `total ${verses.length} verses, ${words.length} words`);
+
+  log("tajweed", "fetching the tajweed-annotated mushaf…");
+  const markup = await fetchTajweedMarkup();
+  log("tajweed", `got markup for ${markup.size} verses; aligning onto the Uthmani text…`);
+
+  const alignments = verses.map((verse) => {
+    const source = markup.get(verse.id);
+    if (!source) throw new Error(`no tajweed markup for verse ${verse.id}`);
+    return {
+      verseId: verse.id,
+      markup: source,
+      canonical: verse.arabic_text,
+      spans: alignToCanonical(source, verse.arabic_text),
+    };
+  });
+
+  const report = verifyAlignment(alignments);
+  log(
+    "tajweed",
+    `${report.spans} rule spans; ${report.exact}/${report.verses} verses aligned exactly`,
+  );
+  if (report.unknown.size > 0) {
+    throw new Error(
+      `upstream emitted unknown tajweed classes: ${[...report.unknown].join(", ")}. ` +
+        `Add them to TAJWEED_RULES and give them a colour before importing.`,
+    );
+  }
+  if (report.dropped.length > 0) {
+    const sample = report.dropped
+      .slice(0, 5)
+      .map((d) => `verse ${d.verseId}: ${d.rule}`)
+      .join("; ");
+    throw new Error(
+      `${report.dropped.length} tajweed rules were lost in alignment (${sample}). ` +
+        `Refusing to import a partially coloured mushaf.`,
+    );
+  }
+
+  const tajweedByVerse = new Map<number, TajweedSpan[]>(
+    alignments.map((a) => [a.verseId, a.spans]),
+  );
 
   log("rukus", "deriving ruku boundaries…");
   const rukus = deriveRukus(verses);
@@ -67,7 +114,11 @@ async function main(): Promise<void> {
     surahs.map((s) => ({ ...s, ruku_count: rukuCounts.get(s.number) ?? 0 })),
     { onConflict: "number" },
   );
-  await upsertAll("quran_verses", verses, { onConflict: "id", size: 500 });
+  await upsertAll(
+    "quran_verses",
+    verses.map((verse) => ({ ...verse, tajweed: tajweedByVerse.get(verse.id) ?? null })),
+    { onConflict: "id", size: 500 },
+  );
   await upsertAll("quran_rukus", rukus, { onConflict: "ruku_number" });
   await upsertAll("quran_words", words, { onConflict: "id", size: 1000 });
   await upsertAll("tafsir_ibn_kathir", tafsir, { onConflict: "surah_number,ayah_start" });

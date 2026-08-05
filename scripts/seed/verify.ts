@@ -7,6 +7,7 @@
  * confirm the database is healthy without re-importing.
  */
 import { admin } from "./db.ts";
+import { TAJWEED_RULES } from "./tajweed.ts";
 
 const EXPECTED_VERSES = 6236;
 const EXPECTED_SURAHS = 114;
@@ -141,6 +142,57 @@ const checks: Check[] = [
       // different number means a truncated or duplicated import.
       const n = await count("quran_words");
       return n > 70_000 && n < 90_000 ? null : `found ${n} words, expected ~77k`;
+    },
+  },
+  {
+    name: "every verse has tajweed spans",
+    run: async () => {
+      const n = await count("quran_verses", (q) => q.is("tajweed", null));
+      return n === 0 ? null : `${n} verses have no tajweed data`;
+    },
+  },
+  {
+    name: "tajweed spans stay inside their verse and never overlap",
+    run: async () => {
+      // The reader slices arabic_text with these offsets directly, so a range
+      // that runs past the end or backwards would drop or duplicate text.
+      const rows = await selectAll<{ id: number; arabic_text: string; tajweed: unknown }>(
+        "quran_verses",
+        "id, arabic_text, tajweed",
+        "id",
+      );
+      const known = new Set<string>(TAJWEED_RULES);
+      const bad: string[] = [];
+
+      for (const row of rows) {
+        const spans = row.tajweed as Array<{ r: string; s: number; e: number }> | null;
+        if (!Array.isArray(spans)) continue;
+        let cursor = 0;
+        for (const span of spans) {
+          if (!known.has(span.r)) bad.push(`verse ${row.id}: unknown rule ${span.r}`);
+          else if (span.s < cursor) bad.push(`verse ${row.id}: span at ${span.s} overlaps`);
+          else if (span.e <= span.s) bad.push(`verse ${row.id}: empty span at ${span.s}`);
+          else if (span.e > row.arabic_text.length) bad.push(`verse ${row.id}: span past end`);
+          cursor = span.e;
+        }
+        if (bad.length > 5) break;
+      }
+      return bad.length === 0 ? null : bad.slice(0, 5).join("; ");
+    },
+  },
+  {
+    name: "tajweed rule coverage looks complete",
+    run: async () => {
+      // Every rule the importer knows about should appear somewhere in the
+      // mushaf; a missing one means the source stopped emitting that class.
+      const rows = await selectAll<{ tajweed: unknown }>("quran_verses", "tajweed", "id");
+      const seen = new Set<string>();
+      for (const row of rows) {
+        const spans = row.tajweed as Array<{ r: string }> | null;
+        for (const span of spans ?? []) seen.add(span.r);
+      }
+      const missing = TAJWEED_RULES.filter((rule) => !seen.has(rule));
+      return missing.length === 0 ? null : `no spans found for: ${missing.join(", ")}`;
     },
   },
   {

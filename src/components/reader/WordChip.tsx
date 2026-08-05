@@ -3,7 +3,7 @@ import { Popover } from "radix-ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, RefreshCw, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Verse, Word, WordStatus } from "@/lib/types";
+import type { VerseContext, Word, WordStatus } from "@/lib/types";
 import { describeAiError, getWordContext, isTauri } from "@/lib/ai";
 import { useSetWordStatus } from "@/hooks/useProgress";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ const STATUS_STYLES: Record<WordStatus | "none", string> = {
  * The AI explanation is fetched only once the user opens a word, so opening a
  * ruku never triggers hundreds of generations.
  */
-function WordDetail({ word, verse }: { word: Word; verse: Verse }) {
+function WordDetail({ word, verse }: { word: Word; verse: VerseContext }) {
   const queryClient = useQueryClient();
   const [regenerating, setRegenerating] = useState(false);
 
@@ -105,7 +105,7 @@ export function WordChip({
   status,
 }: {
   word: Word;
-  verse: Verse;
+  verse: VerseContext;
   status: WordStatus | undefined;
 }) {
   const [open, setOpen] = useState(false);
@@ -137,7 +137,8 @@ export function WordChip({
           sideOffset={8}
           collisionPadding={16}
           className={cn(
-            "z-50 w-[22rem] rounded-xl border border-border bg-surface p-4",
+            // Above the focus-mode overlay (z-70), which also shows word chips.
+            "z-[80] w-[22rem] rounded-xl border border-border bg-surface p-4",
             "shadow-xl shadow-black/20 animate-rise",
           )}
         >

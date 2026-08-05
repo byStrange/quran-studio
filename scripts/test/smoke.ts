@@ -89,6 +89,31 @@ async function main(): Promise<void> {
       return null;
     });
 
+    await check("verses carry tajweed spans the reader can slice", async () => {
+      const { data, error } = await client
+        .from("quran_verses")
+        .select("arabic_text, tajweed")
+        .eq("ruku_number", 1)
+        .order("ayah_number");
+      if (error) return error.message;
+      if (data.length === 0) return "no verses returned";
+
+      for (const verse of data) {
+        const spans = verse.tajweed as Array<{ r: string; s: number; e: number }> | null;
+        if (!Array.isArray(spans)) return "tajweed is missing or not an array";
+        // The reader slices arabic_text with these offsets, so a bad range
+        // would silently drop or repeat part of the ayah.
+        let cursor = 0;
+        for (const span of spans) {
+          if (span.s < cursor || span.e <= span.s || span.e > verse.arabic_text.length) {
+            return `bad span ${span.s}..${span.e} on a ${verse.arabic_text.length}-char verse`;
+          }
+          cursor = span.e;
+        }
+      }
+      return null;
+    });
+
     await check("finds tafsir covering a specific ayah", async () => {
       const { data, error } = await client
         .from("tafsir_ibn_kathir")

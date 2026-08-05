@@ -1,7 +1,8 @@
-import { BookOpen, Check, ChevronDown } from "lucide-react";
+import { BookOpen, Check, ChevronDown, Expand } from "lucide-react";
 import { cn, verseKey } from "@/lib/utils";
 import type { VerseWithWords, WordStatus } from "@/lib/types";
 import { WordChip } from "./WordChip";
+import { TajweedText } from "./TajweedText";
 import { Tooltip } from "@/components/ui/primitives";
 
 export function VerseCard({
@@ -13,6 +14,8 @@ export function VerseCard({
   wordsExpanded,
   onToggleWords,
   wordStatuses,
+  onOpenFocus,
+  tajweed,
 }: {
   verse: VerseWithWords;
   memorized: boolean;
@@ -22,6 +25,10 @@ export function VerseCard({
   wordsExpanded: boolean;
   onToggleWords: () => void;
   wordStatuses: Map<number, WordStatus>;
+  /** Opens focus mode on this ayah. */
+  onOpenFocus: () => void;
+  /** Colour the Arabic by tajweed rule. */
+  tajweed: boolean;
 }) {
   return (
     <article
@@ -61,7 +68,7 @@ export function VerseCard({
 
         <div className="min-w-0 flex-1">
           <p className="arabic text-fg" data-selectable dir="rtl">
-            {verse.arabic_text}
+            <TajweedText text={verse.arabic_text} spans={verse.tajweed} enabled={tajweed} />
           </p>
 
           <p className="mt-4 text-[0.9375rem] leading-relaxed text-fg-muted" data-selectable>
@@ -96,6 +103,19 @@ export function VerseCard({
               <BookOpen className="size-3.5" aria-hidden />
               Tafsir
             </button>
+
+            <Tooltip content="Read this ayah on its own, fullscreen">
+              <button
+                onClick={onOpenFocus}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[0.8125rem]",
+                  "text-fg-subtle transition-colors hover:bg-surface-2 hover:text-fg",
+                )}
+              >
+                <Expand className="size-3.5" aria-hidden />
+                Focus
+              </button>
+            </Tooltip>
           </div>
         </div>
       </div>

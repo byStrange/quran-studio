@@ -37,6 +37,25 @@
 
   --ring: oklch(0.53 0.11 165 / 0.45);
   --shadow-color: 150 20% 20%;
+
+  /* Tajweed. Grouped by rule family the way printed mushafs colour them —
+     madd in blues deepening with obligation, nūn rules in purple/green,
+     qalqalah red, ghunnah orange, silent letters grey — so the colouring is
+     already familiar to anyone who has read a coloured mushaf. */
+  --tj-madd-normal: oklch(0.55 0.16 250);
+  --tj-madd-permissible: oklch(0.5 0.19 268);
+  --tj-madd-obligatory: oklch(0.44 0.21 274);
+  --tj-madd-necessary: oklch(0.36 0.2 280);
+  --tj-ikhfa: oklch(0.48 0.2 312);
+  --tj-ikhfa-shafawi: oklch(0.53 0.21 342);
+  --tj-idgham-ghunnah: oklch(0.48 0.14 168);
+  --tj-idgham-plain: oklch(0.48 0.15 145);
+  --tj-idgham-shafawi: oklch(0.52 0.15 185);
+  --tj-idgham-near: oklch(0.52 0.05 220);
+  --tj-iqlab: oklch(0.52 0.13 232);
+  --tj-ghunnah: oklch(0.56 0.16 55);
+  --tj-qalqalah: oklch(0.52 0.2 27);
+  --tj-silent: oklch(0.7 0.012 95);
 }
 
 .dark {
@@ -67,6 +86,24 @@
 
   --ring: oklch(0.72 0.13 165 / 0.5);
   --shadow-color: 160 30% 3%;
+
+  /* Same hues, lifted well clear of the dark surface. Lightness can no longer
+     encode "stronger madd" once every colour has to be light, so the madd
+     family separates on chroma instead. */
+  --tj-madd-normal: oklch(0.76 0.11 248);
+  --tj-madd-permissible: oklch(0.73 0.15 264);
+  --tj-madd-obligatory: oklch(0.71 0.18 272);
+  --tj-madd-necessary: oklch(0.69 0.2 280);
+  --tj-ikhfa: oklch(0.72 0.18 312);
+  --tj-ikhfa-shafawi: oklch(0.72 0.18 342);
+  --tj-idgham-ghunnah: oklch(0.75 0.14 168);
+  --tj-idgham-plain: oklch(0.76 0.16 145);
+  --tj-idgham-shafawi: oklch(0.76 0.13 185);
+  --tj-idgham-near: oklch(0.72 0.045 220);
+  --tj-iqlab: oklch(0.76 0.12 232);
+  --tj-ghunnah: oklch(0.78 0.14 62);
+  --tj-qalqalah: oklch(0.7 0.17 27);
+  --tj-silent: oklch(0.55 0.012 155);
 }
 
 @theme inline {
@@ -211,6 +248,35 @@
     );
     background-size: 200% 100%;
     animation: var(--animate-shimmer);
+  }
+
+  /* Tajweed colouring.
+
+     Keyed off `data-tajweed` so one set of declarations serves both the verse
+     text and the legend swatches — a swatch is just an empty element carrying
+     the same attribute, painted with `currentColor`. Colour is the only thing
+     applied: no weight, size or spacing change, so switching tajweed on cannot
+     reflow the Arabic. */
+  [data-tajweed="madda_normal"] { color: var(--tj-madd-normal); }
+  [data-tajweed="madda_permissible"] { color: var(--tj-madd-permissible); }
+  [data-tajweed="madda_obligatory"] { color: var(--tj-madd-obligatory); }
+  [data-tajweed="madda_necessary"] { color: var(--tj-madd-necessary); }
+  [data-tajweed="ikhafa"] { color: var(--tj-ikhfa); }
+  [data-tajweed="ikhafa_shafawi"] { color: var(--tj-ikhfa-shafawi); }
+  [data-tajweed="idgham_ghunnah"] { color: var(--tj-idgham-ghunnah); }
+  [data-tajweed="idgham_wo_ghunnah"] { color: var(--tj-idgham-plain); }
+  [data-tajweed="idgham_shafawi"] { color: var(--tj-idgham-shafawi); }
+  [data-tajweed="idgham_mutajanisayn"] { color: var(--tj-idgham-near); }
+  [data-tajweed="idgham_mutaqaribayn"] { color: var(--tj-idgham-near); }
+  [data-tajweed="iqlab"] { color: var(--tj-iqlab); }
+  [data-tajweed="ghunnah"] { color: var(--tj-ghunnah); }
+  [data-tajweed="qalaqah"] { color: var(--tj-qalqalah); }
+  [data-tajweed="ham_wasl"],
+  [data-tajweed="laam_shamsiyah"],
+  [data-tajweed="slnt"] { color: var(--tj-silent); }
+
+  .tj-swatch {
+    background-color: currentColor;
   }
 
   /* Long-form prose: tafsir and AI summaries. */

@@ -135,6 +135,23 @@ export function Settings() {
 
             <div className="flex items-center justify-between gap-6 border-t border-border pt-4">
               <div>
+                <div className="text-[0.8125rem] font-medium text-fg">Tajweed colouring</div>
+                <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
+                  Colour the Arabic by recitation rule, with a legend in the reader. Colour only —
+                  the text itself is unchanged.
+                </p>
+              </div>
+              <Toggle
+                checked={prefs.tajweed}
+                onCheckedChange={(checked) =>
+                  updateProfile.mutate({ ui_prefs: { tajweed: checked } })
+                }
+                label="Tajweed colouring"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-6 border-t border-border pt-4">
+              <div>
                 <div className="text-[0.8125rem] font-medium text-fg">
                   Expand word-by-word by default
                 </div>

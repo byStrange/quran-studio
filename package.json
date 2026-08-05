@@ -12,6 +12,7 @@
     "app:dev": "tauri dev",
     "app:build": "tauri build",
     "seed": "tsx scripts/seed/index.ts",
+    "seed:tajweed": "tsx scripts/seed/backfill-tajweed.ts",
     "seed:verify": "tsx scripts/seed/verify.ts",
     "typecheck": "tsc --noEmit",
     "test:streak": "tsx scripts/test/streak.ts",
