@@ -48,6 +48,16 @@ export interface UiPrefs {
    * and it is a change of colour only, so it costs nothing to those who don't.
    */
   tajweed: boolean;
+  /**
+   * Which reader opening a ruku lands in.
+   *
+   * "study" is the ruku reader: translation, word-by-word, tafsir alongside.
+   * "mushaf" is the printed Madani page, which is what someone revising from
+   * memory wants — the same words in the same places as the paper copy they
+   * memorised from. Study is the default because it is the one that teaches;
+   * the mushaf is a page turn away either way.
+   */
+  readerMode: "study" | "mushaf";
 }
 
 export const DEFAULT_UI_PREFS: UiPrefs = {
@@ -55,6 +65,7 @@ export const DEFAULT_UI_PREFS: UiPrefs = {
   theme: "system",
   wordsExpanded: false,
   tajweed: true,
+  readerMode: "study",
 };
 
 export interface ReadingOverview {

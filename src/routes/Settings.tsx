@@ -113,6 +113,29 @@ export function Settings() {
           <CardBody className="space-y-4">
             <div className="flex items-center justify-between gap-6">
               <div>
+                <div className="text-[0.8125rem] font-medium text-fg">Default layout</div>
+                <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
+                  Study shows translation and word-by-word. Mushaf reproduces the printed Madani
+                  page, for revising from the layout you memorised.
+                </p>
+              </div>
+              <SelectField
+                value={prefs.readerMode}
+                onValueChange={(value) =>
+                  updateProfile.mutate({
+                    ui_prefs: { readerMode: value as "study" | "mushaf" },
+                  })
+                }
+                options={[
+                  { value: "study", label: "Study" },
+                  { value: "mushaf", label: "Mushaf" },
+                ]}
+                className="w-32"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-6 border-t border-border pt-4">
+              <div>
                 <div className="text-[0.8125rem] font-medium text-fg">Tafsir panel side</div>
                 <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
                   Which side of the reader the commentary sits on.

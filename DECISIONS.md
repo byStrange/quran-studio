@@ -247,6 +247,87 @@ backwards.
 
 ---
 
+## Mushaf mode
+
+**The printed Madani mushaf is reproduced from the QCF page fonts, not
+re-typeset.** Readers memorise from a physical copy, and recall is bound to
+where a word sits on the page — so a "mushaf layout" that reflows to the window
+would be the wrong feature wearing the right name. The King Fahd typesetting
+ships as 604 fonts, one per page, in which every word is a single Private Use
+Area glyph with that line's justification already in the outline. Rendering a
+line means emitting its glyph codes in order; there is no letter-spacing,
+kashida or `text-align: justify` anywhere in the mushaf CSS, because all three
+would fight the typesetting rather than help it. Fitting a page is a single
+measurement: line width scales linearly with font size, so `useMushafScale`
+measures the widest line once per page and thereafter just divides the
+available width by that ratio.
+
+**The V1 page fonts are vendored, and mushaf mode is monochrome.** The V4
+fonts were the obvious choice and were vendored first: they carry COLRv1 colour
+layers with six CPAL palettes — three tajweed-coloured, three monochrome —
+which would have made the tajweed toggle a `font-palette` swap inside a single
+font, with the same no-reflow guarantee the study reader gives.
+
+They were dropped because they do not share V1's encoding, which is what
+`quran_mushaf_glyphs` stores. A V4 page font holds exactly one glyph per word
+packed sequentially from U+FC41, and neither reading order nor codepoint order
+reproduces the mapping — glyph advance widths disagree under both. quran.com's
+public API exposes no `code_v4` field to recover it from, and rendering V1
+codes in a V4 font does not fail loudly: it draws real words in the wrong
+places. Monochrome is also simply what the printed mushaf is.
+
+Tajweed colouring therefore stays in the study reader, which colours character
+ranges over readable Arabic. The mushaf draws whole words as single glyphs, and
+there is no honest way to colour two letters of one — so the mushaf reader has
+no tajweed control rather than a control that quietly does nothing.
+
+`pnpm test:mushaf-fonts` is what caught this, and now guards it: it reads the
+cmap out of all 604 woff2 files and asserts every stored glyph resolves in the
+font that has to draw it (88,443 references). Worth keeping precisely because
+the failure it catches is silent — the page still renders, just wrongly.
+
+
+**Page layout is derived from line-number gaps, and every derivation is
+asserted.** quran.com gives each word a page and line, but says nothing about
+the ornamental surah-name banner or the basmalah, because neither is ayah text.
+Line numbers are assigned over the *printed* page, so that furniture still
+consumes them and shows up as a gap. `deriveLines` claims those gaps by walking
+backwards from each surah's first ayah over contiguous empty lines, taking at
+most what that surah is owed — one line for Al-Fatiha (whose basmalah is its
+first ayah) and At-Tawbah (which has none), two for the rest.
+
+Bounding the walk is what keeps pages 1 and 2 honest: they are typeset short
+inside a decorative frame, and their 14 trailing empty lines are real blanks,
+not furniture belonging to Al-Baqarah. Deriving over the whole book rather than
+page by page is what handles At-Tawbah and As-Sajdah, whose banners sit on the
+last line of the preceding page with their text beginning overleaf.
+
+`pnpm test:mushaf` re-runs the derivation over all 604 pages and checks the
+result against what the printed mushaf must be true of: 114 banner lines,
+112 basmalah lines, 15 lines per page, no blank line past page 2, and no ayah
+line without glyphs. It talks only to quran.com, so it can be run before the
+layout is imported.
+
+**Page view is a sibling route, not a mode inside the ruku reader.** A ruku is
+a unit of study and a page is a unit of the physical book; neither divides the
+other, so `/read/page/:n` navigates by page and `/read/:ruku` by ruku, and the
+header toggle hands over at the reader's current position. Reading time is
+still logged against a ruku — the page is the view, the ruku stays the thing
+progress is measured in, so the dashboard, streak and memorization counters
+need no notion of pages at all.
+
+**Fonts are declared per page, on demand.** 604 `@font-face` rules up front
+would be 46MB the reader almost never needs. `lib/mushaf.ts` injects a face and
+its four palette rules the first time a page is opened, and the reader prefetches
+the next page's font while the current one is being read. `font-display: block`
+rather than `swap`: there is no sensible fallback for PUA glyphs, so waiting is
+correct and swapping would flash a page of tofu.
+
+The fonts are from the King Fahd Glorious Quran Printing Complex, mirrored by
+quran.com, and are vendored under `public/fonts/qcf` via git LFS.
+
+---
+
 ## Testing
 
 Two suites run against the real project:

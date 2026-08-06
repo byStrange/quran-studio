@@ -13,10 +13,14 @@
     "app:build": "tauri build",
     "seed": "tsx scripts/seed/index.ts",
     "seed:tajweed": "tsx scripts/seed/backfill-tajweed.ts",
+    "seed:mushaf": "tsx scripts/seed/mushaf-import.ts",
+    "fonts:qcf": "tsx scripts/seed/fonts.ts",
     "seed:verify": "tsx scripts/seed/verify.ts",
     "typecheck": "tsc --noEmit",
     "test:streak": "tsx scripts/test/streak.ts",
     "test:smoke": "tsx scripts/test/smoke.ts",
+    "test:mushaf": "tsx scripts/test/mushaf-check.ts",
+    "test:mushaf-fonts": "tsx scripts/test/mushaf-fonts.ts",
     "test": "tsx scripts/test/streak.ts && tsx scripts/test/smoke.ts"
   },
   "dependencies": {

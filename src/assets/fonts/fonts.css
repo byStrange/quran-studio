@@ -1,6 +1,22 @@
 /* Vendored web fonts — bundled so the app renders identically offline and
    under the Tauri CSP, which blocks external font hosts.
-   Inter (SIL OFL 1.1) and Amiri Quran (SIL OFL 1.1). */
+   Inter (SIL OFL 1.1) and Amiri Quran (SIL OFL 1.1).
+
+   The 604 QCF mushaf page fonts are not declared here. They live in
+   public/fonts/qcf and are declared one at a time as pages are opened, since
+   listing 604 faces up front would be 48MB of `@font-face` the reader almost
+   never needs — see src/lib/mushaf.ts. */
+
+/* Ornamental surah-name banners for mushaf mode. One glyph per surah, so it is
+   small enough to load with the app rather than on demand. Public-domain
+   typeface from the King Fahd Glorious Quran Printing Complex. */
+@font-face {
+  font-family: 'QCF-SurahNames';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url(/fonts/qcf/sura-names.woff2) format('woff2');
+}
 
 @font-face {
   font-family: 'Amiri Quran';

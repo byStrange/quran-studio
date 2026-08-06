@@ -6,6 +6,7 @@ import { AuthScreen } from "./routes/AuthScreen";
 import { Dashboard } from "./routes/Dashboard";
 import { Browse } from "./routes/Browse";
 import { Reader } from "./routes/Reader";
+import { MushafReader } from "./routes/MushafReader";
 import { Vocabulary } from "./routes/Vocabulary";
 import { Quiz } from "./routes/Quiz";
 import { Memorization } from "./routes/Memorization";
@@ -31,6 +32,8 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/browse" element={<Browse />} />
+            {/* Ordered before the ruku route so "page" is never read as one. */}
+            <Route path="/read/page/:pageNumber" element={<MushafReader />} />
             <Route path="/read/:rukuNumber" element={<Reader />} />
             <Route path="/vocabulary" element={<Vocabulary />} />
             <Route path="/quiz" element={<Quiz />} />

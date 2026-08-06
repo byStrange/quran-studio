@@ -287,4 +287,74 @@
   .prose-reading p + p {
     margin-top: 0.85rem;
   }
+
+  /* --- Madani mushaf page -------------------------------------------------
+
+     A printed page is 15 evenly spaced lines, and reproducing it means giving
+     blank and heading lines the same room as ayah lines rather than collapsing
+     them. Everything here is sized in `em` off the page font size the fitting
+     measurement produces, so the page scales as a single unit.
+
+     The glyphs are pre-justified by the font, so there is deliberately no
+     letter-spacing, word-spacing or text-align:justify anywhere below — each
+     would fight the typesetting instead of helping it. */
+  .mushaf-page {
+    --mushaf-line-height: 1.72em;
+    direction: rtl;
+    line-height: 1;
+    color: var(--fg);
+    /* PUA glyphs carry no word breaks and must never be split. */
+    white-space: nowrap;
+  }
+
+  .mushaf-line {
+    display: flex;
+    align-items: center;
+    height: var(--mushaf-line-height);
+    overflow: hidden;
+  }
+
+  .mushaf-line-full {
+    justify-content: flex-start;
+  }
+
+  /* The opening two pages, and closing lines that stop short of the measure. */
+  .mushaf-line-centered {
+    justify-content: center;
+  }
+
+  /* Ayah runs are the click target for tafsir, so they need a hit area without
+     taking vertical space that would disturb the line rhythm. */
+  .mushaf-ayah {
+    cursor: pointer;
+    border-radius: 0.15em;
+    transition: background-color 0.15s ease;
+  }
+  .mushaf-ayah:hover {
+    background-color: var(--surface-2);
+  }
+  .mushaf-ayah[data-memorized] {
+    box-shadow: inset 0 -0.06em 0 var(--accent-soft);
+  }
+  .mushaf-ayah[data-selected] {
+    background-color: var(--accent-soft);
+  }
+  .mushaf-ayah:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .mushaf-surah-banner {
+    font-family: "QCF-SurahNames", serif;
+    font-size: 1.35em;
+    line-height: 1;
+    color: var(--fg);
+  }
+
+  .mushaf-basmalah {
+    font-family: var(--font-arabic);
+    font-size: 0.62em;
+    line-height: 1;
+    color: var(--fg);
+  }
 }

@@ -117,10 +117,89 @@ export type Database = {
           },
         ]
       }
+      quran_mushaf_glyphs: {
+        Row: {
+          char_type: string
+          glyph: string
+          id: number
+          line_number: number
+          page_number: number
+          position: number
+          verse_id: number
+        }
+        Insert: {
+          char_type: string
+          glyph: string
+          id: number
+          line_number: number
+          page_number: number
+          position: number
+          verse_id: number
+        }
+        Update: {
+          char_type?: string
+          glyph?: string
+          id?: number
+          line_number?: number
+          page_number?: number
+          position?: number
+          verse_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quran_mushaf_glyphs_verse_id_fkey"
+            columns: ["verse_id"]
+            isOneToOne: false
+            referencedRelation: "quran_verses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quran_mushaf_glyphs_page_number_line_number_fkey"
+            columns: ["page_number", "line_number"]
+            isOneToOne: false
+            referencedRelation: "quran_mushaf_lines"
+            referencedColumns: ["page_number", "line_number"]
+          },
+        ]
+      }
+      quran_mushaf_lines: {
+        Row: {
+          is_centered: boolean
+          line_number: number
+          line_type: string
+          page_number: number
+          surah_number: number | null
+        }
+        Insert: {
+          is_centered?: boolean
+          line_number: number
+          line_type: string
+          page_number: number
+          surah_number?: number | null
+        }
+        Update: {
+          is_centered?: boolean
+          line_number?: number
+          line_type?: string
+          page_number?: number
+          surah_number?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quran_mushaf_lines_surah_number_fkey"
+            columns: ["surah_number"]
+            isOneToOne: false
+            referencedRelation: "quran_surahs"
+            referencedColumns: ["number"]
+          },
+        ]
+      }
       quran_rukus: {
         Row: {
           ayah_end: number
           ayah_start: number
+          page_end: number | null
+          page_start: number | null
           ruku_in_surah: number
           ruku_number: number
           surah_number: number
@@ -129,6 +208,8 @@ export type Database = {
         Insert: {
           ayah_end: number
           ayah_start: number
+          page_end?: number | null
+          page_start?: number | null
           ruku_in_surah: number
           ruku_number: number
           surah_number: number
@@ -137,6 +218,8 @@ export type Database = {
         Update: {
           ayah_end?: number
           ayah_start?: number
+          page_end?: number | null
+          page_start?: number | null
           ruku_in_surah?: number
           ruku_number?: number
           surah_number?: number
