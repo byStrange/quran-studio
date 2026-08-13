@@ -106,6 +106,16 @@ change to the raw daily totals. This satisfies the brief's requirement that
 streaks be auditable from the source data — the counter can never drift, because
 it is never mutated in place.
 
+**The streak is also refreshed when it is read.**
+The trigger alone is not enough, and the reason is easy to miss: the event the
+grace rules are about — a day ending with no reading — writes no row, so nothing
+fires. A reader who stops reading would keep the numbers computed on their last
+active day, with a lapsed streak still showing and a closed grace window still
+inviting them to restore it. So `current_streak()` recomputes before returning
+whenever the cached row was computed on an earlier day, and the app reads the
+streak through it rather than selecting the table. At most one recompute per
+user per day; the rules stay defined in exactly one place.
+
 **Three streak rules the brief left ambiguous:**
 
 1. *A sub-hour day during the grace window does not restore the streak, and does
@@ -117,7 +127,7 @@ it is never mutated in place.
    so editing history can't erase a record that was genuinely achieved.
 
 All three, plus the core grace/restore behaviour, are covered by
-`pnpm test:streak` (7 scenarios against the live database).
+`pnpm test:streak` (8 scenarios against the live database).
 
 **Session time is attributed to the day the session ended, in the user's
 timezone.** A session spanning local midnight lands entirely on the later day.
@@ -332,7 +342,7 @@ quran.com, and are vendored under `public/fonts/qcf` via git LFS.
 
 Two suites run against the real project:
 
-- `pnpm test:streak` — 7 scenarios pinning the grace/restore rules.
+- `pnpm test:streak` — 8 scenarios pinning the grace/restore rules.
 - `pnpm test:smoke` — 18 checks that sign in with the *publishable* key, the
   same one the app ships with, and exercise every query and RPC the UI depends
   on. It verifies RLS both ways: a user cannot edit Quran content, and cannot

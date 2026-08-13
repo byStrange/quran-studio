@@ -10,19 +10,23 @@ import type {
 
 // --- streaks & hours -------------------------------------------------------
 
+/**
+ * The streak, refreshed for today before it is read.
+ *
+ * This goes through `current_streak()` rather than selecting the table, because
+ * the row is only rewritten when reading is logged. Days passing without any
+ * reading is exactly the case the grace rules describe, and it writes nothing —
+ * so a plain select serves state computed on the last active day.
+ */
 export function useStreak() {
   const { user } = useAuth();
   return useQuery({
     queryKey: ["streak", user?.id],
     enabled: Boolean(user),
     queryFn: async (): Promise<StreakState | null> => {
-      const { data, error } = await supabase
-        .from("streak_state")
-        .select("*")
-        .eq("user_id", user!.id)
-        .maybeSingle();
+      const { data, error } = await supabase.rpc("current_streak");
       if (error) throw error;
-      return data ?? null;
+      return (data as StreakState | null) ?? null;
     },
   });
 }

@@ -96,7 +96,7 @@ pnpm dev         # browser preview — no AI, since that needs the Rust backend
 | `pnpm fonts:qcf` | Vendor the QCF page fonts into `public/fonts/qcf` |
 | `pnpm seed:verify` | Re-run the 13 data integrity checks |
 | `pnpm test` | Run both test suites |
-| `pnpm test:streak` | Verify the streak/grace rules (7 scenarios) |
+| `pnpm test:streak` | Verify the streak/grace rules (8 scenarios) |
 | `pnpm test:smoke` | Verify every query, RPC, and RLS policy (18 checks) |
 | `pnpm test:mushaf` | Re-derive and verify the mushaf layout for all 604 pages |
 | `pnpm test:mushaf-fonts` | Check every stored glyph resolves in its page font |

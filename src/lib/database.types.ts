@@ -543,6 +543,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      current_streak: {
+        Args: never
+        Returns: {
+          computed_at: string
+          current_streak: number
+          grace_expires_on: string | null
+          grace_started_on: string | null
+          last_counted_date: string | null
+          longest_streak: number
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "streak_state"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       log_reading: {
         Args: {
           p_ruku_number?: number
