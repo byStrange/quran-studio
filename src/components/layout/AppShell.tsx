@@ -11,7 +11,7 @@ import {
   Settings as SettingsIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useStreak } from "@/hooks/useProgress";
+import { useStreakStatus } from "@/hooks/useProgress";
 import { Tooltip } from "@/components/ui/primitives";
 
 interface NavItem {
@@ -72,9 +72,8 @@ function NavRow({ item }: { item: NavItem }) {
 }
 
 function StreakBadge() {
-  const { data: streak } = useStreak();
+  const { streak, inGrace } = useStreakStatus();
   const current = streak?.current_streak ?? 0;
-  const inGrace = Boolean(streak?.grace_expires_on);
 
   return (
     <Tooltip

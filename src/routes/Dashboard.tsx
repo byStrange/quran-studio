@@ -6,6 +6,7 @@ import {
   useReadingHistory,
   useReadingOverview,
   useStreak,
+  useStreakStatus,
 } from "@/hooks/useProgress";
 import { useProfile } from "@/hooks/useProfile";
 import { Page } from "@/components/layout/AppShell";
@@ -13,23 +14,18 @@ import { Card, CardBody, CardHeader, StatTile } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ProgressBar, Tooltip } from "@/components/ui/primitives";
 import { Skeleton } from "@/components/ui/feedback";
-import { cn, daysBetween, formatDuration, formatPercent, todayInTimezone } from "@/lib/utils";
+import { cn, formatDuration, formatPercent, todayInTimezone } from "@/lib/utils";
 
 export function Dashboard() {
   const { data: profile } = useProfile();
-  const { data: streak, isLoading: streakLoading } = useStreak();
+  const { isLoading: streakLoading } = useStreak();
+  const { streak, graceDaysLeft } = useStreakStatus();
   const { data: reading, isLoading: readingLoading } = useReadingOverview();
   const { data: memorization, isLoading: memorizationLoading } = useMemorizationOverview();
   const { data: history } = useReadingHistory(84);
 
   const timezone = profile?.timezone ?? "UTC";
   const today = todayInTimezone(timezone);
-
-  /** Days remaining to rescue a paused streak, per the 3-day grace rule. */
-  const graceDaysLeft = useMemo(() => {
-    if (!streak?.grace_expires_on) return null;
-    return Math.max(0, daysBetween(today, streak.grace_expires_on));
-  }, [streak?.grace_expires_on, today]);
 
   const percentMemorized =
     memorization && memorization.total_verses > 0
@@ -63,7 +59,9 @@ export function Dashboard() {
               value={`${streak?.current_streak ?? 0}`}
               hint={
                 graceDaysLeft !== null
-                  ? `Paused · ${graceDaysLeft} ${graceDaysLeft === 1 ? "day" : "days"} to restore`
+                  ? graceDaysLeft === 1
+                    ? "Paused · last day to restore"
+                    : `Paused · ${graceDaysLeft} days to restore`
                   : `Longest: ${streak?.longest_streak ?? 0} days`
               }
               icon={<Flame className="size-4" />}
@@ -100,9 +98,11 @@ export function Dashboard() {
                     </p>
                     <p className="mt-1 text-[0.8125rem] leading-relaxed text-fg-muted">
                       You missed a day, but the streak isn't gone. Read for a full hour in a
-                      single day within the next{" "}
+                      single day{" "}
                       <strong className="font-medium text-fg">
-                        {graceDaysLeft} {graceDaysLeft === 1 ? "day" : "days"}
+                        {graceDaysLeft === 1
+                          ? "before today is over"
+                          : `within the next ${graceDaysLeft} days`}
                       </strong>{" "}
                       and it picks up right where it left off.
                     </p>

@@ -1,6 +1,9 @@
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
+import { useProfile } from "@/hooks/useProfile";
+import { daysBetween, todayInTimezone } from "@/lib/utils";
 import type {
   MemorizationOverview,
   ReadingOverview,
@@ -29,6 +32,28 @@ export function useStreak() {
       return (data as StreakState | null) ?? null;
     },
   });
+}
+
+/**
+ * The streak plus how much of its grace window is left, in whole days.
+ *
+ * `graceDaysLeft` counts today as a day, since a paused streak can still be
+ * restored on its expiry date itself. Null means there is no window to show —
+ * either none is open, or the stored one has already lapsed, which can happen
+ * briefly if the row is read before it is refreshed.
+ */
+export function useStreakStatus() {
+  const { data: streak } = useStreak();
+  const { data: profile } = useProfile();
+  const today = todayInTimezone(profile?.timezone ?? "UTC");
+
+  const graceDaysLeft = useMemo(() => {
+    if (!streak?.grace_expires_on) return null;
+    const left = daysBetween(today, streak.grace_expires_on) + 1;
+    return left > 0 ? left : null;
+  }, [streak?.grace_expires_on, today]);
+
+  return { streak: streak ?? null, graceDaysLeft, inGrace: graceDaysLeft !== null };
 }
 
 export function useReadingOverview() {
