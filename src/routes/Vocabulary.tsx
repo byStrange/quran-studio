@@ -118,13 +118,13 @@ export function Vocabulary() {
           value={statusFilter}
           onValueChange={setStatusFilter}
           options={STATUS_FILTERS}
-          className="w-44"
+          className="w-full sm:w-44"
         />
         <SelectField
           value={surahFilter}
           onValueChange={setSurahFilter}
           options={surahOptions}
-          className="w-60"
+          className="w-full sm:w-60"
         />
       </div>
 
@@ -146,8 +146,8 @@ export function Vocabulary() {
           <CardBody className="pt-5">
             <div className="divide-y divide-border">
               {(words.data ?? []).map((row) => (
-                <div key={row.word.id} className="flex items-center gap-4 py-3 first:pt-0">
-                  <div className="w-28 shrink-0 text-right">
+                <div key={row.word.id} className="flex items-center gap-3 py-3 first:pt-0 md:gap-4">
+                  <div className="w-20 shrink-0 text-right md:w-28">
                     <div className="arabic-sm text-fg">{row.word.arabic}</div>
                     {row.word.transliteration ? (
                       // Arabic descenders reach well below the baseline, so the
@@ -159,7 +159,9 @@ export function Vocabulary() {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm text-fg">{row.word.gloss_en}</div>
+                    {/* Wraps on a phone, where there is no width to truncate
+                        into and the gloss is the point of the row. */}
+                    <div className="text-sm text-fg md:truncate">{row.word.gloss_en}</div>
                     <Link
                       to={`/read/${row.word.verse.ruku_number}`}
                       className="text-[0.75rem] text-fg-subtle transition-colors hover:text-accent"

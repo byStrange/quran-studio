@@ -132,7 +132,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <aside
         className={cn(
-          "flex w-60 shrink-0 flex-col border-r border-border bg-surface/50",
+          // Translucent without a blur reads as a rendering fault, and as a
+          // drawer this sits directly over the page content.
+          "flex w-60 shrink-0 flex-col border-r border-border bg-surface/80 backdrop-blur-xl",
           // Off-canvas drawer below md; an ordinary column from md up, where
           // the translate and the fixed positioning are both undone.
           "fixed inset-y-0 left-0 z-50 transition-transform duration-200",

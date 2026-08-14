@@ -3,7 +3,14 @@
  * rest of the app imports one consistent surface rather than raw Radix.
  */
 import type { ReactNode } from "react";
-import { Dialog, Select, Switch, Tooltip as RadixTooltip, Progress } from "radix-ui";
+import {
+  Dialog,
+  DropdownMenu,
+  Select,
+  Switch,
+  Tooltip as RadixTooltip,
+  Progress,
+} from "radix-ui";
 import { Check, ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -217,5 +224,55 @@ export function Tooltip({ content, children }: { content: ReactNode; children: R
         </RadixTooltip.Portal>
       </RadixTooltip.Root>
     </RadixTooltip.Provider>
+  );
+}
+
+// --- Menu ------------------------------------------------------------------
+
+export interface MenuAction {
+  label: string;
+  icon?: ReactNode;
+  onSelect: () => void;
+  disabled?: boolean;
+  /** Renders in the accent colour, for actions that are currently on. */
+  active?: boolean;
+}
+
+/**
+ * An overflow menu. A phone header cannot hold seven icon buttons and still
+ * leave room for the surah name, so the secondary ones collapse into this.
+ */
+export function MenuButton({ actions, children }: { actions: MenuAction[]; children: ReactNode }) {
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>{children}</DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={6}
+          className={cn(
+            "z-50 min-w-[13rem] rounded-xl border border-border bg-surface p-1",
+            "shadow-2xl shadow-black/30 animate-rise",
+          )}
+        >
+          {actions.map((action) => (
+            <DropdownMenu.Item
+              key={action.label}
+              disabled={action.disabled}
+              onSelect={action.onSelect}
+              className={cn(
+                "flex cursor-pointer select-none items-center gap-2.5 rounded-lg px-2.5 py-2.5",
+                "text-sm outline-none data-[highlighted]:bg-surface-2",
+                "data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
+                action.active ? "text-accent" : "text-fg",
+              )}
+            >
+              <span className="shrink-0 text-fg-subtle">{action.icon}</span>
+              {action.label}
+            </DropdownMenu.Item>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }

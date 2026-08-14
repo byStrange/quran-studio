@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   BookMarked,
+  BookOpen,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -10,6 +11,7 @@ import {
   Expand,
   LayoutList,
   ListTree,
+  MoreHorizontal,
   Palette,
 } from "lucide-react";
 import { useRuku, useRukuVerses, useSurahs } from "@/hooks/useQuranData";
@@ -25,7 +27,7 @@ import { TajweedLegend } from "@/components/reader/TajweedLegend";
 import { RukuSummaryCard } from "@/components/reader/RukuSummaryCard";
 import { Button } from "@/components/ui/button";
 import { ErrorState, LoadingBlock } from "@/components/ui/feedback";
-import { ProgressBar, Tooltip } from "@/components/ui/primitives";
+import { MenuButton, ProgressBar, Tooltip, type MenuAction } from "@/components/ui/primitives";
 
 const TOTAL_RUKUS = 558;
 
@@ -56,6 +58,8 @@ export function Reader() {
   const [expandedVerses, setExpandedVerses] = useState<Set<number>>(new Set());
   const [focusMode, setFocusMode] = useState(false);
   const [focusIndex, setFocusIndex] = useState(0);
+  // Only consulted below md, where the tafsir is a sheet rather than a column.
+  const [tafsirOpen, setTafsirOpen] = useState(false);
   const { sessionSeconds, idle } = useReadingTimer(valid ? rukuNumber : null);
 
   const surah = surahs?.find((s) => s.number === ruku?.surah_number);
@@ -171,6 +175,45 @@ export function Reader() {
 
   const tafsirFirst = prefs.tafsirSide === "left";
 
+  // Everything the desktop header shows as its own button, minus the two that
+  // stop making sense on a phone: the panel side (the tafsir is a sheet, not a
+  // column) and the session clock (informational, and the scarcest thing here
+  // is width).
+  const mobileActions: MenuAction[] = [
+    {
+      label: "Mushaf page view",
+      icon: <BookMarked className="size-4" aria-hidden />,
+      disabled: !verses?.length,
+      onSelect: switchToMushaf,
+    },
+    {
+      label: "Focus mode",
+      icon: <Expand className="size-4" aria-hidden />,
+      disabled: !verses?.length,
+      onSelect: () => {
+        const index = (verses ?? []).findIndex((v) => v.ayah_number === selectedAyah);
+        openFocus(index >= 0 ? index : 0);
+      },
+    },
+    {
+      label: prefs.tajweed ? "Turn off tajweed colouring" : "Colour by tajweed rule",
+      icon: <Palette className="size-4" aria-hidden />,
+      active: prefs.tajweed,
+      onSelect: toggleTajweed,
+    },
+    {
+      label:
+        expandedVerses.size === verseIds.length && verseIds.length > 0
+          ? "Collapse word breakdowns"
+          : "Expand word breakdowns",
+      icon: <ListTree className="size-4" aria-hidden />,
+      onSelect: () =>
+        setExpandedVerses((current) =>
+          current.size === verseIds.length ? new Set() : new Set(verseIds),
+        ),
+    },
+  ];
+
   return (
     <div className="flex h-full flex-col">
       <header className="shrink-0 border-b border-border bg-surface/60 px-3 py-2.5 backdrop-blur md:px-6 md:py-3">
@@ -214,9 +257,11 @@ export function Reader() {
             </Button>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* The full control set needs a window. Below md it collapses to a
+              tafsir toggle and an overflow menu. */}
+          <div className="hidden items-center gap-3 md:flex">
             {verseIds.length > 0 ? (
-              <div className="hidden items-center gap-2.5 md:flex">
+              <div className="flex items-center gap-2.5">
                 <span className="text-[0.75rem] tabular-nums text-fg-subtle">
                   {memorizedCount}/{verseIds.length} memorized
                 </span>
@@ -328,6 +373,22 @@ export function Reader() {
               </Button>
             </Tooltip>
           </div>
+
+          <div className="flex items-center gap-0.5 md:hidden">
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label="Open tafsir"
+              onClick={() => setTafsirOpen(true)}
+            >
+              <BookOpen className="size-4" aria-hidden />
+            </Button>
+            <MenuButton actions={mobileActions}>
+              <Button size="icon" variant="ghost" aria-label="More reader options">
+                <MoreHorizontal className="size-4" aria-hidden />
+              </Button>
+            </MenuButton>
+          </div>
         </div>
       </header>
 
@@ -344,6 +405,8 @@ export function Reader() {
       ) : (
         <SplitPane
           tafsirFirst={tafsirFirst}
+          tafsirOpen={tafsirOpen}
+          onTafsirOpenChange={setTafsirOpen}
           reader={
             <div data-verse-scroll className="h-full overflow-y-auto px-4 py-4 md:px-6 md:py-6">
               <div className="mx-auto max-w-3xl space-y-4">

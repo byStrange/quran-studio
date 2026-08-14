@@ -135,7 +135,8 @@ function NavButton({
       disabled={disabled}
       aria-label={side === "prev" ? "Previous ayah" : "Next ayah"}
       className={cn(
-        "group absolute inset-y-0 z-10 flex w-16 flex-col items-center justify-center gap-1.5 sm:w-24",
+        // Narrow on a phone: every pixel these take is taken from the ayah.
+        "group absolute inset-y-0 z-10 flex w-10 flex-col items-center justify-center gap-1.5 sm:w-24",
         "text-fg-subtle transition-colors hover:text-fg disabled:pointer-events-none disabled:opacity-25",
         side === "prev" ? "left-0" : "right-0",
       )}
@@ -333,7 +334,8 @@ export function FocusMode({
 
       <header
         className={cn(
-          "relative z-20 flex shrink-0 items-center gap-4 px-6 py-4 transition-opacity duration-500",
+          "relative z-20 flex shrink-0 items-center gap-3 px-3 py-2.5 transition-opacity duration-500",
+          "sm:gap-4 sm:px-6 sm:py-4",
           chromeHidden && "opacity-0",
         )}
       >
@@ -347,7 +349,7 @@ export function FocusMode({
 
         <div className="flex-1" />
 
-        <div className="flex items-center gap-1.5 text-[0.75rem] tabular-nums text-fg-subtle">
+        <div className="hidden items-center gap-1.5 text-[0.75rem] tabular-nums text-fg-subtle sm:flex">
           <Clock className="size-3.5" aria-hidden />
           {formatClock(sessionSeconds)}
         </div>
@@ -355,11 +357,13 @@ export function FocusMode({
         <button
           type="button"
           onClick={onExit}
-          className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-[0.8125rem] text-fg-muted transition-colors hover:border-border-strong hover:text-fg"
+          aria-label="Exit focus mode"
+          className="inline-flex h-11 items-center gap-2 rounded-lg border border-border px-3 text-[0.8125rem] text-fg-muted transition-colors hover:border-border-strong hover:text-fg sm:h-9"
         >
           <X className="size-4" aria-hidden />
-          Exit
-          <kbd className="rounded border border-border bg-surface-2 px-1.5 py-0.5 font-sans text-[0.6875rem]">
+          <span className="hidden sm:inline">Exit</span>
+          {/* A key hint is noise on a device with no keyboard. */}
+          <kbd className="hidden rounded border border-border bg-surface-2 px-1.5 py-0.5 font-sans text-[0.6875rem] sm:inline">
             Esc
           </kbd>
         </button>
@@ -379,7 +383,7 @@ export function FocusMode({
           hint={!chromeHidden && atLast && onNextRuku ? `Ruku ${rukuNumber + 1}` : undefined}
         />
 
-        <div className="h-full overflow-y-auto px-16 sm:px-24">
+        <div className="h-full overflow-y-auto px-11 sm:px-24">
           {loading || !verse ? (
             <div className="grid h-full place-items-center">
               <Spinner className="size-6" />

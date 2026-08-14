@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
+  BookOpen,
   BookOpenText,
   ChevronLeft,
   ChevronRight,
@@ -64,6 +65,8 @@ export function MushafReader() {
   const { sessionSeconds, idle } = useReadingTimer(rukus?.[0]?.ruku_number ?? null);
 
   const [selectedVerseId, setSelectedVerseId] = useState<number | null>(null);
+  // Only consulted below md, where the tafsir is a sheet rather than a column.
+  const [tafsirOpen, setTafsirOpen] = useState(false);
 
   // The measure the page is fitted to, tracked live so the mushaf reflows with
   // the window and the tafsir divider.
@@ -183,7 +186,9 @@ export function MushafReader() {
             </Button>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* The page itself is the point on a phone, so the header keeps only
+              what changes what you are looking at. */}
+          <div className="hidden items-center gap-3 md:flex">
             <Tooltip
               content={
                 idle
@@ -234,6 +239,25 @@ export function MushafReader() {
               </Button>
             </Tooltip>
           </div>
+
+          <div className="flex items-center gap-0.5 md:hidden">
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label="Open tafsir"
+              onClick={() => setTafsirOpen(true)}
+            >
+              <BookOpen className="size-4" aria-hidden />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label="Switch to study reader"
+              onClick={switchToStudy}
+            >
+              <BookOpenText className="size-4" aria-hidden />
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -254,8 +278,10 @@ export function MushafReader() {
       ) : (
         <SplitPane
           tafsirFirst={tafsirFirst}
+          tafsirOpen={tafsirOpen}
+          onTafsirOpenChange={setTafsirOpen}
           reader={
-            <div data-mushaf-scroll className="h-full overflow-y-auto px-6 py-6">
+            <div data-mushaf-scroll className="h-full overflow-y-auto px-2 py-3 md:px-6 md:py-6">
               <div className="mx-auto max-w-3xl">
                 {/* Horizontal padding is subtracted from the width the mushaf
                     scale is computed against, so a phone gives it back. */}
