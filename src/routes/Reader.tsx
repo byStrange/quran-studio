@@ -173,7 +173,7 @@ export function Reader() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="shrink-0 border-b border-border bg-surface/60 px-6 py-3 backdrop-blur">
+      <header className="shrink-0 border-b border-border bg-surface/60 px-3 py-2.5 backdrop-blur md:px-6 md:py-3">
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <Button
@@ -345,7 +345,7 @@ export function Reader() {
         <SplitPane
           tafsirFirst={tafsirFirst}
           reader={
-            <div data-verse-scroll className="h-full overflow-y-auto px-6 py-6">
+            <div data-verse-scroll className="h-full overflow-y-auto px-4 py-4 md:px-6 md:py-6">
               <div className="mx-auto max-w-3xl space-y-4">
                 {prefs.tajweed ? <TajweedLegend /> : null}
 

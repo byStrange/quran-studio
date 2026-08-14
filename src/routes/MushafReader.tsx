@@ -144,7 +144,7 @@ export function MushafReader() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="shrink-0 border-b border-border bg-surface/60 px-6 py-3 backdrop-blur">
+      <header className="shrink-0 border-b border-border bg-surface/60 px-3 py-2.5 backdrop-blur md:px-6 md:py-3">
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <Button
@@ -257,7 +257,9 @@ export function MushafReader() {
           reader={
             <div data-mushaf-scroll className="h-full overflow-y-auto px-6 py-6">
               <div className="mx-auto max-w-3xl">
-                <div className="rounded-card border border-border bg-surface px-8 py-7 shadow-sm">
+                {/* Horizontal padding is subtracted from the width the mushaf
+                    scale is computed against, so a phone gives it back. */}
+                <div className="rounded-card border border-border bg-surface px-3 py-5 shadow-sm md:px-8 md:py-7">
                   <div ref={measureRef}>
                     <MushafPage
                       page={page}

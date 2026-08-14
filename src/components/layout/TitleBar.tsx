@@ -9,13 +9,16 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { BookOpen, Copy, Minus, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { appWindow, IS_TAURI } from "@/lib/window";
+import { appWindow, HAS_WINDOW_CHROME, IS_MOBILE_PLATFORM } from "@/lib/window";
 
 /** Mirrors the OS maximise state so the restore icon stays truthful. */
 function useMaximized(): boolean {
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
+    // Gated on the chrome rather than on the window: mobile has a window
+    // object that answers, but asking it to maximise means nothing.
+    if (!HAS_WINDOW_CHROME) return;
     const win = appWindow();
     if (!win) return;
 
@@ -130,7 +133,9 @@ function ResizeHandles() {
 
 function TitleBar({ maximized }: { maximized: boolean }) {
   return (
-    <header className="relative z-30 flex h-10 shrink-0 items-center border-b border-border bg-bg">
+    // Hidden below `md`, where the viewport is a phone rather than a window
+    // and AppShell supplies its own compact header instead.
+    <header className="relative z-30 hidden h-10 shrink-0 items-center border-b border-border bg-bg md:flex">
       {/* A single full-width drag layer: Tauri only drags when the event target
           itself carries the attribute, so the visible row floats above it with
           pointer events off and re-enables them just for the controls. */}
@@ -146,7 +151,7 @@ function TitleBar({ maximized }: { maximized: boolean }) {
 
         <div className="flex-1" />
 
-        {IS_TAURI ? <WindowControls maximized={maximized} /> : null}
+        {HAS_WINDOW_CHROME ? <WindowControls maximized={maximized} /> : null}
       </div>
     </header>
   );
@@ -158,9 +163,11 @@ export function WindowFrame({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-full flex-col bg-bg">
-      <TitleBar maximized={maximized} />
+      {/* On a phone there is no window to title, drag or resize — the OS owns
+          all of that, and the screen is too small to spend 40px saying so. */}
+      {IS_MOBILE_PLATFORM ? null : <TitleBar maximized={maximized} />}
       <div className="relative min-h-0 flex-1">{children}</div>
-      {IS_TAURI && !maximized ? <ResizeHandles /> : null}
+      {HAS_WINDOW_CHROME && !maximized ? <ResizeHandles /> : null}
     </div>
   );
 }

@@ -43,7 +43,7 @@ export function TafsirPanel({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="shrink-0 border-b border-border px-5 py-4">
+      <header className="shrink-0 border-b border-border px-4 py-3 md:px-5 md:py-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
             <BookOpen className="size-3.5" aria-hidden />
@@ -79,7 +79,7 @@ export function TafsirPanel({
         ) : null}
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-5 md:py-5">
         {ayahNumber === null ? (
           <EmptyState
             icon={<BookOpen className="size-5" />}

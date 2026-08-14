@@ -11,6 +11,19 @@ import { getCurrentWindow, type Window } from "@tauri-apps/api/window";
 /** False under a plain `vite dev` browser tab, where the window API is absent. */
 export const IS_TAURI = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+/**
+ * Android and iOS run the same webview, but there is no OS window to minimise,
+ * maximise or resize. The Tauri window API still answers there, so this cannot
+ * be inferred from `IS_TAURI`, and it is deliberately not a viewport check —
+ * a tablet is wide enough for the desktop layout and still has no window
+ * chrome.
+ */
+export const IS_MOBILE_PLATFORM =
+  typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+/** Whether this process draws its own title bar, controls and resize edges. */
+export const HAS_WINDOW_CHROME = IS_TAURI && !IS_MOBILE_PLATFORM;
+
 let cached: Window | null = null;
 
 export function appWindow(): Window | null {

@@ -58,32 +58,41 @@ export function SplitPane({
         dragging.current = true;
         document.body.style.cursor = "col-resize";
       }}
-      className="group relative w-px shrink-0 cursor-col-resize bg-border"
+      // Dragging is a pointer affordance on a window that can spare the width;
+      // below md the panes stack and the divider has nothing to divide.
+      className="group relative hidden w-px shrink-0 cursor-col-resize bg-border md:block"
     >
       <div className="absolute inset-y-0 -left-1 -right-1 transition-colors group-hover:bg-accent/20" />
     </div>
   );
 
+  // The stored percentage is a *width*, so it only applies once the panes sit
+  // side by side. Stacked, tafsir takes a fixed slice of the height instead.
   const tafsirPane = (
     <div
-      className="min-w-0 shrink-0 border-border bg-surface/40"
-      style={{ width: `${tafsirWidth}%` }}
+      className={
+        "min-h-0 min-w-0 shrink-0 border-t border-border bg-surface/40 " +
+        "h-[45%] w-full md:h-auto md:w-[var(--tafsir-width)] md:border-t-0"
+      }
+      style={{ "--tafsir-width": `${tafsirWidth}%` } as React.CSSProperties}
     >
       {tafsir}
     </div>
   );
 
   return (
-    <div ref={containerRef} className="flex min-h-0 flex-1">
+    <div ref={containerRef} className="flex min-h-0 flex-1 flex-col md:flex-row">
       {tafsirFirst ? (
         <>
           {tafsirPane}
           {divider}
-          <div className="min-w-0 flex-1">{reader}</div>
+          {/* Stacked, the reader leads regardless of the side preference: the
+              tafsir reads as commentary below it, not as the page itself. */}
+          <div className="order-first min-h-0 min-w-0 flex-1 md:order-none">{reader}</div>
         </>
       ) : (
         <>
-          <div className="min-w-0 flex-1">{reader}</div>
+          <div className="min-h-0 min-w-0 flex-1">{reader}</div>
           {divider}
           {tafsirPane}
         </>
