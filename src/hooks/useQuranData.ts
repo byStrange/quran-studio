@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import type { Ruku, Surah, TafsirEntry, VerseWithWords } from "@/lib/types";
+import type { Ruku, Surah, TafsirEdition, TafsirEntry, VerseWithWords } from "@/lib/types";
 
 /** Quran content never changes after seeding, so it is cached aggressively. */
 const CONTENT_QUERY = { staleTime: Infinity, gcTime: 60 * 60 * 1000 } as const;
@@ -68,19 +68,41 @@ export function useRukuVerses(rukuNumber: number | null) {
   });
 }
 
-/**
- * Ibn Kathir's commentary covering a specific ayah. Entries often span a
- * range, so this looks for the row whose range contains the ayah.
- */
-export function useTafsirForAyah(surahNumber: number | null, ayahNumber: number | null) {
+/** The tafsir editions that were seeded, in the order the picker shows them. */
+export function useTafsirEditions() {
   return useQuery({
     ...CONTENT_QUERY,
-    queryKey: ["tafsir", surahNumber, ayahNumber],
+    queryKey: ["tafsir-editions"],
+    queryFn: async (): Promise<TafsirEdition[]> => {
+      const { data, error } = await supabase
+        .from("tafsir_editions")
+        .select("*")
+        .order("sort_order")
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+/**
+ * One edition's commentary covering a specific ayah. Entries can span a range,
+ * so this looks for the row whose range contains the ayah.
+ */
+export function useTafsirForAyah(
+  surahNumber: number | null,
+  ayahNumber: number | null,
+  edition: string,
+) {
+  return useQuery({
+    ...CONTENT_QUERY,
+    queryKey: ["tafsir", edition, surahNumber, ayahNumber],
     enabled: surahNumber !== null && ayahNumber !== null,
     queryFn: async (): Promise<TafsirEntry | null> => {
       const { data, error } = await supabase
-        .from("tafsir_ibn_kathir")
+        .from("tafsir")
         .select("*")
+        .eq("edition", edition)
         .eq("surah_number", surahNumber!)
         .lte("ayah_start", ayahNumber!)
         .gte("ayah_end", ayahNumber!)

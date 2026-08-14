@@ -13,6 +13,7 @@
     "app:build": "tauri build",
     "seed": "tsx scripts/seed/index.ts",
     "seed:tajweed": "tsx scripts/seed/backfill-tajweed.ts",
+    "seed:tafsir": "tsx scripts/seed/tafsir-import.ts",
     "seed:mushaf": "tsx scripts/seed/mushaf-import.ts",
     "fonts:qcf": "tsx scripts/seed/fonts.ts",
     "seed:verify": "tsx scripts/seed/verify.ts",

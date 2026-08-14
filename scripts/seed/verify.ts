@@ -202,7 +202,7 @@ const checks: Check[] = [
         surah_number: number;
         ayah_start: number;
         ayah_end: number;
-      }>("tafsir_ibn_kathir", "surah_number, ayah_start, ayah_end", "id");
+      }>("tafsir", "surah_number, ayah_start, ayah_end", "id");
       const { data: surahs, error: surahError } = await admin
         .from("quran_surahs")
         .select("number, ayah_count");
@@ -216,18 +216,53 @@ const checks: Check[] = [
     },
   },
   {
-    name: "tafsir covers every surah",
+    name: "every tafsir edition covers every surah",
     run: async () => {
-      const data = await selectAll<{ surah_number: number }>(
-        "tafsir_ibn_kathir",
-        "surah_number",
+      const data = await selectAll<{ edition: string; surah_number: number }>(
+        "tafsir",
+        "edition, surah_number",
         "id",
       );
-      const covered = new Set(data.map((t) => t.surah_number));
-      const missing = Array.from({ length: EXPECTED_SURAHS }, (_, i) => i + 1).filter(
-        (n) => !covered.has(n),
-      );
-      return missing.length === 0 ? null : `no tafsir for surahs: ${missing.join(", ")}`;
+      const { data: editions, error } = await admin.from("tafsir_editions").select("slug");
+      if (error) throw new Error(error.message);
+      if (!editions?.length) return "no tafsir editions registered";
+
+      const bySlug = new Map(editions.map((e) => [e.slug, new Set<number>()]));
+      for (const row of data) bySlug.get(row.edition)?.add(row.surah_number);
+
+      const gaps: string[] = [];
+      for (const [slug, covered] of bySlug) {
+        const missing = Array.from({ length: EXPECTED_SURAHS }, (_, i) => i + 1).filter(
+          (n) => !covered.has(n),
+        );
+        if (missing.length > 0) {
+          const shown = missing.slice(0, 8).join(", ");
+          gaps.push(
+            `${slug} missing ${missing.length} surah(s): ${shown}${missing.length > 8 ? "…" : ""}`,
+          );
+        }
+      }
+      return gaps.length === 0 ? null : gaps.join("; ");
+    },
+  },
+  {
+    // An edition with no rows would appear in the reader's picker and then
+    // show nothing whichever ayah was selected.
+    name: "no tafsir edition is registered but empty",
+    run: async () => {
+      const { data: editions, error } = await admin.from("tafsir_editions").select("slug");
+      if (error) throw new Error(error.message);
+
+      const empty: string[] = [];
+      for (const { slug } of editions ?? []) {
+        const { count, error: countError } = await admin
+          .from("tafsir")
+          .select("*", { count: "exact", head: true })
+          .eq("edition", slug);
+        if (countError) throw new Error(countError.message);
+        if (!count) empty.push(slug);
+      }
+      return empty.length === 0 ? null : `editions with no content: ${empty.join(", ")}`;
     },
   },
 ];

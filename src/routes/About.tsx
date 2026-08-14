@@ -28,9 +28,16 @@ const SOURCES: Source[] = [
   {
     name: "Tafsir Ibn Kathir (abridged, English)",
     url: "https://github.com/spa5k/tafsir_api",
-    used: "The commentary in the reader's tafsir panel, mapped to ayah ranges.",
+    used: "The English option in the reader's tafsir panel, mapped to ayah ranges.",
     license:
       "Public-domain classical text; JSON mirror published by the tafsir_api project under MIT.",
+  },
+  {
+    name: "Al-Mukhtasar fi Tafsir al-Qur'an al-Karim (Uzbek)",
+    url: "https://github.com/spa5k/tafsir_api",
+    used: "The Uzbek option in the reader's tafsir panel, one entry per ayah.",
+    license:
+      "© Tafsir Center for Quranic Studies; official Uzbek edition, mirrored by the tafsir_api project.",
   },
   {
     name: "Ollama Cloud",
@@ -109,11 +116,17 @@ export function About() {
           <CardHeader title="A note on the tafsir" />
           <CardBody>
             <p className="prose-reading text-[0.875rem]">
-              Ibn Kathir frequently comments on several ayahs together. Where that happens the
-              panel shows the full entry and labels the verse range it covers, rather than
-              repeating the same commentary for each ayah. AI-generated notes are a study aid,
-              not a source of religious rulings — check anything important against the tafsir
-              itself and a qualified teacher.
+              Two editions are available, switched from the panel itself: Ibn Kathir in English
+              and Al-Mukhtasar in Uzbek. Both are human translations — nothing in the tafsir
+              panel is machine-translated. Ibn Kathir frequently comments on several ayahs
+              together; where that happens the panel shows the full entry and labels the verse
+              range it covers, rather than repeating the same commentary for each ayah.
+              Al-Mukhtasar comments ayah by ayah and is considerably more concise.
+            </p>
+            <p className="prose-reading mt-3 text-[0.875rem]">
+              AI-generated notes elsewhere in the app are a study aid, not a source of religious
+              rulings — check anything important against the tafsir itself and a qualified
+              teacher.
             </p>
           </CardBody>
         </Card>

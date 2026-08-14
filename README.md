@@ -1,7 +1,8 @@
 # Quran Studio
 
 A desktop app for learning and memorizing the Quran **ruku by ruku**. Each of
-the Quran's 558 rukus is a lesson: Arabic text alongside Ibn Kathir's tafsir,
+the Quran's 558 rukus is a lesson: Arabic text alongside tafsir in English or
+Uzbek,
 a word-by-word breakdown with AI-generated context for each word, memorization
 tracking, vocabulary quizzing, and reading streaks.
 
@@ -46,9 +47,9 @@ pnpm seed
 ```
 
 This downloads the full corpus once (~2 minutes) and writes it to Supabase:
-114 surahs, 6,236 verses with translation, 558 rukus, 77,429 words, 1,902
-tafsir entries, and 59,923 tajweed rule spans. Downloads are cached under `scripts/seed/.cache`, so re-running
-is cheap. The import finishes by running 10 integrity checks.
+114 surahs, 6,236 verses with translation, 558 rukus, 77,429 words, 8,114
+tafsir entries across two editions, and 59,923 tajweed rule spans. Downloads are cached under `scripts/seed/.cache`, so re-running
+is cheap. The import finishes by running 14 integrity checks.
 
 The running app never calls a third-party Quran API — it only reads Supabase.
 
@@ -92,12 +93,13 @@ pnpm dev         # browser preview — no AI, since that needs the Rust backend
 | `pnpm dev` | Frontend only, in a browser |
 | `pnpm seed` | Import all Quran content into Supabase |
 | `pnpm seed:tajweed` | Backfill only the tajweed spans on an existing database |
+| `pnpm seed:tafsir` | Re-import just the tafsir editions |
 | `pnpm seed:mushaf` | Import the 604-page Madani mushaf layout |
 | `pnpm fonts:qcf` | Vendor the QCF page fonts into `public/fonts/qcf` |
-| `pnpm seed:verify` | Re-run the 13 data integrity checks |
+| `pnpm seed:verify` | Re-run the 14 data integrity checks |
 | `pnpm test` | Run both test suites |
 | `pnpm test:streak` | Verify the streak/grace rules (8 scenarios) |
-| `pnpm test:smoke` | Verify every query, RPC, and RLS policy (18 checks) |
+| `pnpm test:smoke` | Verify every query, RPC, and RLS policy (21 checks) |
 | `pnpm test:mushaf` | Re-derive and verify the mushaf layout for all 604 pages |
 | `pnpm test:mushaf-fonts` | Check every stored glyph resolves in its page font |
 | `pnpm typecheck` | `tsc --noEmit` |
@@ -147,7 +149,9 @@ the in-app **About** screen for source attribution.
 
 Quran text, translation, word-by-word data, tajweed annotations, and the Madani
 mushaf page layout from the quran.com API (Saheeh International translation).
-Tafsir Ibn Kathir (English, abridged) via the `tafsir_api` project. Amiri Quran
+Tafsir Ibn Kathir (English, abridged) and Al-Mukhtasar fi Tafsir al-Qur'an
+al-Karim (Uzbek, Tafsir Center for Quranic Studies) via the `tafsir_api`
+project. Amiri Quran
 and Inter typefaces under the SIL Open Font License. The QCF V1 mushaf page
 fonts and surah-name banners are from the King Fahd Glorious Quran Printing
 Complex, mirrored by quran.com. Please respect each source's terms if you redistribute

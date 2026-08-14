@@ -29,14 +29,46 @@ this and would fail the import if it were ever violated.
 It publishes the English Ibn Kathir corpus as one JSON file per surah — 114
 requests rather than 6,236. Verified all 114 surahs are covered.
 
+**Tafsir is a multi-edition table, because a second edition arrived.**
+`tafsir_ibn_kathir` baked the edition into the table name, which was honest
+while there was one of them. It is now `tafsir` with an `edition` column
+pointing at a `tafsir_editions` row, so a third edition is a seed change and
+nothing else. The rename kept the 1,902 imported rows in place.
+
+Editions are a table rather than a constant in the app because the reader
+builds its picker from them: an edition can only be offered if its content is
+actually present. Two import checks enforce the pairing — every edition covers
+every surah, and no edition is registered with nothing behind it — so the
+picker cannot advertise an edition that answers with a blank panel.
+
+**The Uzbek tafsir is Al-Mukhtasar, not a translation of Ibn Kathir.**
+The app is meant to be usable by Uzbek readers, and the obvious move — running
+Ibn Kathir through a model — was the wrong one. It would have produced an
+unreviewed translation of an *abridgement*, two lossy hops from the Arabic,
+published under Ibn Kathir's name, with the errors concentrated exactly where
+they matter most: aqidah, hadith gradings, anything ruling-shaped.
+
+`spa5k/tafsir_api` already carries `uzbek-mokhtasar`, the official Uzbek
+edition of Al-Mukhtasar fī Tafsīr al-Qurʾān al-Karīm from the Tafsir Center
+for Quranic Studies — a human translation of a committee-authored work. It
+covers all 6,236 ayahs, one per ayah, against Ibn Kathir's 1,902 collapsed
+ranges. It is much terser than Ibn Kathir, so an Uzbek reader gets a thinner
+commentary than an English one; that is a real cost, and still the better
+trade than shipping a machine translation with a scholar's name on it.
+
+Its content is Cyrillic, so its title and language label are stored in Cyrillic
+too, and the panel sets `lang` from the edition. A Latin-script Uzbek audience
+would need a transliteration pass, which is mechanical but not yet done.
+
 **Tafsir As-Sa'di was asked for and deliberately not added.** No English
 translation of it exists in any open corpus — quran.com, qul.tarteel.ai and
 `spa5k/tafsir_api` all carry As-Sa'di in Arabic, Russian, Urdu, Turkish,
 Persian, Indonesian and Albanian, but never English, and the IIPH English
 edition is print-only. Shipping the Arabic original, or an English tafsir by
 someone else relabelled as As-Sa'di, would both have been worse than shipping
-Ibn Kathir alone. Revisit if an English edition is ever released openly;
-`tafsir_ibn_kathir` would need to become a multi-source table first.
+Ibn Kathir alone. The multi-source table that note called for now exists, so
+if an English edition is ever released openly, adding it is a row in
+`TAFSIR_EDITIONS` and a re-run of `pnpm seed:tafsir`.
 
 The requested Saheeh International translation needed no work — the seed has
 always imported quran.com resource id 20, which is that translation.
@@ -47,6 +79,11 @@ identical text against every ayah in that run. The seed detects consecutive
 identical entries and stores one row spanning `ayah_start..ayah_end` (1,902 rows
 instead of ~6,000). The reader looks up the row whose range contains the
 selected ayah and labels the range it covers.
+
+The rule is per-edition and not special-cased: Al-Mukhtasar comments ayah by
+ayah, so the same pass finds almost nothing to merge and leaves 6,212 rows for
+6,236 ayahs. Identical neighbours merge; an edition that has none keeps them
+all.
 
 **Tajweed rules are stored as ranges over the existing text, not as a second
 copy of it.**
@@ -343,7 +380,7 @@ quran.com, and are vendored under `public/fonts/qcf` via git LFS.
 Two suites run against the real project:
 
 - `pnpm test:streak` — 8 scenarios pinning the grace/restore rules.
-- `pnpm test:smoke` — 18 checks that sign in with the *publishable* key, the
+- `pnpm test:smoke` — 21 checks that sign in with the *publishable* key, the
   same one the app ships with, and exercise every query and RPC the UI depends
   on. It verifies RLS both ways: a user cannot edit Quran content, and cannot
   see another user's rows.

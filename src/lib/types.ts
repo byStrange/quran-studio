@@ -7,7 +7,8 @@ export type Surah = Tables["quran_surahs"]["Row"];
 export type Verse = Tables["quran_verses"]["Row"];
 export type Ruku = Tables["quran_rukus"]["Row"];
 export type Word = Tables["quran_words"]["Row"];
-export type TafsirEntry = Tables["tafsir_ibn_kathir"]["Row"];
+export type TafsirEntry = Tables["tafsir"]["Row"];
+export type TafsirEdition = Tables["tafsir_editions"]["Row"];
 export type Profile = Tables["profiles"]["Row"];
 export type StreakState = Tables["streak_state"]["Row"];
 export type WordProgress = Tables["user_word_progress"]["Row"];
@@ -39,6 +40,15 @@ export interface VerseWithWords extends Omit<Verse, "tajweed"> {
 export interface UiPrefs {
   /** Which side of the reader the tafsir panel occupies. */
   tafsirSide: "left" | "right";
+  /**
+   * Which tafsir edition the panel shows, as a `tafsir_editions.slug`.
+   *
+   * Stored rather than derived so the choice survives a reload, and kept as a
+   * plain string because the set of editions lives in the database — an
+   * unknown slug (an edition removed from a later seed) falls back to the
+   * default rather than leaving the panel stuck on nothing.
+   */
+  tafsirEdition: string;
   theme: "light" | "dark" | "system";
   /** Show the word-by-word breakdown expanded by default. */
   wordsExpanded: boolean;
@@ -60,8 +70,11 @@ export interface UiPrefs {
   readerMode: "study" | "mushaf";
 }
 
+export const DEFAULT_TAFSIR_EDITION = "en-tafisr-ibn-kathir";
+
 export const DEFAULT_UI_PREFS: UiPrefs = {
   tafsirSide: "right",
+  tafsirEdition: DEFAULT_TAFSIR_EDITION,
   theme: "system",
   wordsExpanded: false,
   tajweed: true,

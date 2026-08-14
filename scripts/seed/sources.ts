@@ -6,7 +6,7 @@
  * ruku/juz metadata in a single call per surah — with no credentials.
  *
  * Tafsir: spa5k/tafsir_api, a static JSON mirror of quran.com's tafsir corpus
- * served from jsDelivr, which bundles Ibn Kathir (English) one file per surah.
+ * served from jsDelivr, one file per surah per edition.
  *
  * These are fetched exactly once, here, and written into Supabase. The running
  * app never calls them.
@@ -14,11 +14,42 @@
 import { cachedJson, stripHtml } from "./util.ts";
 
 const QURAN_API = "https://api.quran.com/api/v4";
-const TAFSIR_CDN =
-  "https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir/en-tafisr-ibn-kathir";
+const TAFSIR_CDN = "https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir";
 
 /** Saheeh International, resource id 20 in the quran.com translation catalog. */
 export const TRANSLATION_ID = 20;
+
+/**
+ * The tafsir editions imported, with display metadata written alongside them.
+ *
+ * The upstream catalogue is not used for these fields: it lists the Uzbek
+ * edition with both name and author as "Uzbek Mokhtasar", which is a slug, not
+ * a title. Naming them here keeps the picker readable and makes the curation
+ * deliberate — the mirror carries a hundred editions and this app ships two.
+ *
+ * The Uzbek edition is titled and labelled in Cyrillic because its content is
+ * Cyrillic; a reader who can use it is a reader who reads that script.
+ */
+export const TAFSIR_EDITIONS = [
+  {
+    slug: "en-tafisr-ibn-kathir",
+    name: "Ibn Kathir",
+    author_name: "Hafiz Ibn Kathir",
+    language_code: "en",
+    language_name: "English",
+    sort_order: 0,
+  },
+  {
+    slug: "uzbek-mokhtasar",
+    name: "Ал-Мухтасар",
+    author_name: "Tafsir Center for Quranic Studies",
+    language_code: "uz",
+    language_name: "Ўзбекча",
+    sort_order: 1,
+  },
+] as const;
+
+export type TafsirEditionSlug = (typeof TAFSIR_EDITIONS)[number]["slug"];
 
 // --- wire types ------------------------------------------------------------
 
@@ -89,6 +120,7 @@ export interface Word {
 }
 
 export interface TafsirEntry {
+  edition: string;
   surah_number: number;
   ayah_start: number;
   ayah_end: number;
@@ -166,18 +198,26 @@ export async function fetchSurahContent(
 }
 
 /**
- * Ibn Kathir comments on runs of ayahs at a time; the source mirror repeats
- * the identical commentary against every ayah in the run. Consecutive
- * duplicates are collapsed into one row covering the whole range so the reader
- * can show "commentary on 2:1-5" instead of the same text five times.
+ * One edition's commentary on one surah.
+ *
+ * Ibn Kathir comments on runs of ayahs at a time, and the mirror repeats the
+ * identical commentary against every ayah in the run. Consecutive duplicates
+ * are collapsed into one row covering the whole range so the reader can show
+ * "commentary on 2:1-5" instead of the same text five times. The Mukhtasar
+ * comments ayah by ayah and collapses to almost nothing, which is correct
+ * rather than a special case — the rule is "identical neighbours merge", and
+ * it simply finds few.
  */
 export async function fetchTafsir(
+  edition: string,
   surahNumber: number,
   ayahCount: number,
 ): Promise<TafsirEntry[]> {
   const data = await cachedJson<TafsirResponse>(
-    `tafsir-${surahNumber}`,
-    `${TAFSIR_CDN}/${surahNumber}.json`,
+    // The edition belongs in the cache key: without it the second edition
+    // would be served the first one's download.
+    `tafsir-${edition}-${surahNumber}`,
+    `${TAFSIR_CDN}/${edition}/${surahNumber}.json`,
   );
 
   const byAyah = new Map<number, string>();
@@ -199,7 +239,13 @@ export async function fetchTafsir(
     if (current && current.content === text && current.ayah_end === ayah - 1) {
       current.ayah_end = ayah;
     } else {
-      current = { surah_number: surahNumber, ayah_start: ayah, ayah_end: ayah, content: text };
+      current = {
+        edition,
+        surah_number: surahNumber,
+        ayah_start: ayah,
+        ayah_end: ayah,
+        content: text,
+      };
       entries.push(current);
     }
   }

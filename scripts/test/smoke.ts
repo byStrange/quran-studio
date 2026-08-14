@@ -114,16 +114,56 @@ async function main(): Promise<void> {
       return null;
     });
 
-    await check("finds tafsir covering a specific ayah", async () => {
+    await check("lists the tafsir editions", async () => {
+      const { data, error } = await client.from("tafsir_editions").select("*").order("sort_order");
+      if (error) return error.message;
+      if (!data?.length) return "no editions returned";
+      const missing = ["en-tafisr-ibn-kathir", "uzbek-mokhtasar"].filter(
+        (slug) => !data.some((e) => e.slug === slug),
+      );
+      return missing.length === 0 ? null : `missing editions: ${missing.join(", ")}`;
+    });
+
+    // The reader's tafsir lookup, run once per edition: a missing row for one
+    // edition is invisible in a single-edition check.
+    await check("every edition has commentary covering 2:3", async () => {
+      const { data: editions, error: editionError } = await client
+        .from("tafsir_editions")
+        .select("slug");
+      if (editionError) return editionError.message;
+
+      const empty: string[] = [];
+      for (const { slug } of editions ?? []) {
+        const { data, error } = await client
+          .from("tafsir")
+          .select("*")
+          .eq("edition", slug)
+          .eq("surah_number", 2)
+          .lte("ayah_start", 3)
+          .gte("ayah_end", 3)
+          .maybeSingle();
+        if (error) return `${slug}: ${error.message}`;
+        if (!data || data.content.length === 0) empty.push(slug);
+      }
+      return empty.length === 0 ? null : `no tafsir for 2:3 in: ${empty.join(", ")}`;
+    });
+
+    // Uzbek content is Cyrillic; a mojibake or transcoding fault upstream
+    // would still be a non-empty string, so the script itself is asserted.
+    await check("the Uzbek edition returns Cyrillic text", async () => {
       const { data, error } = await client
-        .from("tafsir_ibn_kathir")
-        .select("*")
-        .eq("surah_number", 2)
-        .lte("ayah_start", 3)
-        .gte("ayah_end", 3)
+        .from("tafsir")
+        .select("content")
+        .eq("edition", "uzbek-mokhtasar")
+        .eq("surah_number", 18)
+        .lte("ayah_start", 1)
+        .gte("ayah_end", 1)
         .maybeSingle();
       if (error) return error.message;
-      return data && data.content.length > 0 ? null : "no tafsir found for 2:3";
+      if (!data?.content) return "no Uzbek tafsir for 18:1";
+      return /\p{Script=Cyrillic}/u.test(data.content)
+        ? null
+        : `expected Cyrillic, got: ${data.content.slice(0, 40)}`;
     });
 
     // --- the content tables must stay read-only ----------------------------
@@ -140,6 +180,38 @@ async function main(): Promise<void> {
         .single();
       if (after?.translation_en === "tampered") return "a user was able to edit scripture!";
       return error || after ? null : "unexpected state";
+    });
+
+    await check("cannot modify tafsir or its editions", async () => {
+      const { error: contentError } = await client
+        .from("tafsir")
+        .update({ content: "tampered" })
+        .eq("edition", "en-tafisr-ibn-kathir")
+        .eq("surah_number", 2)
+        .eq("ayah_start", 1);
+      const { data: after } = await client
+        .from("tafsir")
+        .select("content")
+        .eq("edition", "en-tafisr-ibn-kathir")
+        .eq("surah_number", 2)
+        .eq("ayah_start", 1)
+        .maybeSingle();
+      if (after?.content === "tampered") return "a user was able to edit the tafsir!";
+
+      // The editions table drives the reader's picker; a user who could insert
+      // into it could point the panel at an edition with no content.
+      const { error: insertError } = await client.from("tafsir_editions").insert({
+        slug: "smoke-test",
+        name: "smoke",
+        author_name: "smoke",
+        language_code: "xx",
+        language_name: "smoke",
+      });
+      if (!insertError) {
+        await admin.from("tafsir_editions").delete().eq("slug", "smoke-test");
+        return "a user was able to register a tafsir edition!";
+      }
+      return contentError || after ? null : "unexpected state";
     });
 
     // --- per-user writes ---------------------------------------------------

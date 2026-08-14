@@ -147,18 +147,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "quran_mushaf_glyphs_verse_id_fkey"
-            columns: ["verse_id"]
-            isOneToOne: false
-            referencedRelation: "quran_verses"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "quran_mushaf_glyphs_page_number_line_number_fkey"
             columns: ["page_number", "line_number"]
             isOneToOne: false
             referencedRelation: "quran_mushaf_lines"
             referencedColumns: ["page_number", "line_number"]
+          },
+          {
+            foreignKeyName: "quran_mushaf_glyphs_verse_id_fkey"
+            columns: ["verse_id"]
+            isOneToOne: false
+            referencedRelation: "quran_verses"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -436,11 +436,12 @@ export type Database = {
         }
         Relationships: []
       }
-      tafsir_ibn_kathir: {
+      tafsir: {
         Row: {
           ayah_end: number
           ayah_start: number
           content: string
+          edition: string
           id: number
           surah_number: number
         }
@@ -448,6 +449,7 @@ export type Database = {
           ayah_end: number
           ayah_start: number
           content: string
+          edition: string
           id?: never
           surah_number: number
         }
@@ -455,10 +457,18 @@ export type Database = {
           ayah_end?: number
           ayah_start?: number
           content?: string
+          edition?: string
           id?: never
           surah_number?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "tafsir_edition_fkey"
+            columns: ["edition"]
+            isOneToOne: false
+            referencedRelation: "tafsir_editions"
+            referencedColumns: ["slug"]
+          },
           {
             foreignKeyName: "tafsir_ibn_kathir_surah_number_fkey"
             columns: ["surah_number"]
@@ -467,6 +477,33 @@ export type Database = {
             referencedColumns: ["number"]
           },
         ]
+      }
+      tafsir_editions: {
+        Row: {
+          author_name: string
+          language_code: string
+          language_name: string
+          name: string
+          slug: string
+          sort_order: number
+        }
+        Insert: {
+          author_name: string
+          language_code: string
+          language_name: string
+          name: string
+          slug: string
+          sort_order?: number
+        }
+        Update: {
+          author_name?: string
+          language_code?: string
+          language_name?: string
+          name?: string
+          slug?: string
+          sort_order?: number
+        }
+        Relationships: []
       }
       user_word_progress: {
         Row: {

@@ -1,9 +1,10 @@
 /**
  * One-time Quran content import.
  *
- * Fetches text, translation, word-by-word data, ruku boundaries, and Ibn
- * Kathir tafsir from the upstream sources and writes them into Supabase. The
- * app itself never talks to those APIs — it only reads these tables.
+ * Fetches text, translation, word-by-word data, ruku boundaries, and every
+ * tafsir edition in `TAFSIR_EDITIONS` from the upstream sources and writes
+ * them into Supabase. The app itself never talks to those APIs — it only
+ * reads these tables.
  *
  *   pnpm seed
  *
@@ -16,6 +17,7 @@ import {
   fetchSurahs,
   fetchSurahContent,
   fetchTafsir,
+  TAFSIR_EDITIONS,
   type TafsirEntry,
   type Verse,
   type Word,
@@ -92,14 +94,16 @@ async function main(): Promise<void> {
   const rukus = deriveRukus(verses);
   log("rukus", `derived ${rukus.length} rukus`);
 
-  log("tafsir", "fetching Ibn Kathir…");
-  const tafsirPerSurah = await mapLimit(surahs, 4, async (surah) => {
-    const entries = await fetchTafsir(surah.number, surah.ayah_count);
-    log("tafsir", `surah ${surah.number}: ${entries.length} entries`);
-    return entries;
-  });
-  const tafsir: TafsirEntry[] = tafsirPerSurah.flat();
-  log("tafsir", `total ${tafsir.length} entries after range collapsing`);
+  const tafsir: TafsirEntry[] = [];
+  for (const edition of TAFSIR_EDITIONS) {
+    log("tafsir", `fetching ${edition.name} (${edition.language_name})…`);
+    const perSurah = await mapLimit(surahs, 4, (surah) =>
+      fetchTafsir(edition.slug, surah.number, surah.ayah_count),
+    );
+    const entries = perSurah.flat();
+    log("tafsir", `${edition.slug}: ${entries.length} entries after range collapsing`);
+    tafsir.push(...entries);
+  }
 
   // Surah ruku counts are derived, not fetched.
   const rukuCounts = new Map<number, number>();
@@ -121,7 +125,9 @@ async function main(): Promise<void> {
   );
   await upsertAll("quran_rukus", rukus, { onConflict: "ruku_number" });
   await upsertAll("quran_words", words, { onConflict: "id", size: 1000 });
-  await upsertAll("tafsir_ibn_kathir", tafsir, { onConflict: "surah_number,ayah_start" });
+  // Editions first: the tafsir rows carry a foreign key to them.
+  await upsertAll("tafsir_editions", [...TAFSIR_EDITIONS], { onConflict: "slug" });
+  await upsertAll("tafsir", tafsir, { onConflict: "edition,surah_number,ayah_start" });
 
   log("verify", "running data integrity checks…");
   const ok = await runValidation();
