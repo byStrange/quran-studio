@@ -1,0 +1,2 @@
+1. PRIORITY HIGH. need to add tajweed support. some users can't read without them
+2. add tafseer as sadi, and translation sahih international (first check which translation is being used. if its already sahih international no need to change)
