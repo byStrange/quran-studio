@@ -11,6 +11,8 @@
     "tauri": "tauri",
     "app:dev": "tauri dev",
     "app:build": "tauri build",
+    "app:android": "bash scripts/android-build.sh",
+    "app:android:init": "bash scripts/android-build.sh --init",
     "seed": "tsx scripts/seed/index.ts",
     "seed:tajweed": "tsx scripts/seed/backfill-tajweed.ts",
     "seed:tafsir": "tsx scripts/seed/tafsir-import.ts",
