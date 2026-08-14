@@ -2,6 +2,10 @@ mod ollama;
 
 use ollama::AiState;
 
+/// On desktop `main` calls this directly. Android has no `main`: the activity
+/// loads this library and calls the entry symbol the macro exports, so without
+/// it the `.so` builds fine and then fails validation for missing symbols.
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Load configuration from the first .env we can find. Real process
     // environment variables always win over file contents.
