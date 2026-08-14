@@ -89,6 +89,14 @@ else
   args=(--apk --debug --target aarch64)
 fi
 
+# Gradle rewrites the APK in place without compacting it, so each rebuild
+# strands the previous copy of the 200MB native library inside the file: the
+# central directory lists it once, the archive still carries it twice. Three
+# builds in and the APK has doubled for no reason. Deleting the previous
+# output costs nothing, unlike a clean build, which would recompile Rust.
+rm -f src-tauri/gen/android/app/build/outputs/apk/*/*/*.apk
+rm -f src-tauri/gen/android/app/build/outputs/bundle/*/*.aab
+
 echo "ANDROID_HOME=$ANDROID_HOME"
 echo "NDK_HOME=$NDK_HOME"
 echo "JAVA_HOME=${JAVA_HOME:-<system default>}"
