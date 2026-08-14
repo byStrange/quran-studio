@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "app:dev": "tauri dev",
-    "app:build": "tauri build",
+    "app:build": "NO_STRIP=true tauri build",
     "app:android": "bash scripts/android-build.sh",
     "app:android:init": "bash scripts/android-build.sh --init",
     "seed": "tsx scripts/seed/index.ts",
