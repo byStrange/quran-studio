@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, GraduationCap, RotateCcw, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
+import { useContentLanguage } from "@/hooks/useProfile";
 import { Page } from "@/components/layout/AppShell";
 import { Card, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,8 @@ interface QuizWord {
   word_id: number;
   arabic: string;
   transliteration: string | null;
-  gloss_en: string;
+  /** The answer, in whichever content language the round was drawn for. */
+  gloss: string;
   surah_number: number;
   ayah_number: number;
 }
@@ -29,6 +31,7 @@ interface Question extends QuizWord {
 export function Quiz() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const language = useContentLanguage();
 
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<string | null>(null);
@@ -36,12 +39,15 @@ export function Quiz() {
   const [finished, setFinished] = useState(false);
 
   const quiz = useQuery({
-    queryKey: ["quiz-pool", user?.id],
+    queryKey: ["quiz-pool", user?.id, language],
     enabled: Boolean(user),
     staleTime: 0,
     gcTime: 0,
     queryFn: async (): Promise<Question[]> => {
-      const { data: pool, error } = await supabase.rpc("quiz_pool", { p_limit: QUESTION_COUNT });
+      const { data: pool, error } = await supabase.rpc("quiz_pool", {
+        p_limit: QUESTION_COUNT,
+        p_language: language,
+      });
       if (error) throw error;
       const words = (pool ?? []) as QuizWord[];
       if (words.length === 0) return [];
@@ -49,19 +55,19 @@ export function Quiz() {
       // One distractor request covers the whole round.
       const { data: distractors, error: distractorError } = await supabase.rpc(
         "quiz_distractors",
-        { p_exclude: words.map((w) => w.gloss_en), p_limit: 10 },
+        { p_exclude: words.map((w) => w.gloss), p_limit: 10, p_language: language },
       );
       if (distractorError) throw distractorError;
-      const pool2 = ((distractors ?? []) as Array<{ gloss_en: string }>).map((d) => d.gloss_en);
+      const pool2 = ((distractors ?? []) as Array<{ gloss: string }>).map((d) => d.gloss);
 
       return words.map((word) => {
         // Prefer other answers from this round as distractors — they're
         // Quranic vocabulary too, which makes the choice a real test.
         const others = words
-          .filter((w) => w.word_id !== word.word_id && w.gloss_en !== word.gloss_en)
-          .map((w) => w.gloss_en);
+          .filter((w) => w.word_id !== word.word_id && w.gloss !== word.gloss)
+          .map((w) => w.gloss);
         const candidates = shuffle([...others, ...pool2]).slice(0, 3);
-        return { ...word, choices: shuffle([word.gloss_en, ...candidates]) };
+        return { ...word, choices: shuffle([word.gloss, ...candidates]) };
       });
     },
   });
@@ -107,7 +113,7 @@ export function Quiz() {
   const answer = useCallback(
     (choice: string) => {
       if (picked !== null || !question) return;
-      const correct = choice === question.gloss_en;
+      const correct = choice === question.gloss;
       setPicked(choice);
       setScore((s) => ({ correct: s.correct + (correct ? 1 : 0), answered: s.answered + 1 }));
       record.mutate({ wordId: question.word_id, correct });
@@ -235,7 +241,7 @@ export function Quiz() {
 
           <div className="mx-auto mt-8 grid max-w-md gap-2">
             {question!.choices.map((choice, i) => {
-              const isCorrect = choice === question!.gloss_en;
+              const isCorrect = choice === question!.gloss;
               const isPicked = picked === choice;
               const reveal = picked !== null;
 

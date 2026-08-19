@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, Sparkles, WandSparkles } from "lucide-react";
 import { describeAiError, fetchCachedRukuSummary, getRukuSummary, isTauri } from "@/lib/ai";
 import type { VerseWithWords } from "@/lib/types";
+import { useContentLanguage } from "@/hooks/useProfile";
 import { ayahRangeLabel, toParagraphs } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -24,11 +25,12 @@ export function RukuSummaryCard({
 }) {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const language = useContentLanguage();
 
   const cached = useQuery({
-    queryKey: ["ruku-summary", rukuNumber],
+    queryKey: ["ruku-summary", rukuNumber, language],
     staleTime: Infinity,
-    queryFn: () => fetchCachedRukuSummary(rukuNumber),
+    queryFn: () => fetchCachedRukuSummary(rukuNumber, language),
   });
 
   const generate = useMutation({
@@ -43,11 +45,13 @@ export function RukuSummaryCard({
           verses: verses.map((v) => ({
             ayah_number: v.ayah_number,
             translation_en: v.translation_en,
+            translation_ru: v.translation_ru,
           })),
         },
+        language,
         { force },
       ),
-    onSuccess: (data) => queryClient.setQueryData(["ruku-summary", rukuNumber], data),
+    onSuccess: (data) => queryClient.setQueryData(["ruku-summary", rukuNumber, language], data),
     onError: (error) => toast(describeAiError(error), "error"),
   });
 

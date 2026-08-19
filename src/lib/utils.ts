@@ -25,6 +25,14 @@ export function formatClock(seconds: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
 }
 
+/** "31.9 MB" — for download sizes, which are always megabytes here. */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 MB";
+  const mb = bytes / 1_000_000;
+  if (mb >= 1000) return `${(mb / 1000).toFixed(1)} GB`;
+  return mb >= 10 ? `${Math.round(mb)} MB` : `${mb.toFixed(1)} MB`;
+}
+
 export function formatPercent(value: number, digits = 1): string {
   if (!Number.isFinite(value)) return "0%";
   return `${value.toFixed(digits)}%`;

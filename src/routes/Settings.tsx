@@ -3,8 +3,18 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Check, KeyRound, LogOut, Monitor, Moon, Sun } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTheme } from "@/providers/ThemeProvider";
-import { useProfile, useUiPrefs, useUpdateProfile } from "@/hooks/useProfile";
-import { getAiStatus, isTauri, setAiApiKey } from "@/lib/ai";
+import { useContentLanguage, useProfile, useUiPrefs, useUpdateProfile } from "@/hooks/useProfile";
+import { useActiveReciter, useReciters } from "@/hooks/useRecitation";
+import { useTafsirEditions } from "@/hooks/useQuranData";
+import { useDownloadedSurahs } from "@/hooks/useAudioDownloads";
+import { describeAiError, getAiStatus, isTauri, setAiApiKey } from "@/lib/ai";
+import {
+  CONTENT_LANGUAGES,
+  contentLanguageInfo,
+  DEFAULT_CONTENT_LANGUAGE,
+  editionMatchesLanguage,
+  isContentLanguage,
+} from "@/lib/language";
 import { Page } from "@/components/layout/AppShell";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,10 +47,17 @@ const TIMEZONES = [
 
 export function Settings() {
   const { user, signOut } = useAuth();
+  const { data: reciters } = useReciters();
+  const { data: downloaded } = useDownloadedSurahs();
   const { theme, setTheme } = useTheme();
   const { data: profile } = useProfile();
   const prefs = useUiPrefs();
+  const language = useContentLanguage();
+  const { data: editions } = useTafsirEditions();
   const updateProfile = useUpdateProfile();
+  // Resolved rather than read straight from prefs, so the picker shows the
+  // reciter that will actually play when nothing has been chosen yet.
+  const reciter = useActiveReciter(prefs.reciterId);
   const toast = useToast();
 
   const [apiKey, setApiKey] = useState("");
@@ -63,8 +80,10 @@ export function Settings() {
         status.model ? "success" : "error",
       );
     },
-    onError: (error) =>
-      toast(error instanceof Error ? error.message : "Could not save the key.", "error"),
+    // A rejected `invoke` throws the serialized Rust error as a plain string,
+    // not an Error, so an `instanceof` check would discard every backend
+    // message and report a useless generic failure.
+    onError: (error) => toast(describeAiError(error), "error"),
   });
 
   // Offer to correct a profile timezone that no longer matches the machine.
@@ -105,6 +124,56 @@ export function Settings() {
                 </button>
               ))}
             </div>
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader
+            title="Language"
+            description="The language of the scripture material. The interface stays in English."
+          />
+          <CardBody className="space-y-4">
+            <div className="flex items-center justify-between gap-6">
+              <div>
+                <div className="text-[0.8125rem] font-medium text-fg">Translation and study</div>
+                <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
+                  Sets the verse translation, the word-by-word glosses, the tafsir edition, and the
+                  language the AI writes its explanations in. Currently reading{" "}
+                  {contentLanguageInfo(language).translator}.
+                </p>
+              </div>
+              <SelectField
+                value={language}
+                onValueChange={(value) => {
+                  const next = isContentLanguage(value) ? value : DEFAULT_CONTENT_LANGUAGE;
+                  // The tafsir edition moves with the language rather than
+                  // being left behind on the previous one, which would leave a
+                  // reader who switched to Russian with a Russian translation
+                  // and an English commentary beside it. It stays a separate
+                  // preference, so picking a different edition afterwards
+                  // still sticks.
+                  const edition = editions?.find((e) => editionMatchesLanguage(e, next))?.slug;
+                  updateProfile.mutate({
+                    ui_prefs: {
+                      contentLanguage: next,
+                      ...(edition ? { tafsirEdition: edition } : {}),
+                    },
+                  });
+                }}
+                options={CONTENT_LANGUAGES.map((l) => ({
+                  value: l.code,
+                  label: l.code === "en" ? l.label : `${l.label} · ${l.nativeLabel}`,
+                }))}
+                className="w-44"
+              />
+            </div>
+
+            {language === "ru" ? (
+              <p className="border-t border-border pt-4 text-[0.75rem] text-fg-subtle">
+                About 1.5% of words have no Russian gloss in the upstream corpus and show the
+                English one instead.
+              </p>
+            ) : null}
           </CardBody>
         </Card>
 
@@ -190,6 +259,83 @@ export function Settings() {
                 label="Expand word-by-word by default"
               />
             </div>
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader
+            title="Recitation"
+            description="Which reciter plays, and how closely the reader follows along."
+          />
+          <CardBody className="space-y-4">
+            <div className="flex items-center justify-between gap-6">
+              <div className="min-w-0">
+                <div className="text-[0.8125rem] font-medium text-fg">Reciter</div>
+                <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
+                  {reciters?.length
+                    ? "Each recitation is one continuous file per surah, so phrasing across " +
+                      "ayah boundaries is the reciter's own."
+                    : "No recitations imported yet — run `pnpm seed:audio`."}
+                </p>
+              </div>
+              {reciters?.length ? (
+                <SelectField
+                  value={reciter ? String(reciter.id) : ""}
+                  onValueChange={(value) =>
+                    updateProfile.mutate({ ui_prefs: { reciterId: Number(value) } })
+                  }
+                  options={reciters.map((r) => ({
+                    value: String(r.id),
+                    label: r.style ? `${r.name} · ${r.style}` : r.name,
+                  }))}
+                  placeholder="Reciter"
+                  className="w-56 shrink-0"
+                />
+              ) : null}
+            </div>
+
+            <div className="flex items-center justify-between gap-6 border-t border-border pt-4">
+              <div>
+                <div className="text-[0.8125rem] font-medium text-fg">Follow the recitation</div>
+                <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
+                  Scroll to the ayah being recited as it plays. Turn off to read one place while
+                  listening to another.
+                </p>
+              </div>
+              <Toggle
+                checked={prefs.followRecitation}
+                onCheckedChange={(checked) =>
+                  updateProfile.mutate({ ui_prefs: { followRecitation: checked } })
+                }
+                label="Follow the recitation"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-6 border-t border-border pt-4">
+              <div>
+                <div className="text-[0.8125rem] font-medium text-fg">Highlight words</div>
+                <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
+                  Light up each word in the word-by-word row as it is recited.
+                </p>
+              </div>
+              <Toggle
+                checked={prefs.highlightWords}
+                onCheckedChange={(checked) =>
+                  updateProfile.mutate({ ui_prefs: { highlightWords: checked } })
+                }
+                label="Highlight words"
+              />
+            </div>
+
+            {isTauri() ? (
+              <div className="border-t border-border pt-4 text-[0.75rem] text-fg-subtle">
+                {downloaded?.size
+                  ? `${downloaded.size} ${
+                      downloaded.size === 1 ? "surah is" : "surahs are"
+                    } saved for offline listening. Remove one from the player bar in the reader.`
+                  : "Nothing saved for offline yet — use the download button in the reader's player bar."}
+              </div>
+            ) : null}
           </CardBody>
         </Card>
 

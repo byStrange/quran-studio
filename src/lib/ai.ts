@@ -6,6 +6,7 @@
  * by every user, so each word explanation and ruku summary is produced once.
  */
 import { invoke } from "@tauri-apps/api/core";
+import { verseTranslation, wordGloss, type ContentLanguage } from "./language";
 import { supabase } from "./supabase";
 import type { VerseContext, Word } from "./types";
 
@@ -50,11 +51,15 @@ export interface WordContext {
   generated_at: string | null;
 }
 
-export async function fetchCachedWordContext(wordId: number): Promise<WordContext | null> {
+export async function fetchCachedWordContext(
+  wordId: number,
+  language: ContentLanguage,
+): Promise<WordContext | null> {
   const { data, error } = await supabase
     .from("word_ai_context")
     .select("explanation, model_used, generated_at")
     .eq("word_id", wordId)
+    .eq("language", language)
     .maybeSingle();
   if (error) throw error;
   return data ?? null;
@@ -67,10 +72,11 @@ export async function fetchCachedWordContext(wordId: number): Promise<WordContex
 export async function getWordContext(
   word: Word,
   verse: VerseContext,
+  language: ContentLanguage,
   options: { force?: boolean } = {},
 ): Promise<WordContext> {
   if (!options.force) {
-    const cached = await fetchCachedWordContext(word.id);
+    const cached = await fetchCachedWordContext(word.id, language);
     if (cached) return cached;
   }
   if (!isTauri()) throw new AiUnavailableError(NOT_IN_TAURI);
@@ -80,22 +86,26 @@ export async function getWordContext(
     {
       arabic: word.arabic,
       transliteration: word.transliteration ?? "",
-      gloss: word.gloss_en ?? "",
+      gloss: wordGloss(word, language) ?? "",
       surahNumber: verse.surah_number,
       ayahNumber: verse.ayah_number,
       verseArabic: verse.arabic_text,
-      verseTranslation: verse.translation_en,
+      verseTranslation: verseTranslation(verse, language),
+      language,
     },
   );
 
   const row = {
     word_id: word.id,
+    language,
     explanation: generated.explanation,
     model_used: generated.model_used,
     generated_at: new Date().toISOString(),
   };
   // A cache write failure must never lose the text the user just waited for.
-  const { error } = await supabase.from("word_ai_context").upsert(row, { onConflict: "word_id" });
+  const { error } = await supabase
+    .from("word_ai_context")
+    .upsert(row, { onConflict: "word_id,language" });
   if (error) console.warn("could not cache word context:", error.message);
 
   return row;
@@ -109,11 +119,15 @@ export interface RukuSummary {
   generated_at: string | null;
 }
 
-export async function fetchCachedRukuSummary(rukuNumber: number): Promise<RukuSummary | null> {
+export async function fetchCachedRukuSummary(
+  rukuNumber: number,
+  language: ContentLanguage,
+): Promise<RukuSummary | null> {
   const { data, error } = await supabase
     .from("ruku_ai_summary")
     .select("summary, model_used, generated_at")
     .eq("ruku_number", rukuNumber)
+    .eq("language", language)
     .maybeSingle();
   if (error) throw error;
   return data ?? null;
@@ -124,18 +138,22 @@ export async function getRukuSummary(
     rukuNumber: number;
     surahName: string;
     verseRange: string;
-    verses: Array<{ ayah_number: number; translation_en: string }>;
+    verses: Array<{ ayah_number: number; translation_en: string; translation_ru: string | null }>;
   },
+  language: ContentLanguage,
   options: { force?: boolean } = {},
 ): Promise<RukuSummary> {
   if (!options.force) {
-    const cached = await fetchCachedRukuSummary(input.rukuNumber);
+    const cached = await fetchCachedRukuSummary(input.rukuNumber, language);
     if (cached) return cached;
   }
   if (!isTauri()) throw new AiUnavailableError(NOT_IN_TAURI);
 
+  // The passage goes to the model in the language it is asked to write in,
+  // so a Russian summary reasons over the Russian translation rather than
+  // silently translating an English one.
   const passage = input.verses
-    .map((v) => `${v.ayah_number}. ${v.translation_en}`)
+    .map((v) => `${v.ayah_number}. ${verseTranslation(v, language)}`)
     .join("\n");
 
   const generated = await invoke<{ summary: string; model_used: string }>(
@@ -145,18 +163,20 @@ export async function getRukuSummary(
       surahName: input.surahName,
       verseRange: input.verseRange,
       passage,
+      language,
     },
   );
 
   const row = {
     ruku_number: input.rukuNumber,
+    language,
     summary: generated.summary,
     model_used: generated.model_used,
     generated_at: new Date().toISOString(),
   };
   const { error } = await supabase
     .from("ruku_ai_summary")
-    .upsert(row, { onConflict: "ruku_number" });
+    .upsert(row, { onConflict: "ruku_number,language" });
   if (error) console.warn("could not cache ruku summary:", error.message);
 
   return row;

@@ -13,12 +13,30 @@ import {
   ListTree,
   MoreHorizontal,
   Palette,
+  Sparkles,
 } from "lucide-react";
-import { useRuku, useRukuVerses, useSurahs } from "@/hooks/useQuranData";
-import { useMemorizedVerses, useToggleMemorized, useWordProgress } from "@/hooks/useProgress";
+import { useRuku, useRukuVerses, useSurahs, useSurahVerseIds } from "@/hooks/useQuranData";
+import {
+  useMemorizedVerses,
+  useTafsirReadVerses,
+  useToggleMemorized,
+  useToggleTafsirRead,
+  useWordProgress,
+} from "@/hooks/useProgress";
+import {
+  useActiveReciter,
+  useReciters,
+  useRecitationFile,
+  useRecitationTimings,
+} from "@/hooks/useRecitation";
+import { useRecitationPlayer } from "@/hooks/useRecitationPlayer";
+import { useSurahDownload } from "@/hooks/useAudioDownloads";
 import { useUiPrefs, useUpdateProfile } from "@/hooks/useProfile";
 import { useReadingTimer } from "@/hooks/useReadingTimer";
+import { useIsDesktop } from "@/hooks/useMediaQuery";
+import type { RepeatMode } from "@/lib/types";
 import { ayahRangeLabel, cn, formatClock } from "@/lib/utils";
+import { AudioBar } from "@/components/reader/AudioBar";
 import { VerseCard } from "@/components/reader/VerseCard";
 import { SplitPane } from "@/components/reader/SplitPane";
 import { FocusMode } from "@/components/reader/FocusMode";
@@ -54,15 +72,72 @@ export function Reader() {
   const { data: wordStatuses } = useWordProgress(wordIds);
   const toggleMemorized = useToggleMemorized();
 
+  const surahNumber = ruku?.surah_number ?? null;
+
+  // Unfiltered on purpose. Every marked ayah in the Quran is a few thousand
+  // integers at most, and the tafsir panel needs ids the ruku does not hold —
+  // scoping the query to the ruku would just mean a second one beside it.
+  const { data: tafsirRead } = useTafsirReadVerses();
+  const { data: surahVerseIds } = useSurahVerseIds(surahNumber);
+  const toggleTafsirRead = useToggleTafsirRead();
+
   const [selectedAyah, setSelectedAyah] = useState<number | null>(null);
   const [expandedVerses, setExpandedVerses] = useState<Set<number>>(new Set());
   const [focusMode, setFocusMode] = useState(false);
   const [focusIndex, setFocusIndex] = useState(0);
   // Only consulted below md, where the tafsir is a sheet rather than a column.
   const [tafsirOpen, setTafsirOpen] = useState(false);
+  const isDesktop = useIsDesktop();
   const { sessionSeconds, idle } = useReadingTimer(valid ? rukuNumber : null);
 
   const surah = surahs?.find((s) => s.number === ruku?.surah_number);
+
+  // --- recitation ----------------------------------------------------------
+
+  const { data: reciters } = useReciters();
+  const reciter = useActiveReciter(prefs.reciterId);
+  const { data: recitation } = useRecitationFile(reciter?.id ?? null, surahNumber);
+  const { data: timings } = useRecitationTimings(reciter?.id ?? null, verseIds);
+
+  const download = useSurahDownload({
+    reciterId: reciter?.id ?? null,
+    surahNumber,
+    url: recitation?.audio_url ?? null,
+    fileSize: recitation?.file_size ?? null,
+  });
+
+  const player = useRecitationPlayer({
+    // A downloaded copy wins over the CDN whenever there is one, so a surah
+    // saved for offline keeps playing when the connection doesn't.
+    src: download.localSrc ?? recitation?.audio_url ?? null,
+    verseIds,
+    timings,
+    rate: prefs.playbackRate,
+    repeatMode: prefs.repeatMode,
+  });
+
+  const recitingVerseId = player.currentVerseId;
+
+  /**
+   * Keeps the ayah being recited on screen.
+   *
+   * Smooth scrolling rather than a jump: the ayah changes every few seconds
+   * and a hard cut each time is disorienting to read against. In focus mode
+   * there is nothing to scroll — the ayah on screen is chosen by index — so
+   * following means moving the index instead.
+   */
+  useEffect(() => {
+    if (!prefs.followRecitation || recitingVerseId === null) return;
+    const index = (verses ?? []).findIndex((verse) => verse.id === recitingVerseId);
+    if (index < 0) return;
+    if (focusMode) {
+      setFocusIndex(index);
+      return;
+    }
+    document
+      .getElementById(`verse-${recitingVerseId}`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [recitingVerseId, prefs.followRecitation, focusMode, verses]);
 
   // Reset per-ruku view state when navigating between lessons.
   useEffect(() => {
@@ -135,6 +210,49 @@ export function Reader() {
     updateProfile.mutate({ ui_prefs: { tajweed: !prefs.tajweed } });
   }, [prefs.tajweed, updateProfile]);
 
+  const setMemorized = useCallback(
+    (verseId: number) =>
+      toggleMemorized.mutate({ verseId, memorized: !(memorized?.has(verseId) ?? false) }),
+    [memorized, toggleMemorized],
+  );
+
+  /** The surah's ayah numbers whose tafsir is already marked read. */
+  const readAyahs = useMemo(() => {
+    const ayahs = new Set<number>();
+    if (!surahVerseIds || !tafsirRead) return ayahs;
+    for (const [ayah, id] of surahVerseIds) {
+      if (tafsirRead.has(id)) ayahs.add(ayah);
+    }
+    return ayahs;
+  }, [surahVerseIds, tafsirRead]);
+
+  /** Marks a whole tafsir entry, which is usually a range rather than one ayah. */
+  const setTafsirReadRange = useCallback(
+    (ayahStart: number, ayahEnd: number, read: boolean) => {
+      if (!surahVerseIds) return;
+      const ids: number[] = [];
+      for (let ayah = ayahStart; ayah <= ayahEnd; ayah++) {
+        const id = surahVerseIds.get(ayah);
+        if (id !== undefined) ids.push(id);
+      }
+      toggleTafsirRead.mutate({ verseIds: ids, read });
+    },
+    [surahVerseIds, toggleTafsirRead],
+  );
+
+  /**
+   * Points the tafsir at an ayah. Below md the panel is a sheet rather than a
+   * column, so asking for a tafsir has to open it as well — selecting alone
+   * changes nothing the reader can see.
+   */
+  const showTafsirFor = useCallback(
+    (ayahNumber: number) => {
+      setSelectedAyah(ayahNumber);
+      if (!isDesktop) setTafsirOpen(true);
+    },
+    [isDesktop],
+  );
+
   /**
    * Hands over to the mushaf reader at the page the reader is looking at —
    * the selected ayah's page when there is one, otherwise where the ruku opens.
@@ -160,6 +278,16 @@ export function Reader() {
     () => verseIds.filter((id) => memorized?.has(id)).length,
     [verseIds, memorized],
   );
+
+  const tafsirReadCount = useMemo(
+    () => verseIds.filter((id) => tafsirRead?.has(id)).length,
+    [verseIds, tafsirRead],
+  );
+
+  // The whole point of the ruku as a unit: it is the amount someone sits down
+  // to memorize, so finishing one is the thing worth marking.
+  const rukuMemorized = verseIds.length > 0 && memorizedCount === verseIds.length;
+  const rukuTafsirRead = verseIds.length > 0 && tafsirReadCount === verseIds.length;
 
   if (!valid) {
     return (
@@ -261,15 +389,35 @@ export function Reader() {
               tafsir toggle and an overflow menu. */}
           <div className="hidden items-center gap-3 md:flex">
             {verseIds.length > 0 ? (
-              <div className="flex items-center gap-2.5">
-                <span className="text-[0.75rem] tabular-nums text-fg-subtle">
-                  {memorizedCount}/{verseIds.length} memorized
-                </span>
-                <ProgressBar
-                  value={(memorizedCount / verseIds.length) * 100}
-                  className="w-20"
-                />
-              </div>
+              rukuMemorized ? (
+                // A finished ruku stops being a progress bar and becomes a
+                // result. The tafsir line is kept because it is the gap the
+                // second marker exists to show: memorized, not yet understood.
+                <Tooltip
+                  content={
+                    rukuTafsirRead
+                      ? "Every ayah in this ruku is memorized and its tafsir read."
+                      : `Memorized. Tafsir read on ${tafsirReadCount} of ${verseIds.length} ayahs.`
+                  }
+                >
+                  <div className="flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent-soft px-2.5 py-1.5 text-[0.75rem] font-medium text-accent-soft-fg">
+                    <Sparkles className="size-3.5" aria-hidden />
+                    Ruku memorized
+                    {!rukuTafsirRead ? (
+                      <span className="font-normal tabular-nums opacity-70">
+                        · tafsir {tafsirReadCount}/{verseIds.length}
+                      </span>
+                    ) : null}
+                  </div>
+                </Tooltip>
+              ) : (
+                <div className="flex items-center gap-2.5">
+                  <span className="text-[0.75rem] tabular-nums text-fg-subtle">
+                    {memorizedCount}/{verseIds.length} memorized
+                  </span>
+                  <ProgressBar value={(memorizedCount / verseIds.length) * 100} className="w-20" />
+                </div>
+              )
             ) : null}
 
             <Tooltip
@@ -379,7 +527,13 @@ export function Reader() {
               size="icon"
               variant="ghost"
               aria-label="Open tafsir"
-              onClick={() => setTafsirOpen(true)}
+              onClick={() => {
+                // The sheet covers the ayahs, so none can be chosen from
+                // inside it: opening on an empty panel is a dead end.
+                const first = verses?.[0];
+                if (selectedAyah === null && first) setSelectedAyah(first.ayah_number);
+                setTafsirOpen(true);
+              }}
             >
               <BookOpen className="size-4" aria-hidden />
             </Button>
@@ -423,19 +577,27 @@ export function Reader() {
                     key={verse.id}
                     verse={verse}
                     memorized={memorized?.has(verse.id) ?? false}
-                    onToggleMemorized={() =>
-                      toggleMemorized.mutate({
-                        verseId: verse.id,
-                        memorized: !(memorized?.has(verse.id) ?? false),
+                    onToggleMemorized={() => setMemorized(verse.id)}
+                    tafsirRead={tafsirRead?.has(verse.id) ?? false}
+                    onToggleTafsirRead={() =>
+                      toggleTafsirRead.mutate({
+                        verseIds: [verse.id],
+                        read: !(tafsirRead?.has(verse.id) ?? false),
                       })
                     }
                     selected={selectedAyah === verse.ayah_number}
-                    onSelect={() => setSelectedAyah(verse.ayah_number)}
+                    onSelect={() => showTafsirFor(verse.ayah_number)}
                     wordsExpanded={expandedVerses.has(verse.id)}
                     onToggleWords={() => toggleWords(verse.id)}
                     wordStatuses={wordStatuses ?? new Map()}
                     onOpenFocus={() => openFocus(index)}
                     tajweed={prefs.tajweed}
+                    reciting={recitingVerseId === verse.id}
+                    recitingWordPosition={
+                      prefs.highlightWords ? player.currentWordPosition : null
+                    }
+                    onPlayFromHere={() => player.playVerse(verse.id)}
+                    canPlay={player.available}
                   />
                 ))}
 
@@ -465,13 +627,32 @@ export function Reader() {
           }
           tafsir={
             <TafsirPanel
-              surahNumber={ruku?.surah_number ?? null}
+              surahNumber={surahNumber}
               ayahNumber={selectedAyah}
               surahName={surah?.name_english ?? ""}
+              readAyahs={readAyahs}
+              onToggleRead={setTafsirReadRange}
             />
           }
         />
       )}
+
+      {!rukuLoading && !versesLoading && !isError ? (
+        <AudioBar
+          player={player}
+          reciters={reciters}
+          reciterId={reciter?.id ?? null}
+          onReciterChange={(id) => updateProfile.mutate({ ui_prefs: { reciterId: id } })}
+          rate={prefs.playbackRate}
+          onRateChange={(rate) => updateProfile.mutate({ ui_prefs: { playbackRate: rate } })}
+          repeatMode={prefs.repeatMode}
+          onRepeatModeChange={(mode: RepeatMode) =>
+            updateProfile.mutate({ ui_prefs: { repeatMode: mode } })
+          }
+          download={download}
+          compact={!isDesktop}
+        />
+      ) : null}
 
       {focusMode ? (
         <FocusMode
@@ -483,15 +664,19 @@ export function Reader() {
           rukuNumber={rukuNumber}
           rukuInSurah={ruku?.ruku_in_surah ?? null}
           memorized={memorized ?? new Set()}
-          onToggleMemorized={(verse) =>
-            toggleMemorized.mutate({
-              verseId: verse.id,
-              memorized: !(memorized?.has(verse.id) ?? false),
+          onToggleMemorized={(verse) => setMemorized(verse.id)}
+          tafsirRead={tafsirRead ?? new Set()}
+          onToggleTafsirRead={(verse) =>
+            toggleTafsirRead.mutate({
+              verseIds: [verse.id],
+              read: !(tafsirRead?.has(verse.id) ?? false),
             })
           }
           wordStatuses={wordStatuses ?? new Map()}
           sessionSeconds={sessionSeconds}
           loading={versesLoading}
+          player={player}
+          highlightWords={prefs.highlightWords}
           tajweed={prefs.tajweed}
           onToggleTajweed={toggleTajweed}
           onPrevRuku={

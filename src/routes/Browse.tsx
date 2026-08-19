@@ -1,16 +1,19 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronRight, Search } from "lucide-react";
+import { ChevronRight, GraduationCap, Search, Sparkles } from "lucide-react";
 import { useRukus, useSurahs } from "@/hooks/useQuranData";
+import { useRukuProgress, type RukuProgress } from "@/hooks/useProgress";
 import { Page } from "@/components/layout/AppShell";
 import { Input } from "@/components/ui/field";
 import { EmptyState, LoadingBlock } from "@/components/ui/feedback";
+import { Tooltip } from "@/components/ui/primitives";
 import { ayahRangeLabel, cn } from "@/lib/utils";
 
 export function Browse() {
   const navigate = useNavigate();
   const { data: surahs, isLoading: surahsLoading } = useSurahs();
   const { data: rukus, isLoading: rukusLoading } = useRukus();
+  const { data: progress } = useRukuProgress();
   const [query, setQuery] = useState("");
   const [openSurah, setOpenSurah] = useState<number | null>(null);
 
@@ -69,6 +72,11 @@ export function Browse() {
           {filtered.map((surah) => {
             const surahRukus = rukusBySurah.get(surah.number) ?? [];
             const expanded = openSurah === surah.number;
+            const rukusDone = surahRukus.filter((ruku) => {
+              const p = progress?.get(ruku.ruku_number);
+              return p !== undefined && p.verse_count > 0 && p.memorized_count === p.verse_count;
+            }).length;
+            const surahDone = rukusDone > 0 && rukusDone === surahRukus.length;
 
             return (
               <div
@@ -80,7 +88,12 @@ export function Browse() {
                   aria-expanded={expanded}
                   className="flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-surface-2"
                 >
-                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-2 text-[0.8125rem] font-semibold tabular-nums text-fg-muted">
+                  <span
+                    className={cn(
+                      "grid size-9 shrink-0 place-items-center rounded-lg text-[0.8125rem] font-semibold tabular-nums",
+                      surahDone ? "bg-accent text-accent-fg" : "bg-surface-2 text-fg-muted",
+                    )}
+                  >
                     {surah.number}
                   </span>
 
@@ -97,6 +110,14 @@ export function Browse() {
                       {surah.ayah_count} ayahs · {surahRukus.length}{" "}
                       {surahRukus.length === 1 ? "ruku" : "rukus"} ·{" "}
                       <span className="capitalize">{surah.revelation_type}</span>
+                      {rukusDone > 0 ? (
+                        <span className="text-accent">
+                          {" · "}
+                          {surahDone
+                            ? "memorized"
+                            : `${rukusDone}/${surahRukus.length} rukus memorized`}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
 
@@ -114,21 +135,13 @@ export function Browse() {
                 {expanded ? (
                   <div className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-2 border-t border-border bg-surface-2/40 p-3">
                     {surahRukus.map((ruku) => (
-                      <button
+                      <RukuTile
                         key={ruku.ruku_number}
-                        onClick={() => navigate(`/read/${ruku.ruku_number}`)}
-                        className={cn(
-                          "rounded-lg border border-border bg-surface px-3 py-2.5 text-left",
-                          "transition-colors hover:border-accent/40 hover:bg-accent-soft/40",
-                        )}
-                      >
-                        <div className="text-[0.8125rem] font-medium text-fg">
-                          Ruku {ruku.ruku_in_surah}
-                        </div>
-                        <div className="mt-0.5 text-[0.75rem] tabular-nums text-fg-subtle">
-                          Ayahs {ayahRangeLabel(ruku.ayah_start, ruku.ayah_end)}
-                        </div>
-                      </button>
+                        label={`Ruku ${ruku.ruku_in_surah}`}
+                        ayahs={ayahRangeLabel(ruku.ayah_start, ruku.ayah_end)}
+                        progress={progress?.get(ruku.ruku_number)}
+                        onOpen={() => navigate(`/read/${ruku.ruku_number}`)}
+                      />
                     ))}
                   </div>
                 ) : null}
@@ -138,5 +151,96 @@ export function Browse() {
         </div>
       )}
     </Page>
+  );
+}
+
+/**
+ * One ruku in the grid, carrying how far through it the reader is.
+ *
+ * A finished ruku changes colour rather than filling a bar: the bar answers
+ * "how much is left", which stops being the question once the answer is none.
+ * The tafsir marker is a separate corner icon because the two can — and often
+ * do — finish at different times, and seeing which rukus are memorized but not
+ * yet understood is the whole reason the second marker exists.
+ */
+function RukuTile({
+  label,
+  ayahs,
+  progress,
+  onOpen,
+}: {
+  label: string;
+  ayahs: string;
+  progress: RukuProgress | undefined;
+  onOpen: () => void;
+}) {
+  const total = progress?.verse_count ?? 0;
+  const memorized = progress?.memorized_count ?? 0;
+  const tafsirRead = progress?.tafsir_read_count ?? 0;
+  const complete = total > 0 && memorized === total;
+  const tafsirComplete = total > 0 && tafsirRead === total;
+  const started = memorized > 0 && !complete;
+
+  const tile = (
+    <button
+      onClick={onOpen}
+      className={cn(
+        "relative overflow-hidden rounded-lg border px-3 py-2.5 text-left transition-colors",
+        complete
+          ? "border-accent/50 bg-accent-soft/60 hover:bg-accent-soft"
+          : "border-border bg-surface hover:border-accent/40 hover:bg-accent-soft/40",
+      )}
+    >
+      <div className="flex items-center gap-1.5">
+        <span
+          className={cn(
+            "text-[0.8125rem] font-medium",
+            complete ? "text-accent-soft-fg" : "text-fg",
+          )}
+        >
+          {label}
+        </span>
+        {complete ? <Sparkles className="size-3.5 shrink-0 text-accent" aria-hidden /> : null}
+        {tafsirComplete ? (
+          <GraduationCap className="size-3.5 shrink-0 text-gold" aria-hidden />
+        ) : null}
+      </div>
+
+      <div
+        className={cn(
+          "mt-0.5 text-[0.75rem] tabular-nums",
+          complete ? "text-accent-soft-fg/80" : "text-fg-subtle",
+        )}
+      >
+        {started ? `${memorized}/${total} memorized` : `Ayahs ${ayahs}`}
+      </div>
+
+      {/* A hairline along the bottom edge rather than a widget: it has to read
+          at a glance across a grid of twenty, without competing with the text. */}
+      {started ? (
+        <span className="absolute inset-x-0 bottom-0 h-[2px] bg-border/60" aria-hidden>
+          <span
+            className="block h-full bg-accent"
+            style={{ width: `${(memorized / total) * 100}%` }}
+          />
+        </span>
+      ) : null}
+    </button>
+  );
+
+  if (!progress || memorized === 0) return tile;
+
+  return (
+    <Tooltip
+      content={
+        complete
+          ? tafsirComplete
+            ? "Memorized, and the tafsir read on every ayah."
+            : `Memorized. Tafsir read on ${tafsirRead} of ${total} ayahs.`
+          : `${memorized} of ${total} ayahs memorized · tafsir read on ${tafsirRead}.`
+      }
+    >
+      {tile}
+    </Tooltip>
   );
 }

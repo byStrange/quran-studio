@@ -7,10 +7,12 @@
  * tokens so both themes are defined in one place, and are referenced by name
  * rather than value so a span only ever needs `data-tajweed`.
  *
- * The palette follows the colour families used in printed tajweed mushafs and
- * on quran.com — madd in blues, ghunnah orange, qalqalah red, ikhfa purple,
- * idgham green, silent letters grey — so a reader who already knows one of
- * those does not have to relearn anything here.
+ * The palette is the standard tajweed one, matched hex for hex in light mode
+ * (#537FFF madd ṭabīʿī, #FF7E1E ghunnah, #DD0008 qalqalah, #9400A8 ikhfāʾ,
+ * #169200 idghām, #AAAAAA silent, …) — the same values every implementation of
+ * these rule classes ships, including the quran.com source the spans come
+ * from. It is deliberately not a house palette: readers arrive having learnt
+ * these colours from a printed mushaf, so a "nicer" green is just a wrong one.
  */
 
 export const TAJWEED_RULES = [

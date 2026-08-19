@@ -143,6 +143,92 @@ export function useToggleMemorized() {
       queryClient.invalidateQueries({ queryKey: ["memorized"] });
       queryClient.invalidateQueries({ queryKey: ["memorization-overview"] });
       queryClient.invalidateQueries({ queryKey: ["memorized-by-surah"] });
+      queryClient.invalidateQueries({ queryKey: ["ruku-progress"] });
+    },
+  });
+}
+
+// --- tafsir read -----------------------------------------------------------
+
+export function useTafsirReadVerses(verseIds?: number[]) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["tafsir-read", user?.id, verseIds?.join(",") ?? "all"],
+    enabled: Boolean(user),
+    queryFn: async (): Promise<Set<number>> => {
+      let query = supabase.from("tafsir_read_verses").select("verse_id");
+      if (verseIds?.length) query = query.in("verse_id", verseIds);
+      const { data, error } = await query;
+      if (error) throw error;
+      return new Set((data ?? []).map((row) => row.verse_id));
+    },
+  });
+}
+
+/**
+ * Marks or unmarks the tafsir as read for one or more ayahs.
+ *
+ * Takes a list rather than a single id because a tafsir entry usually covers a
+ * range: Ibn Kathir comments on 2:1-5 in one passage, and someone who has read
+ * that passage has read the commentary on all five. Marking them one at a time
+ * would be five clicks for one act of reading.
+ */
+export function useToggleTafsirRead() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ verseIds, read }: { verseIds: number[]; read: boolean }) => {
+      if (verseIds.length === 0) return;
+      if (read) {
+        const { error } = await supabase
+          .from("tafsir_read_verses")
+          .upsert(
+            verseIds.map((verseId) => ({ user_id: user!.id, verse_id: verseId })),
+            { onConflict: "user_id,verse_id" },
+          );
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("tafsir_read_verses")
+          .delete()
+          .eq("user_id", user!.id)
+          .in("verse_id", verseIds);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tafsir-read"] });
+      queryClient.invalidateQueries({ queryKey: ["ruku-progress"] });
+    },
+  });
+}
+
+// --- per-ruku progress -----------------------------------------------------
+
+export interface RukuProgress {
+  ruku_number: number;
+  surah_number: number;
+  verse_count: number;
+  memorized_count: number;
+  tafsir_read_count: number;
+}
+
+/**
+ * Memorized and tafsir-read counts for every ruku, keyed by ruku number.
+ *
+ * One 558-row read serves the whole ruku grid and the reader header; the
+ * alternative is every marked verse id in the Quran just to count them.
+ */
+export function useRukuProgress() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["ruku-progress", user?.id],
+    enabled: Boolean(user),
+    queryFn: async (): Promise<Map<number, RukuProgress>> => {
+      const { data, error } = await supabase.rpc("ruku_progress");
+      if (error) throw error;
+      return new Map((data ?? []).map((row) => [row.ruku_number, row as RukuProgress]));
     },
   });
 }

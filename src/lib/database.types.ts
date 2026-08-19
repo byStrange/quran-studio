@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.15"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       daily_reading: {
@@ -268,7 +293,6 @@ export type Database = {
       quran_verses: {
         Row: {
           arabic_text: string
-          audio_url: string | null
           ayah_number: number
           id: number
           juz_number: number
@@ -277,10 +301,10 @@ export type Database = {
           surah_number: number
           tajweed: Json | null
           translation_en: string
+          translation_ru: string | null
         }
         Insert: {
           arabic_text: string
-          audio_url?: string | null
           ayah_number: number
           id: number
           juz_number: number
@@ -289,10 +313,10 @@ export type Database = {
           surah_number: number
           tajweed?: Json | null
           translation_en: string
+          translation_ru?: string | null
         }
         Update: {
           arabic_text?: string
-          audio_url?: string | null
           ayah_number?: number
           id?: number
           juz_number?: number
@@ -301,6 +325,7 @@ export type Database = {
           surah_number?: number
           tajweed?: Json | null
           translation_en?: string
+          translation_ru?: string | null
         }
         Relationships: [
           {
@@ -316,6 +341,7 @@ export type Database = {
         Row: {
           arabic: string
           gloss_en: string | null
+          gloss_ru: string | null
           id: number
           position: number
           transliteration: string | null
@@ -324,6 +350,7 @@ export type Database = {
         Insert: {
           arabic: string
           gloss_en?: string | null
+          gloss_ru?: string | null
           id: number
           position: number
           transliteration?: string | null
@@ -332,6 +359,7 @@ export type Database = {
         Update: {
           arabic?: string
           gloss_en?: string | null
+          gloss_ru?: string | null
           id?: number
           position?: number
           transliteration?: string | null
@@ -377,21 +405,132 @@ export type Database = {
         }
         Relationships: []
       }
+      recitation_files: {
+        Row: {
+          audio_url: string
+          duration_ms: number
+          file_size: number | null
+          format: string
+          reciter_id: number
+          surah_number: number
+        }
+        Insert: {
+          audio_url: string
+          duration_ms: number
+          file_size?: number | null
+          format?: string
+          reciter_id: number
+          surah_number: number
+        }
+        Update: {
+          audio_url?: string
+          duration_ms?: number
+          file_size?: number | null
+          format?: string
+          reciter_id?: number
+          surah_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recitation_files_reciter_id_fkey"
+            columns: ["reciter_id"]
+            isOneToOne: false
+            referencedRelation: "reciters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recitation_files_surah_number_fkey"
+            columns: ["surah_number"]
+            isOneToOne: false
+            referencedRelation: "quran_surahs"
+            referencedColumns: ["number"]
+          },
+        ]
+      }
+      recitation_timings: {
+        Row: {
+          end_ms: number
+          reciter_id: number
+          segments: Json | null
+          start_ms: number
+          verse_id: number
+        }
+        Insert: {
+          end_ms: number
+          reciter_id: number
+          segments?: Json | null
+          start_ms: number
+          verse_id: number
+        }
+        Update: {
+          end_ms?: number
+          reciter_id?: number
+          segments?: Json | null
+          start_ms?: number
+          verse_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recitation_timings_reciter_id_fkey"
+            columns: ["reciter_id"]
+            isOneToOne: false
+            referencedRelation: "reciters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recitation_timings_verse_id_fkey"
+            columns: ["verse_id"]
+            isOneToOne: false
+            referencedRelation: "quran_verses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reciters: {
+        Row: {
+          id: number
+          name: string
+          qirat: string | null
+          slug: string
+          sort_order: number
+          style: string | null
+        }
+        Insert: {
+          id: number
+          name: string
+          qirat?: string | null
+          slug: string
+          sort_order?: number
+          style?: string | null
+        }
+        Update: {
+          id?: number
+          name?: string
+          qirat?: string | null
+          slug?: string
+          sort_order?: number
+          style?: string | null
+        }
+        Relationships: []
+      }
       ruku_ai_summary: {
         Row: {
           generated_at: string
+          language: string
           model_used: string
           ruku_number: number
           summary: string
         }
         Insert: {
           generated_at?: string
+          language: string
           model_used: string
           ruku_number: number
           summary: string
         }
         Update: {
           generated_at?: string
+          language?: string
           model_used?: string
           ruku_number?: number
           summary?: string
@@ -400,7 +539,7 @@ export type Database = {
           {
             foreignKeyName: "ruku_ai_summary_ruku_number_fkey"
             columns: ["ruku_number"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "quran_rukus"
             referencedColumns: ["ruku_number"]
           },
@@ -505,6 +644,32 @@ export type Database = {
         }
         Relationships: []
       }
+      tafsir_read_verses: {
+        Row: {
+          read_at: string
+          user_id: string
+          verse_id: number
+        }
+        Insert: {
+          read_at?: string
+          user_id: string
+          verse_id: number
+        }
+        Update: {
+          read_at?: string
+          user_id?: string
+          verse_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tafsir_read_verses_verse_id_fkey"
+            columns: ["verse_id"]
+            isOneToOne: false
+            referencedRelation: "quran_verses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_word_progress: {
         Row: {
           correct_count: number
@@ -550,18 +715,21 @@ export type Database = {
         Row: {
           explanation: string
           generated_at: string
+          language: string
           model_used: string
           word_id: number
         }
         Insert: {
           explanation: string
           generated_at?: string
+          language: string
           model_used: string
           word_id: number
         }
         Update: {
           explanation?: string
           generated_at?: string
+          language?: string
           model_used?: string
           word_id?: number
         }
@@ -569,7 +737,7 @@ export type Database = {
           {
             foreignKeyName: "word_ai_context_word_id_fkey"
             columns: ["word_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "quran_words"
             referencedColumns: ["id"]
           },
@@ -630,17 +798,17 @@ export type Database = {
         }[]
       }
       quiz_distractors: {
-        Args: { p_exclude: string[]; p_limit?: number }
+        Args: { p_exclude: string[]; p_language?: string; p_limit?: number }
         Returns: {
-          gloss_en: string
+          gloss: string
         }[]
       }
       quiz_pool: {
-        Args: { p_limit?: number }
+        Args: { p_language?: string; p_limit?: number }
         Returns: {
           arabic: string
           ayah_number: number
-          gloss_en: string
+          gloss: string
           status: Database["public"]["Enums"]["word_status"]
           surah_number: number
           transliteration: string
@@ -649,6 +817,17 @@ export type Database = {
       }
       reading_overview: { Args: never; Returns: Json }
       recompute_streak: { Args: { p_user_id: string }; Returns: undefined }
+      ruku_progress: {
+        Args: never
+        Returns: {
+          memorized_count: number
+          ruku_number: number
+          surah_number: number
+          tafsir_read_count: number
+          verse_count: number
+        }[]
+      }
+      set_word_glosses_ru: { Args: { p_rows: Json }; Returns: number }
       vocabulary_overview: { Args: never; Returns: Json }
     }
     Enums: {
@@ -778,6 +957,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       word_status: ["new", "learning", "learned"],

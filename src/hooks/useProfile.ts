@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
+import {
+  DEFAULT_CONTENT_LANGUAGE,
+  isContentLanguage,
+  type ContentLanguage,
+} from "@/lib/language";
 import { DEFAULT_UI_PREFS, type Profile, type UiPrefs } from "@/lib/types";
 import { detectTimezone } from "@/lib/utils";
 
@@ -38,6 +43,18 @@ export function useProfile() {
 export function useUiPrefs(): UiPrefs {
   const { data } = useProfile();
   return { ...DEFAULT_UI_PREFS, ...((data?.ui_prefs as Partial<UiPrefs> | null) ?? {}) };
+}
+
+/**
+ * The content language, for the many components that need only that.
+ *
+ * Validated rather than cast: `ui_prefs` is free-form JSON, so a row written
+ * by a newer build (or edited by hand) can hold a language this build has no
+ * column for, and falling back beats rendering blank scripture.
+ */
+export function useContentLanguage(): ContentLanguage {
+  const { contentLanguage } = useUiPrefs();
+  return isContentLanguage(contentLanguage) ? contentLanguage : DEFAULT_CONTENT_LANGUAGE;
 }
 
 export function useUpdateProfile() {

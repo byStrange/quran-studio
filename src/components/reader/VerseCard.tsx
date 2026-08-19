@@ -1,5 +1,7 @@
-import { BookOpen, Check, ChevronDown, Expand } from "lucide-react";
+import { BookOpen, Check, ChevronDown, Expand, GraduationCap, Play, Volume2 } from "lucide-react";
 import { cn, verseKey } from "@/lib/utils";
+import { verseTranslation } from "@/lib/language";
+import { useContentLanguage } from "@/hooks/useProfile";
 import type { VerseWithWords, WordStatus } from "@/lib/types";
 import { WordChip } from "./WordChip";
 import { TajweedText } from "./TajweedText";
@@ -9,6 +11,8 @@ export function VerseCard({
   verse,
   memorized,
   onToggleMemorized,
+  tafsirRead,
+  onToggleTafsirRead,
   selected,
   onSelect,
   wordsExpanded,
@@ -16,10 +20,17 @@ export function VerseCard({
   wordStatuses,
   onOpenFocus,
   tajweed,
+  reciting,
+  recitingWordPosition,
+  onPlayFromHere,
+  canPlay,
 }: {
   verse: VerseWithWords;
   memorized: boolean;
   onToggleMemorized: () => void;
+  /** Whether the tafsir on this ayah has been read. */
+  tafsirRead: boolean;
+  onToggleTafsirRead: () => void;
   selected: boolean;
   onSelect: () => void;
   wordsExpanded: boolean;
@@ -29,13 +40,29 @@ export function VerseCard({
   onOpenFocus: () => void;
   /** Colour the Arabic by tajweed rule. */
   tajweed: boolean;
+  /** This ayah is the one currently being recited. */
+  reciting: boolean;
+  /** Position of the word being recited, when this is the reciting ayah. */
+  recitingWordPosition: number | null;
+  onPlayFromHere: () => void;
+  canPlay: boolean;
 }) {
+  const language = useContentLanguage();
+
   return (
     <article
       id={`verse-${verse.id}`}
+      data-reciting={reciting || undefined}
       className={cn(
-        "scroll-mt-4 rounded-card border bg-surface transition-colors",
-        selected ? "border-accent/50 shadow-sm" : "border-border",
+        "scroll-mt-24 rounded-card border bg-surface transition-colors",
+        // Recitation wins over selection: it moves on its own and the reader
+        // is following it, so it has to be findable at a glance while
+        // scrolling. Selection is where they last clicked, which they know.
+        reciting
+          ? "border-accent bg-accent-soft/25 shadow-sm"
+          : selected
+            ? "border-accent/50 shadow-sm"
+            : "border-border",
       )}
     >
       <div className="flex items-start gap-4 p-5">
@@ -46,10 +73,10 @@ export function VerseCard({
               memorized ? "bg-accent text-accent-fg" : "bg-surface-2 text-fg-muted",
             )}
           >
-            {verse.ayah_number}
+            {reciting ? <Volume2 className="size-3.5" aria-hidden /> : verse.ayah_number}
           </span>
 
-          <Tooltip content={memorized ? "Marked as memorized" : "Mark as memorized"}>
+          <Tooltip content={memorized ? "Memorized" : "Mark as memorized"}>
             <button
               onClick={onToggleMemorized}
               aria-pressed={memorized}
@@ -64,6 +91,28 @@ export function VerseCard({
               <Check className="size-3.5" aria-hidden />
             </button>
           </Tooltip>
+
+          {/* The second marker sits directly under the first because the two
+              are read together — "known by heart" and "understood" are the
+              pair that tells you what is left to do on this ayah. */}
+          <Tooltip content={tafsirRead ? "Tafsir read" : "Mark tafsir as read"}>
+            <button
+              onClick={onToggleTafsirRead}
+              aria-pressed={tafsirRead}
+              aria-label={`Mark the tafsir on ${verseKey(
+                verse.surah_number,
+                verse.ayah_number,
+              )} as read`}
+              className={cn(
+                "grid size-7 place-items-center rounded-lg border transition-colors",
+                tafsirRead
+                  ? "border-gold/50 bg-gold-soft text-gold-soft-fg"
+                  : "border-border text-fg-subtle hover:border-border-strong hover:text-fg",
+              )}
+            >
+              <GraduationCap className="size-3.5" aria-hidden />
+            </button>
+          </Tooltip>
         </div>
 
         <div className="min-w-0 flex-1">
@@ -72,10 +121,28 @@ export function VerseCard({
           </p>
 
           <p className="mt-4 text-[0.9375rem] leading-relaxed text-fg-muted" data-selectable>
-            {verse.translation_en}
+            {verseTranslation(verse, language)}
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-1">
+            {canPlay ? (
+              <Tooltip content="Play the recitation from this ayah">
+                <button
+                  onClick={onPlayFromHere}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[0.8125rem]",
+                    "transition-colors",
+                    reciting
+                      ? "text-accent-soft-fg"
+                      : "text-fg-subtle hover:bg-surface-2 hover:text-fg",
+                  )}
+                >
+                  <Play className="size-3.5" aria-hidden />
+                  Play
+                </button>
+              </Tooltip>
+            ) : null}
+
             <button
               onClick={onToggleWords}
               className={cn(
@@ -129,6 +196,7 @@ export function VerseCard({
                 word={word}
                 verse={verse}
                 status={wordStatuses.get(word.id)}
+                reciting={reciting && recitingWordPosition === word.position}
               />
             ))}
           </div>

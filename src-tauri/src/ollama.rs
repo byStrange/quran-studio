@@ -9,19 +9,23 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use std::time::Duration;
+use tauri::Manager;
 
 const DEFAULT_BASE_URL: &str = "https://ollama.com";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(90);
 
+/// What we ask for unless the catalog says otherwise or `OLLAMA_MODEL` pins
+/// something else.
+const DEFAULT_MODEL: &str = "gemma4:31b-cloud";
+
 /// Preference order for model discovery. The catalog changes over time, so we
-/// resolve against `/api/tags` at runtime rather than hardcoding a single
-/// name; these are only ranking hints, and any `*-cloud` model is acceptable.
+/// resolve against `/api/tags` at runtime rather than trusting a single name;
+/// these are only ranking hints, and any catalog entry is acceptable.
 const MODEL_PREFERENCES: &[&str] = &[
-    "qwen3-coder:480b-cloud",
-    "gpt-oss:120b-cloud",
-    "deepseek-v3.1:671b-cloud",
-    "kimi-k2:1t-cloud",
-    "glm-4.6:cloud",
+    DEFAULT_MODEL,
+    "gpt-oss:120b",
+    "qwen3.5:397b",
+    "deepseek-v4-pro:preview",
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -32,7 +36,7 @@ pub enum AiError {
     Network(String),
     #[error("Ollama Cloud returned {status}: {body}")]
     Api { status: u16, body: String },
-    #[error("no cloud-capable model found in the Ollama catalog")]
+    #[error("the Ollama catalog lists no models for this account")]
     NoModel,
     #[error("unexpected response shape from Ollama Cloud")]
     BadResponse,
@@ -93,10 +97,23 @@ fn base_url() -> String {
         .unwrap_or_else(|| DEFAULT_BASE_URL.to_string())
 }
 
-/// `~/.config/quran-studio/.env` (or the platform equivalent) — where
-/// `ai_set_api_key` stores the key for bundled builds that have no project
-/// tree to read a `.env` from.
-pub fn user_config_path() -> Option<std::path::PathBuf> {
+/// Where `ai_set_api_key` stores the key for bundled builds that have no
+/// project tree to read a `.env` from.
+///
+/// The path has to come from Tauri rather than from `XDG_CONFIG_HOME`/`HOME`:
+/// an Android app process is given neither, so a hand-built `~/.config` path
+/// resolves to nothing there and the key can never be saved. The resolver
+/// returns the app's private data directory on Android and the usual
+/// per-user config directory on desktop.
+pub fn user_config_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_config_dir().ok().map(|dir| dir.join(".env"))
+}
+
+/// Earlier desktop builds wrote to `~/.config/quran-studio/.env`, which is not
+/// where the resolver points. Read-only fallback so a key saved before the
+/// move keeps working; nothing writes here any more.
+#[cfg(desktop)]
+pub fn legacy_config_path() -> Option<std::path::PathBuf> {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .map(std::path::PathBuf::from)
         .or_else(|| {
@@ -128,8 +145,17 @@ struct TagModel {
     model: String,
 }
 
+/// The catalog lists bare names (`gemma4:31b`) while the hosted variant is
+/// also addressable with a suffix (`gemma4:31b-cloud`). Both route to the same
+/// model, so compare on the stem to avoid missing a match on spelling alone.
+fn base_name(name: &str) -> &str {
+    name.strip_suffix("-cloud")
+        .or_else(|| name.strip_suffix(":cloud"))
+        .unwrap_or(name)
+}
+
 /// Resolves a usable hosted model, preferring an explicit `OLLAMA_MODEL`, then
-/// our preference list, then any model advertising the `-cloud` suffix.
+/// our preference list, then whatever the catalog lists first.
 async fn resolve_model(state: &AiState) -> AiResult<String> {
     if let Ok(pinned) = std::env::var("OLLAMA_MODEL") {
         let pinned = pinned.trim().to_string();
@@ -173,10 +199,9 @@ async fn resolve_model(state: &AiState) -> AiResult<String> {
 
     let chosen = MODEL_PREFERENCES
         .iter()
-        .find(|pref| names.iter().any(|n| n == *pref))
+        .find(|pref| names.iter().any(|n| base_name(n) == base_name(pref)))
         .map(|s| s.to_string())
-        .or_else(|| names.iter().find(|n| n.contains("-cloud")).cloned())
-        .or_else(|| names.iter().find(|n| n.ends_with(":cloud")).cloned())
+        .or_else(|| names.first().cloned())
         .ok_or(AiError::NoModel)?;
 
     if let Ok(mut slot) = state.resolved_model.lock() {
@@ -288,6 +313,30 @@ fn clean_output(raw: &str) -> String {
     text.trim().to_string()
 }
 
+/// Rewrites one assignment in a `.env` body, leaving every other line alone —
+/// the file may also carry `OLLAMA_MODEL` or a hand-added setting.
+fn upsert_env_var(existing: &str, key: &str, value: &str) -> String {
+    let prefix = format!("{key}=");
+    let mut replaced = false;
+    let mut out: Vec<String> = existing
+        .lines()
+        .map(|line| {
+            if line.trim_start().starts_with(&prefix) {
+                replaced = true;
+                format!("{prefix}{value}")
+            } else {
+                line.to_string()
+            }
+        })
+        .collect();
+    if !replaced {
+        out.push(format!("{prefix}{value}"));
+    }
+    let mut body = out.join("\n");
+    body.push('\n');
+    body
+}
+
 fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         s.to_string()
@@ -320,17 +369,19 @@ pub async fn ai_status(state: tauri::State<'_, AiState>) -> Result<AiStatus, AiE
 /// process, so Settings can configure AI without editing files by hand.
 #[tauri::command]
 pub async fn ai_set_api_key(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AiState>,
     api_key: String,
 ) -> Result<AiStatus, AiError> {
     let trimmed = api_key.trim().to_string();
-    let path = user_config_path().ok_or_else(|| {
+    let path = user_config_path(&app).ok_or_else(|| {
         AiError::Persist("could not determine a config directory".to_string())
     })?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| AiError::Persist(e.to_string()))?;
     }
-    std::fs::write(&path, format!("OLLAMA_API_KEY={trimmed}\n"))
+    let existing = std::fs::read_to_string(&path).unwrap_or_default();
+    std::fs::write(&path, upsert_env_var(&existing, "OLLAMA_API_KEY", &trimmed))
         .map_err(|e| AiError::Persist(e.to_string()))?;
 
     #[cfg(unix)]
@@ -355,11 +406,28 @@ pub async fn ai_set_api_key(
     }
 }
 
-const WORD_SYSTEM: &str = "You are a precise Quranic Arabic teacher writing for an English-speaking \
+/// The language an explanation is written in.
+///
+/// Resolved from the code the frontend sends rather than trusted verbatim: it
+/// is interpolated into a prompt, and an unrecognised value should fall back
+/// to English rather than instruct the model in whatever string arrived.
+fn language_name(code: &str) -> &'static str {
+    match code {
+        "ru" => "Russian",
+        _ => "English",
+    }
+}
+
+fn word_system(language: &str) -> String {
+    format!(
+        "You are a precise Quranic Arabic teacher writing for a {language}-speaking \
 student who is memorizing the Quran. Explain why a specific word form is used in a specific ayah: \
 its grammatical role, the nuance that distinguishes it from a near-synonym, or its thematic \
 significance in that passage. Write two or three sentences of plain prose. Do not restate the \
-translation, do not use markdown, headings, or lists, and do not add any preamble.";
+translation, do not use markdown, headings, or lists, and do not add any preamble. \
+Write your entire answer in {language}."
+    )
+}
 
 #[tauri::command]
 pub async fn ai_generate_word_context(
@@ -371,23 +439,29 @@ pub async fn ai_generate_word_context(
     ayah_number: i32,
     verse_arabic: String,
     verse_translation: String,
+    language: String,
 ) -> Result<WordContext, AiError> {
+    let language = language_name(&language);
     let prompt = format!(
         "Word: {arabic} ({transliteration}) — commonly glossed as \"{gloss}\".\n\
          It appears in Surah {surah_number}, ayah {ayah_number}.\n\n\
          Full ayah (Arabic): {verse_arabic}\n\
-         Full ayah (English): {verse_translation}\n\n\
+         Full ayah ({language}): {verse_translation}\n\n\
          Explain why this particular word and form is used here."
     );
-    let (explanation, model_used) = chat(&state, WORD_SYSTEM, &prompt, 300).await?;
+    let (explanation, model_used) = chat(&state, &word_system(language), &prompt, 300).await?;
     Ok(WordContext { explanation, model_used })
 }
 
-const RUKU_SYSTEM: &str = "You are a Quran study guide writing for an English-speaking student \
+fn ruku_system(language: &str) -> String {
+    format!(
+        "You are a Quran study guide writing for a {language}-speaking student \
 memorizing the Quran ruku by ruku. Given a passage, write one short paragraph — four to six \
 sentences — covering its central theme, how the passage develops, and what a student should take \
 away from it. Write plain prose. Do not use markdown, headings, or lists, do not number the \
-ayahs, and do not add any preamble.";
+ayahs, and do not add any preamble. Write your entire answer in {language}."
+    )
+}
 
 #[tauri::command]
 pub async fn ai_generate_ruku_summary(
@@ -396,12 +470,14 @@ pub async fn ai_generate_ruku_summary(
     surah_name: String,
     verse_range: String,
     passage: String,
+    language: String,
 ) -> Result<RukuSummary, AiError> {
+    let language = language_name(&language);
     let prompt = format!(
         "Ruku {ruku_number} of the Quran — Surah {surah_name}, ayahs {verse_range}.\n\n\
-         Passage (English translation):\n{passage}\n\n\
+         Passage ({language} translation):\n{passage}\n\n\
          Summarize what a student should learn and take away from this ruku."
     );
-    let (summary, model_used) = chat(&state, RUKU_SYSTEM, &prompt, 500).await?;
+    let (summary, model_used) = chat(&state, &ruku_system(language), &prompt, 500).await?;
     Ok(RukuSummary { summary, model_used })
 }

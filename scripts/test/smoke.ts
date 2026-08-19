@@ -166,7 +166,104 @@ async function main(): Promise<void> {
         : `expected Cyrillic, got: ${data.content.slice(0, 40)}`;
     });
 
+    // --- recitation --------------------------------------------------------
+    await check("lists the reciters", async () => {
+      const { data, error } = await client.from("reciters").select("*").order("sort_order");
+      if (error) return error.message;
+      if (!data?.length) return "no reciters returned — run pnpm seed:audio";
+      const slugs = new Set(data.map((r) => r.slug));
+      return slugs.size === data.length ? null : "duplicate reciter slugs";
+    });
+
+    /**
+     * The player's whole contract in one check.
+     *
+     * It seeks into a continuous surah recording using these offsets, so a
+     * timing past the end of the file, or one that starts before the ayah
+     * before it, would send the playhead somewhere the reader did not ask for.
+     * Word segments have to sit inside their own ayah for the same reason.
+     */
+    await check("ayah timings index into the surah recording", async () => {
+      const { data: reciter } = await client
+        .from("reciters")
+        .select("id, name")
+        .order("sort_order")
+        .limit(1)
+        .maybeSingle();
+      if (!reciter) return "no reciters to check";
+
+      const { data: file, error: fileError } = await client
+        .from("recitation_files")
+        .select("audio_url, duration_ms")
+        .eq("reciter_id", reciter.id)
+        .eq("surah_number", 18)
+        .maybeSingle();
+      if (fileError) return fileError.message;
+      if (!file) return `no surah 18 recording for ${reciter.name}`;
+      if (!file.audio_url.startsWith("http")) return `bad audio url: ${file.audio_url}`;
+
+      const { data: verses } = await client
+        .from("quran_verses")
+        .select("id, ayah_number")
+        .eq("surah_number", 18)
+        .order("ayah_number");
+      const verseIds = (verses ?? []).map((v) => v.id);
+
+      const { data: timings, error } = await client
+        .from("recitation_timings")
+        .select("verse_id, start_ms, end_ms, segments")
+        .eq("reciter_id", reciter.id)
+        .in("verse_id", verseIds);
+      if (error) return error.message;
+      if (!timings?.length) return `no timings for ${reciter.name} on surah 18`;
+
+      const byVerse = new Map(timings.map((t) => [t.verse_id, t]));
+      let previousEnd = -1;
+      for (const id of verseIds) {
+        const timing = byVerse.get(id);
+        if (!timing) continue;
+        if (timing.start_ms < previousEnd) return `ayah ${id} starts before the previous one ends`;
+        if (timing.end_ms <= timing.start_ms) return `ayah ${id} has an empty span`;
+        // Upstream reports durations to whole seconds, and the final ayah's
+        // end tends to include the tail of the recitation dying away, so a
+        // few seconds of overrun is normal — across the whole seeded set the
+        // worst is 3s on 42 of ~81,000 rows. The fault this guards against is
+        // a timing on the wrong scale or the wrong file, which is minutes out.
+        if (timing.end_ms > file.duration_ms + 5000) {
+          return `ayah ${id} ends at ${timing.end_ms}ms, past the ${file.duration_ms}ms file`;
+        }
+        previousEnd = timing.end_ms;
+
+        const segments = timing.segments as number[][] | null;
+        for (const segment of segments ?? []) {
+          const [, startMs, endMs] = segment;
+          if (startMs === undefined || endMs === undefined) return `ayah ${id} has a short segment`;
+          if (startMs < timing.start_ms || endMs > timing.end_ms) {
+            return `ayah ${id} has a word segment outside its own span`;
+          }
+        }
+      }
+      return null;
+    });
+
     // --- the content tables must stay read-only ----------------------------
+    await check("cannot modify recitation data", async () => {
+      const { error } = await client
+        .from("recitation_files")
+        .update({ audio_url: "https://evil.example/tampered.mp3" })
+        .eq("surah_number", 18);
+      const { data: after } = await client
+        .from("recitation_files")
+        .select("audio_url")
+        .eq("surah_number", 18)
+        .limit(1)
+        .maybeSingle();
+      if (after?.audio_url.includes("evil.example")) {
+        return "a user was able to repoint a recitation!";
+      }
+      return error || after ? null : "unexpected state";
+    });
+
     await check("cannot modify Quran content", async () => {
       const { error } = await client
         .from("quran_verses")
@@ -227,6 +324,21 @@ async function main(): Promise<void> {
       return data.some((r) => r.verse_id === 1) ? null : "row not returned";
     });
 
+    // The second marker is deliberately independent of the first, so this
+    // marks a *different* verse from the memorized one above — ruku_progress
+    // below then has a ruku where the two counts genuinely disagree.
+    await check("marks the tafsir read on a verse", async () => {
+      const { error } = await client
+        .from("tafsir_read_verses")
+        .insert({ user_id: userId, verse_id: 2 });
+      if (error) return error.message;
+      const { data, error: readError } = await client
+        .from("tafsir_read_verses")
+        .select("verse_id");
+      if (readError) return readError.message;
+      return data.some((r) => r.verse_id === 2) ? null : "row not returned";
+    });
+
     await check("records word progress", async () => {
       const { data: word } = await client.from("quran_words").select("id").limit(1).single();
       const { error } = await client
@@ -243,10 +355,11 @@ async function main(): Promise<void> {
       const { error } = await client.from("word_ai_context").upsert(
         {
           word_id: word!.id,
+          language: "en",
           explanation: "smoke-test explanation",
           model_used: "smoke-test",
         },
-        { onConflict: "word_id" },
+        { onConflict: "word_id,language" },
       );
       return error ? error.message : null;
     });
@@ -301,9 +414,26 @@ async function main(): Promise<void> {
         p_limit: 3,
       });
       if (error) return error.message;
-      const glosses = ((data ?? []) as Array<{ gloss_en: string }>).map((d) => d.gloss_en);
+      const glosses = ((data ?? []) as Array<{ gloss: string }>).map((d) => d.gloss);
       if (glosses.length !== 3) return `got ${glosses.length} distractors`;
       return glosses.includes("In (the) name") ? "excluded gloss leaked through" : null;
+    });
+
+    await check("quiz_distractors answers in Russian", async () => {
+      const { data, error } = await client.rpc("quiz_distractors", {
+        p_exclude: [],
+        p_limit: 5,
+        p_language: "ru",
+      });
+      if (error) return error.message;
+      const glosses = ((data ?? []) as Array<{ gloss: string }>).map((d) => d.gloss);
+      if (glosses.length === 0) return "no distractors";
+      // The Russian corpus falls back to English for words it doesn't cover,
+      // so some Latin text is expected; a round with *no* Cyrillic at all
+      // means the language argument was ignored.
+      return glosses.some((g) => /[А-Яа-яЁё]/.test(g))
+        ? null
+        : "no Russian glosses — p_language was ignored";
     });
 
     await check("memorized_by_surah reports per-surah progress", async () => {
@@ -313,6 +443,28 @@ async function main(): Promise<void> {
       if (rows.length !== 114) return `got ${rows.length} rows`;
       const first = rows.find((r) => r.surah_number === 1);
       return first?.memorized_count === 1 ? null : `surah 1 count = ${first?.memorized_count}`;
+    });
+
+    // Verse 1 is memorized and verse 2 has its tafsir read, both in ruku 1 —
+    // so this also asserts the two markers are counted separately rather than
+    // one being derived from the other.
+    await check("ruku_progress counts both markers", async () => {
+      const { data, error } = await client.rpc("ruku_progress");
+      if (error) return error.message;
+      const rows = (data ?? []) as Array<{
+        ruku_number: number;
+        verse_count: number;
+        memorized_count: number;
+        tafsir_read_count: number;
+      }>;
+      if (rows.length !== 558) return `got ${rows.length} rukus`;
+      const first = rows.find((r) => r.ruku_number === 1);
+      if (!first) return "ruku 1 missing";
+      if (first.verse_count !== 7) return `ruku 1 has ${first.verse_count} verses, expected 7`;
+      if (first.memorized_count !== 1) return `memorized_count = ${first.memorized_count}`;
+      if (first.tafsir_read_count !== 1) return `tafsir_read_count = ${first.tafsir_read_count}`;
+      const total = rows.reduce((n, r) => n + r.verse_count, 0);
+      return total === 6236 ? null : `rukus cover ${total} verses, expected 6236`;
     });
 
     await check("profile was created automatically at signup", async () => {

@@ -22,10 +22,10 @@ import {
   Columns2,
   Coffee,
 } from "lucide-react";
-import { useSurahs } from "@/hooks/useQuranData";
+import { useSurahs, useSurahVerseIds } from "@/hooks/useQuranData";
 import { useMushafPage, useMushafPageVerses, useRukusOnPage } from "@/hooks/useMushafPage";
 import { prefetchPageFont, useMushafScale } from "@/hooks/useMushafScale";
-import { useMemorizedVerses } from "@/hooks/useProgress";
+import { useMemorizedVerses, useTafsirReadVerses, useToggleTafsirRead } from "@/hooks/useProgress";
 import { useUiPrefs, useUpdateProfile } from "@/hooks/useProfile";
 import { useReadingTimer } from "@/hooks/useReadingTimer";
 import { isValidPage, pageFontFamily, TOTAL_PAGES } from "@/lib/mushaf";
@@ -36,6 +36,8 @@ import { TafsirPanel } from "@/components/reader/TafsirPanel";
 import { Button } from "@/components/ui/button";
 import { ErrorState, LoadingBlock } from "@/components/ui/feedback";
 import { Tooltip } from "@/components/ui/primitives";
+import { verseTranslation } from "@/lib/language";
+import { useContentLanguage } from "@/hooks/useProfile";
 
 export function MushafReader() {
   const params = useParams<{ pageNumber: string }>();
@@ -44,6 +46,7 @@ export function MushafReader() {
   const valid = isValidPage(pageNumber);
 
   const prefs = useUiPrefs();
+  const language = useContentLanguage();
   const updateProfile = useUpdateProfile();
 
   const {
@@ -121,6 +124,34 @@ export function MushafReader() {
 
   const selectedVerse = verses?.find((verse) => verse.id === selectedVerseId) ?? null;
   const surah = surahs?.find((s) => s.number === selectedVerse?.surah_number);
+
+  // A page can straddle two surahs, so the ayah→id map follows the selection
+  // rather than the page.
+  const { data: tafsirRead } = useTafsirReadVerses();
+  const { data: surahVerseIds } = useSurahVerseIds(selectedVerse?.surah_number ?? null);
+  const toggleTafsirRead = useToggleTafsirRead();
+
+  const readAyahs = useMemo(() => {
+    const ayahs = new Set<number>();
+    if (!surahVerseIds || !tafsirRead) return ayahs;
+    for (const [ayah, id] of surahVerseIds) {
+      if (tafsirRead.has(id)) ayahs.add(ayah);
+    }
+    return ayahs;
+  }, [surahVerseIds, tafsirRead]);
+
+  const setTafsirReadRange = useCallback(
+    (ayahStart: number, ayahEnd: number, read: boolean) => {
+      if (!surahVerseIds) return;
+      const ids: number[] = [];
+      for (let ayah = ayahStart; ayah <= ayahEnd; ayah++) {
+        const id = surahVerseIds.get(ayah);
+        if (id !== undefined) ids.push(id);
+      }
+      toggleTafsirRead.mutate({ verseIds: ids, read });
+    },
+    [surahVerseIds, toggleTafsirRead],
+  );
   const memorizedIds = useMemo(() => memorized ?? new Set<number>(), [memorized]);
 
   /** Hands over to the ruku reader at the ayah currently selected. */
@@ -310,7 +341,7 @@ export function MushafReader() {
                     <span className="mr-2 text-fg-subtle tabular-nums">
                       {selectedVerse.surah_number}:{selectedVerse.ayah_number}
                     </span>
-                    {selectedVerse.translation_en}
+                    {verseTranslation(selectedVerse, language)}
                   </p>
                 ) : null}
 
@@ -343,6 +374,8 @@ export function MushafReader() {
               surahNumber={selectedVerse?.surah_number ?? null}
               ayahNumber={selectedVerse?.ayah_number ?? null}
               surahName={surah?.name_english ?? ""}
+              readAyahs={readAyahs}
+              onToggleRead={setTafsirReadRange}
             />
           }
         />

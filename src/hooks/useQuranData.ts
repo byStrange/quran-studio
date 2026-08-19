@@ -68,6 +68,32 @@ export function useRukuVerses(rukuNumber: number | null) {
   });
 }
 
+/**
+ * `ayah_number` → verse id, for one whole surah.
+ *
+ * A tafsir entry's range is written in ayah numbers and does not have to stop
+ * where the ruku does — a commentary on 2:1-5 is one passage whether or not the
+ * ruku on screen ends at 2:4. Marking it read therefore needs the surah's
+ * numbering rather than only the verses the reader happens to have loaded.
+ * The longest surah is 286 rows, so this stays a single request.
+ */
+export function useSurahVerseIds(surahNumber: number | null) {
+  return useQuery({
+    ...CONTENT_QUERY,
+    queryKey: ["surah-verse-ids", surahNumber],
+    enabled: surahNumber !== null,
+    queryFn: async (): Promise<Map<number, number>> => {
+      const { data, error } = await supabase
+        .from("quran_verses")
+        .select("id, ayah_number")
+        .eq("surah_number", surahNumber!)
+        .order("ayah_number");
+      if (error) throw error;
+      return new Map((data ?? []).map((row) => [row.ayah_number, row.id]));
+    },
+  });
+}
+
 /** The tafsir editions that were seeded, in the order the picker shows them. */
 export function useTafsirEditions() {
   return useQuery({

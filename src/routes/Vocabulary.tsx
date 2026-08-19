@@ -6,6 +6,8 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSurahs } from "@/hooks/useQuranData";
 import { useSetWordStatus } from "@/hooks/useProgress";
+import { useContentLanguage } from "@/hooks/useProfile";
+import { wordGloss } from "@/lib/language";
 import { Page } from "@/components/layout/AppShell";
 import { Card, CardBody, StatTile } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,7 @@ interface VocabRow {
     arabic: string;
     transliteration: string | null;
     gloss_en: string | null;
+    gloss_ru: string | null;
     verse: { surah_number: number; ayah_number: number; ruku_number: number };
   };
 }
@@ -35,6 +38,7 @@ const STATUS_FILTERS = [
 
 export function Vocabulary() {
   const { user } = useAuth();
+  const language = useContentLanguage();
   const { data: surahs } = useSurahs();
   const setStatus = useSetWordStatus();
 
@@ -64,7 +68,7 @@ export function Vocabulary() {
         .from("user_word_progress")
         .select(
           "status, review_count, correct_count, " +
-            "word:quran_words!inner(id, arabic, transliteration, gloss_en, " +
+            "word:quran_words!inner(id, arabic, transliteration, gloss_en, gloss_ru, " +
             "verse:quran_verses!inner(surah_number, ayah_number, ruku_number))",
         )
         .order("updated_at", { ascending: false })
@@ -161,7 +165,7 @@ export function Vocabulary() {
                   <div className="min-w-0 flex-1">
                     {/* Wraps on a phone, where there is no width to truncate
                         into and the gloss is the point of the row. */}
-                    <div className="text-sm text-fg md:truncate">{row.word.gloss_en}</div>
+                    <div className="text-sm text-fg md:truncate">{wordGloss(row.word, language)}</div>
                     <Link
                       to={`/read/${row.word.verse.ruku_number}`}
                       className="text-[0.75rem] text-fg-subtle transition-colors hover:text-accent"

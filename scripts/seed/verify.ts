@@ -76,6 +76,29 @@ const checks: Check[] = [
     },
   },
   {
+    name: "every verse has a Russian translation",
+    run: async () => {
+      const missing = await count("quran_verses", (q) => q.is("translation_ru", null));
+      const empty = await count("quran_verses", (q) => q.eq("translation_ru", ""));
+      const n = missing + empty;
+      return n === 0 ? null : `${n} verses have no Russian translation`;
+    },
+  },
+  {
+    name: "Russian word glosses cover most of the Quran",
+    run: async () => {
+      // The upstream corpus is ~98.5% complete and the reader falls back to
+      // English for the rest, so this is a floor rather than an equality: it
+      // catches a half-finished import, not the gaps that are simply there.
+      const total = await count("quran_words");
+      const glossed = await count("quran_words", (q) => q.not("gloss_ru", "is", null));
+      const pct = (glossed / total) * 100;
+      return pct >= 95
+        ? null
+        : `only ${pct.toFixed(1)}% of words have a Russian gloss (${glossed}/${total})`;
+    },
+  },
+  {
     name: "verse ayah counts match surah metadata",
     run: async () => {
       const { data, error } = await admin

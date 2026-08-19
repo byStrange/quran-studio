@@ -15,9 +15,22 @@ import { cachedJson, stripHtml } from "./util.ts";
 
 const QURAN_API = "https://api.quran.com/api/v4";
 const TAFSIR_CDN = "https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir";
+/** Fallback for the files jsDelivr refuses; see `cachedJson`. */
+const TAFSIR_RAW = "https://raw.githubusercontent.com/spa5k/tafsir_api/main/tafsir";
 
 /** Saheeh International, resource id 20 in the quran.com translation catalog. */
 export const TRANSLATION_ID = 20;
+
+/**
+ * Elmir Kuliev's Russian translation, resource id 45.
+ *
+ * Chosen over the catalogue's two other Russian translations for the same
+ * reason Saheeh International carries the English: it renders the meaning
+ * plainly and leaves interpretation to the tafsir. Abu Adel's inlines
+ * explanatory brackets into almost every ayah, and the Ministry of Awqaf's is
+ * a paraphrase — both fight the tafsir panel sitting next to them.
+ */
+export const TRANSLATION_ID_RU = 45;
 
 /**
  * The tafsir editions imported, with display metadata written alongside them.
@@ -47,6 +60,27 @@ export const TAFSIR_EDITIONS = [
     language_name: "Ўзбекча",
     sort_order: 1,
   },
+  // The two Russian editions are the same pairing the English side has: one
+  // narrative classical tafsir and one that stays close to the ayah. Both are
+  // complete across all 6,236 ayahs, which the Uzbek Mukhtasar above is too —
+  // but at roughly a tenth of the length, being the brief edition rather than
+  // a full commentary.
+  {
+    slug: "ru-tafsir-ibne-kahtir",
+    name: "Ибн Касир",
+    author_name: "Хафиз Ибн Касир",
+    language_code: "ru",
+    language_name: "Русский",
+    sort_order: 2,
+  },
+  {
+    slug: "tafsir-as-saadi-russian",
+    name: "Ас-Саади",
+    author_name: "Абд ар-Рахман ас-Саади",
+    language_code: "ru",
+    language_name: "Русский",
+    sort_order: 3,
+  },
 ] as const;
 
 export type TafsirEditionSlug = (typeof TAFSIR_EDITIONS)[number]["slug"];
@@ -72,7 +106,10 @@ interface VersesResponse {
     juz_number: number;
     page_number: number | null;
     text_uthmani: string;
-    translations?: Array<{ text: string }>;
+    // Requested as `translations=20,45`; the array comes back in the order
+    // the ids were asked for, but each entry carries its `resource_id` and
+    // that is what the reader below matches on.
+    translations?: Array<{ resource_id: number; text: string }>;
     words?: Array<{
       id: number;
       position: number;
@@ -108,6 +145,7 @@ export interface Verse {
   page_number: number | null;
   arabic_text: string;
   translation_en: string;
+  translation_ru: string;
 }
 
 export interface Word {
@@ -156,15 +194,22 @@ export async function fetchSurahContent(
     const url =
       `${QURAN_API}/verses/by_chapter/${surahNumber}` +
       `?language=en&words=true&word_fields=text_uthmani,transliteration` +
-      `&translations=${TRANSLATION_ID}` +
+      `&translations=${TRANSLATION_ID},${TRANSLATION_ID_RU}` +
       `&fields=text_uthmani,ruku_number,juz_number,page_number` +
       `&per_page=50&page=${page}`;
+    // The requested translations belong in the cache key. Without them, a
+    // tree that had already been seeded English-only would keep serving those
+    // downloads after Russian was added to the URL, and every verse would
+    // import with an empty Russian translation and no error anywhere.
     const data: VersesResponse = await cachedJson<VersesResponse>(
-      `verses-${surahNumber}-${page}`,
+      `verses-${TRANSLATION_ID}-${TRANSLATION_ID_RU}-${surahNumber}-${page}`,
       url,
     );
 
     for (const v of data.verses) {
+      const translation = (id: number) =>
+        stripHtml(v.translations?.find((t) => t.resource_id === id)?.text ?? "");
+
       verses.push({
         id: v.id,
         surah_number: surahNumber,
@@ -173,7 +218,8 @@ export async function fetchSurahContent(
         juz_number: v.juz_number,
         page_number: v.page_number,
         arabic_text: v.text_uthmani,
-        translation_en: stripHtml(v.translations?.[0]?.text ?? ""),
+        translation_en: translation(TRANSLATION_ID),
+        translation_ru: translation(TRANSLATION_ID_RU),
       });
 
       for (const w of v.words ?? []) {
@@ -217,7 +263,10 @@ export async function fetchTafsir(
     // The edition belongs in the cache key: without it the second edition
     // would be served the first one's download.
     `tafsir-${edition}-${surahNumber}`,
-    `${TAFSIR_CDN}/${edition}/${surahNumber}.json`,
+    [
+      `${TAFSIR_CDN}/${edition}/${surahNumber}.json`,
+      `${TAFSIR_RAW}/${edition}/${surahNumber}.json`,
+    ],
   );
 
   const byAyah = new Map<number, string>();

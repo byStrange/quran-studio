@@ -128,6 +128,56 @@ Saheeh International arrives with `<sup foot_note=…>` markers. There is no
 footnote UI in v1, so dangling superscript numbers would be noise; the markers
 are removed at import, not at render.
 
+**Recitation is one continuous file per surah, seeked into — not ayah clips
+played back to back.**
+This was the requirement that decided the source. Stitching per-ayah mp3s is
+the easy implementation and it sounds wrong: a reciter's phrasing carries
+across ayah boundaries, and concatenating clips inserts a seam at every one of
+them. So an ayah is a *window* into the surah recording — seek to its offset,
+stop at the next — and nothing is ever cut or joined. Playing a ruku is one
+seek and one stop; the recitation between the ayahs is the reciter's own.
+
+That needs a source publishing both the gapless recordings and per-ayah
+millisecond offsets into them. Of the open ones, only quran.com's `qdc` API
+(`api.qurancdn.com/api/qdc`) does: EveryAyah publishes per-ayah clips with no
+continuous file, and the quranicaudio mirrors publish the continuous files with
+no timings. `qdc` returns `verse_timings` with `timestamp_from`/`timestamp_to`
+per ayah *and* word-level `segments` as `[position, startMs, endMs]` triples,
+which is what makes the word-by-word row follow along. Verified before building
+anything: the CDN answers range requests and sends CORS headers, so seeking
+into a 32 MB file streams only the part being played rather than downloading
+the surah first.
+
+**Two of the fourteen catalogued reciters are the same recording.**
+Ids 7 and 173 are both "Mishari Rashid al-`Afasy / Murattal / Hafs", identical
+on every displayed field; their audio differs only in encoding
+(`murattal/18.mp3` vs `streaming/mp3/18.mp3`, 1,996s vs 2,041s). Offering both
+would have been a picker with a duplicate in it. The seed deduplicates on slug
+keeping the lower id, which leaves 13 — and deliberately keys on slug rather
+than name, because al-Minshawi's "Murattal" and "Kids repeat" are genuinely
+different recordings and both survive.
+
+**`quran_verses.audio_url` was dropped rather than filled in.**
+The column was reserved by an earlier migration and assumed the shape this
+build rejected — one file per ayah. Keeping it would have left a slot that
+only a per-ayah source could fill. It was null in all 6,236 rows and referenced
+nowhere in the app, so `20260815000001_recitation.sql` drops it and replaces it
+with `recitation_files` (one row per reciter × surah) and `recitation_timings`
+(one row per reciter × ayah, with the word segments as jsonb).
+
+Importing all 13 reciters is 1,596 upstream requests and ~81,000 timing rows;
+`scripts/seed/.cache` makes an interrupted run cheap to resume, which mattered
+— the first full run died partway on a transient upload failure.
+
+**Offline is per-surah, downloaded on demand.**
+A whole recitation of the Quran is several gigabytes, so "download everything"
+is not a feature anyone wants twice. What a reader actually wants offline is
+the surah they are working through, so the download button lives in the
+player bar and takes one surah at a time, into
+`$APPDATA/recitations/<reciter>/<surah>.mp3` via a `.part` file renamed on
+completion. A local copy wins over the CDN whenever one exists, so nothing has
+to be re-chosen when the connection goes.
+
 ---
 
 ## Database
@@ -174,6 +224,25 @@ effect measured in minutes a few times a year.
 **Day boundaries are resolved server-side.** `log_reading` computes the calendar
 day from `profiles.timezone` rather than trusting a date from the client, so a
 wrong system clock cannot manufacture streak days.
+
+**"Tafsir read" is a second table, not a status on `memorized_verses`.**
+Memorizing an ayah and understanding it are different achievements, reached at
+different times and in either order — plenty of people memorize a surah as a
+child and read its commentary decades later. Folding them into one marker with
+a status column hides exactly the gap worth seeing: the ayahs known by heart
+whose meaning has not been read yet. Two independent tables keep both facts
+answerable, and either can be marked without the other existing.
+
+It is deliberately *not* per-edition. Marking against the edition it was read
+in would mean switching editions silently unmarks everything, and "I have read
+the commentary on this ayah" is the thing the reader is tracking, not "I have
+read Ibn Kathir on this ayah".
+
+**`ruku_progress()` aggregates server-side.** The ruku grid needs both counts
+for all 558 rukus at once. Doing that in the client means shipping every marked
+verse id in the Quran just to count them, so it is one `security definer`
+function returning 558 rows with the verse count, the memorized count and the
+tafsir-read count per ruku.
 
 ---
 
@@ -274,12 +343,26 @@ with focus mode's text size, because which rules you need marked is a property
 of how you read, not of which window you are in; the reader and focus mode
 therefore share one switch.
 
-The colours follow the families used in printed tajweed mushafs and on
-quran.com — madd in blues, ghunnah orange, qalqalah red, ikhfa purple, idgham
-green, silent letters grey — so anyone who already reads a coloured mushaf
-does not have to relearn them. In dark mode lightness can no longer encode
-"stronger madd" once every colour has to sit clear of a near-black surface, so
-the madd family separates on chroma instead.
+**The colours are the standard tajweed palette, not a house one.** Light mode
+matches it hex for hex — `#537FFF` madd ṭabīʿī through `#000EBC` madd lāzim,
+`#9400A8` ikhfāʾ, `#D500B7` ikhfāʾ shafawī, `#169200` idghām, `#58B800` idghām
+shafawī, `#26BFFD` iqlāb, `#FF7E1E` ghunnah, `#DD0008` qalqalah, `#AAAAAA`
+silent — the values shipped by every implementation of these seventeen rule
+classes, and by the quran.com edition the spans are imported from. An earlier
+pass approximated the *families* instead ("madd in blues, idghām green") and
+drifted far enough to be wrong: idghām shafawī came out teal rather than green,
+iqlāb a dark blue indistinguishable from the madds rather than sky blue, and
+the mutajānisayn pair blue-grey rather than grey. A reader who has learnt these
+colours from a printed mushaf reads a deviation as the app misidentifying the
+rule, so the palette is pinned to the standard and the hexes are kept in
+comments beside the tokens to stay checkable.
+
+Dark mode cannot use those values directly — madd lāzim at `#000EBC` sits at
+1.5:1 against the surface. So each colour keeps its standard *hue* exactly,
+which is the part a reader recognises, and only lightness and chroma move, by
+the least that clears 4.5:1. Ordering survives: madd still deepens and
+saturates with obligation, iqlāb stays the one bright sky blue (unchanged, as
+it already reads on dark), silent letters stay the greys.
 
 **The legend names the rules properly.** "Blue means long" would be quicker to
 read and would teach nothing; someone learning to recite is learning that this
@@ -291,6 +374,50 @@ nūn sākinah, mīm sākinah — rather than listed flat.
 every word in any ruku the user has logged a session against. Counting only
 tapped words would make the denominator grow as the user interacts, which is
 backwards.
+
+**Following the recitation runs on an animation frame, not `timeupdate`.**
+The element's own `timeupdate` fires about four times a second. That is fine
+for a progress bar and far too coarse to light up individual words, which turn
+over several times a second in a normal murattal. The follow loop reads
+`currentTime` every frame instead and resolves position from the timings
+directly.
+
+Two rules inside that loop are worth stating, because both look like bugs
+until you know the recordings. The current ayah is *the last one to have
+started*, not the one strictly containing the playhead — recordings leave small
+gaps between ayahs, and holding the highlight across them beats blinking it off
+and on. And the current word is found by asking which segment contains the
+playhead rather than by walking forward, because a reciter who repeats a phrase
+produces a second segment for a word already sung, so positions do not only
+increase.
+
+**Repeat-one-ayah pins the ayah it was turned on for.** Re-reading the current
+ayah every frame would make "repeat this ayah" mean "repeat whichever ayah is
+current", which never settles on the one the reader picked. The pin is keyed on
+the mode changing, so turning it on mid-ayah loops that ayah.
+
+**The player lives in `Reader` and is passed into focus mode**, for the same
+reason focus mode is an overlay: playback should not stop because the reader
+changed how it is looking at the ayah.
+
+**Two markers, two buttons, side by side on every ayah.**
+The memorized check and the tafsir cap sit directly under one another on the
+verse card because they are read together — "known by heart" and "understood"
+are the pair that says what is left to do on this ayah. In the tafsir panel the
+mark button is at the *foot* of the commentary rather than beside its heading:
+the honest moment to claim you have read something is when you have reached the
+bottom of it. It marks the entry's whole range in one act, since a commentary
+on 2:1-5 is one passage, and the range is resolved through the surah's own
+ayah→id map so an entry that reaches past the ruku on screen still marks
+correctly.
+
+**A finished ruku stops being a progress bar and becomes a result.** In the
+browse grid and the reader header, a fully memorized ruku switches to the
+accent colour with a marker rather than showing a full bar — the bar answers
+"how much is left", which stops being the question once the answer is none. The
+tafsir marker is a separate corner icon on the same tile, because the two
+finish at different times and the rukus that are memorized but not yet read are
+precisely what the second marker was added to surface.
 
 ---
 
@@ -380,10 +507,19 @@ quran.com, and are vendored under `public/fonts/qcf` via git LFS.
 Two suites run against the real project:
 
 - `pnpm test:streak` — 8 scenarios pinning the grace/restore rules.
-- `pnpm test:smoke` — 21 checks that sign in with the *publishable* key, the
+- `pnpm test:smoke` — 26 checks that sign in with the *publishable* key, the
   same one the app ships with, and exercise every query and RPC the UI depends
   on. It verifies RLS both ways: a user cannot edit Quran content, and cannot
   see another user's rows.
+
+The recitation check is the player's contract written down: ayah timings must
+ascend without overlapping, stay inside the file they index into, and carry
+word segments contained by their own ayah. A timing on the wrong scale or
+against the wrong file is the fault it exists to catch, and that is minutes
+out — so it allows a few seconds of overrun at the end of a surah, because
+upstream reports durations to whole seconds and the final ayah's end includes
+the recitation dying away. Across the seeded set the worst overrun is 3s on 42
+of ~81,000 rows.
 
 Both create and delete throwaway users. `pnpm seed:verify` re-runs the 13
 import integrity checks at any time.
@@ -395,13 +531,58 @@ page. Any validation query that spans a table now pages explicitly.
 
 ---
 
+## Russian mode
+
+**Content language, not interface language.** The setting picks the language of
+the *scripture material* — verse translation, word-by-word glosses, tafsir
+edition, AI explanations, quiz answers — and leaves the interface chrome in
+English. Wanting the Quran in Russian is not the same request as wanting the
+settings screen in Russian, and a single switch doing both would be much harder
+to back out of. `src/lib/language.ts` owns every read that used to go straight
+to `translation_en` or `gloss_en`.
+
+**Sibling columns, not a translations table.** `translation_ru` and `gloss_ru`
+sit next to their English counterparts. A `quran_translations` table is the
+better shape for "arbitrarily many translations", but the app shows exactly one
+at a time; a column kept every existing read path working and cost one
+migration instead of a rewrite of the reader.
+
+**Language joins the AI cache key.** `word_ai_context` and `ruku_ai_summary`
+are global and shared by every user. Keyed on content alone — as they were —
+the first reader to generate a Russian summary would overwrite the English one
+for everybody, and the next English reader would overwrite it back. Both
+primary keys are now `(content, language)`.
+
+**Three sources, because no single one has all of it.**
+
+| Material | Source | Coverage |
+| --- | --- | --- |
+| Verse translation (Kuliev) | quran.com API, resource 45 | 6,236 / 6,236 |
+| Tafsir (Ibn Kathir, as-Sa'di) | spa5k/tafsir_api mirror | 6,236 / 6,236 each |
+| Word-by-word glosses | QUL resource 553 | 76,267 / 77,429 |
+
+The word-by-word corpus is the awkward one. quran.com has no Russian glosses
+and — worse than failing — answers `language=ru` with the English ones, so the
+gap is silent. Tarteel's QUL does have them, but its bulk export needs an
+account, so `scripts/seed/wbw-russian.ts` reads the public proofreading view a
+verse at a time and caches all 6,236 pages on disk.
+
+**The word order is checked, not assumed.** quran.com's word ids are not in
+mushaf order (id 6 is the first word of 112:1), so positional word data has to
+be aligned on `(surah, ayah, position)`. Getting that wrong would shift every
+gloss by one and look like nothing worse than a bad translation. The importer
+therefore compares both the Arabic and the English gloss on every word against
+the row already stored, skips any word that fails, and refuses the whole import
+if more than 1% fail. In practice ~1,100 words have no Russian upstream and a
+handful more sit in ayahs the two corpora segment differently (2:181, 8:6);
+those fall back to English rather than importing shifted.
+
 ## Deliberately not built (v1)
 
-- **Audio.** `quran_verses.audio_url` exists and is always null, so recitation
-  can be added without a migration, as the brief requested.
 - **OAuth providers.** Email/password only; adding providers is Supabase
   configuration, not app code.
-- **i18n.** English only, per the brief.
+- **Interface translation.** The content language covers scripture material;
+  buttons, headings and settings labels stay English. See "Russian mode".
 - **Offline write queue.** Reads are cached aggressively by TanStack Query, but
   writes require connectivity. Unflushed reading time is retained in memory and
   retried rather than silently dropped.

@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import type { VerseContext, Word, WordStatus } from "@/lib/types";
 import { describeAiError, getWordContext, isTauri } from "@/lib/ai";
 import { useSetWordStatus } from "@/hooks/useProgress";
+import { useContentLanguage } from "@/hooks/useProfile";
+import { wordGloss } from "@/lib/language";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/feedback";
 
@@ -22,20 +24,24 @@ const STATUS_STYLES: Record<WordStatus | "none", string> = {
  */
 function WordDetail({ word, verse }: { word: Word; verse: VerseContext }) {
   const queryClient = useQueryClient();
+  const language = useContentLanguage();
   const [regenerating, setRegenerating] = useState(false);
 
+  // The language is part of the query key as well as the request: switching
+  // it must show the other language's explanation, not the cached one for the
+  // language that happened to be active when the word was first opened.
   const context = useQuery({
-    queryKey: ["word-context", word.id],
+    queryKey: ["word-context", word.id, language],
     staleTime: Infinity,
     retry: false,
-    queryFn: () => getWordContext(word, verse),
+    queryFn: () => getWordContext(word, verse, language),
   });
 
   const regenerate = useMutation({
-    mutationFn: () => getWordContext(word, verse, { force: true }),
+    mutationFn: () => getWordContext(word, verse, language, { force: true }),
     onMutate: () => setRegenerating(true),
     onSettled: () => setRegenerating(false),
-    onSuccess: (data) => queryClient.setQueryData(["word-context", word.id], data),
+    onSuccess: (data) => queryClient.setQueryData(["word-context", word.id, language], data),
   });
 
   return (
@@ -51,7 +57,7 @@ function WordDetail({ word, verse }: { word: Word; verse: VerseContext }) {
             </div>
           ) : null}
         </div>
-        <div className="pt-1 text-right text-sm font-medium text-fg">{word.gloss_en}</div>
+        <div className="pt-1 text-right text-sm font-medium text-fg">{wordGloss(word, language)}</div>
       </div>
 
       <div className="border-t border-border pt-3">
@@ -103,13 +109,17 @@ export function WordChip({
   word,
   verse,
   status,
+  reciting,
 }: {
   word: Word;
   verse: VerseContext;
   status: WordStatus | undefined;
+  /** This word is the one currently being recited. */
+  reciting?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const setStatus = useSetWordStatus();
+  const language = useContentLanguage();
   const current = status ?? "none";
 
   return (
@@ -120,6 +130,11 @@ export function WordChip({
             "flex min-w-[4.5rem] flex-col items-center gap-1 rounded-xl border px-3 py-2",
             "transition-colors",
             STATUS_STYLES[current],
+            // Overrides the learning-status colour while the word is being
+            // sung. The status is a long-lived fact the reader can check any
+            // time; this lasts under a second and is the only thing making the
+            // row followable, so it takes the chip for as long as it holds.
+            reciting && "border-accent bg-accent-soft text-accent-soft-fg ring-2 ring-accent/30",
           )}
         >
           <span className="arabic-sm leading-tight text-fg">{word.arabic}</span>
@@ -128,7 +143,7 @@ export function WordChip({
               {word.transliteration}
             </span>
           ) : null}
-          <span className="text-[0.75rem] leading-tight text-fg-muted">{word.gloss_en}</span>
+          <span className="text-[0.75rem] leading-tight text-fg-muted">{wordGloss(word, language)}</span>
         </button>
       </Popover.Trigger>
 
