@@ -77,10 +77,17 @@ cd "$(dirname "$0")/.."
 
 # src-tauri/gen is gitignored, so a fresh clone has no Gradle project to build.
 # `--init` generates one; it is a sibling subcommand, not a build flag.
+#
+# `android init` lays down the stock template icons — the Tauri logo on the
+# green Android background — and there is no hook to override them. `tauri
+# icon` writes the launcher mipmaps straight into the Gradle project once it
+# exists, so it has to run after init, and again after any re-init, or the APK
+# ships the template icon.
 if [ "${1:-}" = "--init" ]; then
   echo "ANDROID_HOME=$ANDROID_HOME"
   echo "NDK_HOME=$NDK_HOME"
-  exec npx tauri android init
+  npx tauri android init
+  exec npx tauri icon src-tauri/icon-source.svg
 fi
 
 if [ "$#" -gt 0 ]; then
