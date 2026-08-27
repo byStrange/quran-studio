@@ -19,8 +19,11 @@ import { useRuku, useRukuVerses, useSurahs, useSurahVerseIds } from "@/hooks/use
 import {
   useMemorizedVerses,
   useTafsirReadVerses,
+  useWordsLearnedVerses,
   useToggleMemorized,
+  useToggleRukuMemorized,
   useToggleTafsirRead,
+  useToggleWordsLearned,
   useWordProgress,
 } from "@/hooks/useProgress";
 import {
@@ -37,6 +40,7 @@ import { useIsDesktop } from "@/hooks/useMediaQuery";
 import type { RepeatMode } from "@/lib/types";
 import { ayahRangeLabel, cn, formatClock } from "@/lib/utils";
 import { AudioBar } from "@/components/reader/AudioBar";
+import { ListenFAB } from "@/components/reader/ListenFAB";
 import { VerseCard } from "@/components/reader/VerseCard";
 import { SplitPane } from "@/components/reader/SplitPane";
 import { FocusMode } from "@/components/reader/FocusMode";
@@ -69,8 +73,11 @@ export function Reader() {
   const verseIds = useMemo(() => (verses ?? []).map((v) => v.id), [verses]);
   const wordIds = useMemo(() => (verses ?? []).flatMap((v) => v.words.map((w) => w.id)), [verses]);
   const { data: memorized } = useMemorizedVerses(verseIds);
+  const { data: wordsLearned } = useWordsLearnedVerses(verseIds);
   const { data: wordStatuses } = useWordProgress(wordIds);
   const toggleMemorized = useToggleMemorized();
+  const toggleRukuMemorized = useToggleRukuMemorized();
+  const toggleWordsLearned = useToggleWordsLearned();
 
   const surahNumber = ruku?.surah_number ?? null;
 
@@ -87,6 +94,8 @@ export function Reader() {
   const [focusIndex, setFocusIndex] = useState(0);
   // Only consulted below md, where the tafsir is a sheet rather than a column.
   const [tafsirOpen, setTafsirOpen] = useState(false);
+  /** Verse the Listen & Follow matcher is tracking, or null when not listening. */
+  const [listenVerseId, setListenVerseId] = useState<number | null>(null);
   const isDesktop = useIsDesktop();
   const { sessionSeconds, idle } = useReadingTimer(valid ? rukuNumber : null);
 
@@ -119,25 +128,39 @@ export function Reader() {
   const recitingVerseId = player.currentVerseId;
 
   /**
-   * Keeps the ayah being recited on screen.
+   * The "active verse" comes from either the recitation player or the Listen
+   * & Follow matcher — whichever is actively providing a signal. Listen mode
+   * takes priority when it is active (the player bar is hidden while listening).
+   */
+  const activeVerseId = listenVerseId ?? recitingVerseId;
+  /** Whether auto-scroll is driven by listen mode (always on) or the player (pref-gated). */
+  const isListenActive = listenVerseId !== null;
+
+  /**
+   * Keeps the ayah being recited — or listened to — on screen.
    *
    * Smooth scrolling rather than a jump: the ayah changes every few seconds
    * and a hard cut each time is disorienting to read against. In focus mode
    * there is nothing to scroll — the ayah on screen is chosen by index — so
    * following means moving the index instead.
+   *
+   * When in listen mode, auto-scroll is always on — the entire point of the
+   * feature is following the user, so gating it on the followRecitation pref
+   * would defeat its purpose. When in playback mode, it respects the pref.
    */
   useEffect(() => {
-    if (!prefs.followRecitation || recitingVerseId === null) return;
-    const index = (verses ?? []).findIndex((verse) => verse.id === recitingVerseId);
+    if (activeVerseId === null) return;
+    if (!isListenActive && !prefs.followRecitation) return;
+    const index = (verses ?? []).findIndex((verse) => verse.id === activeVerseId);
     if (index < 0) return;
     if (focusMode) {
       setFocusIndex(index);
       return;
     }
     document
-      .getElementById(`verse-${recitingVerseId}`)
+      .getElementById(`verse-${activeVerseId}`)
       ?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [recitingVerseId, prefs.followRecitation, focusMode, verses]);
+  }, [activeVerseId, isListenActive, prefs.followRecitation, focusMode, verses]);
 
   // Reset per-ruku view state when navigating between lessons.
   useEffect(() => {
@@ -284,10 +307,16 @@ export function Reader() {
     [verseIds, tafsirRead],
   );
 
+  const wordsLearnedCount = useMemo(
+    () => verseIds.filter((id) => wordsLearned?.has(id)).length,
+    [verseIds, wordsLearned],
+  );
+
   // The whole point of the ruku as a unit: it is the amount someone sits down
   // to memorize, so finishing one is the thing worth marking.
   const rukuMemorized = verseIds.length > 0 && memorizedCount === verseIds.length;
   const rukuTafsirRead = verseIds.length > 0 && tafsirReadCount === verseIds.length;
+  const rukuWordsLearned = verseIds.length > 0 && wordsLearnedCount === verseIds.length;
 
   if (!valid) {
     return (
@@ -395,26 +424,34 @@ export function Reader() {
                 // second marker exists to show: memorized, not yet understood.
                 <Tooltip
                   content={
-                    rukuTafsirRead
-                      ? "Every ayah in this ruku is memorized and its tafsir read."
-                      : `Memorized. Tafsir read on ${tafsirReadCount} of ${verseIds.length} ayahs.`
+                    rukuTafsirRead && rukuWordsLearned
+                      ? "Every ayah in this ruku is memorized, tafsir read, and words learned."
+                      : `Memorized. Tafsir ${tafsirReadCount}/${verseIds.length}. Words ${wordsLearnedCount}/${verseIds.length}.`
                   }
                 >
-                  <div className="flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent-soft px-2.5 py-1.5 text-[0.75rem] font-medium text-accent-soft-fg">
+                  <button
+                    onClick={() => toggleRukuMemorized.mutate({ verseIds, memorized: false })}
+                    className="flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent-soft px-2.5 py-1.5 text-[0.75rem] font-medium text-accent-soft-fg transition-colors hover:bg-accent-soft/80"
+                  >
                     <Sparkles className="size-3.5" aria-hidden />
                     Ruku memorized
-                    {!rukuTafsirRead ? (
+                    {!rukuTafsirRead || !rukuWordsLearned ? (
                       <span className="font-normal tabular-nums opacity-70">
-                        · tafsir {tafsirReadCount}/{verseIds.length}
+                        · tafsir {tafsirReadCount} · words {wordsLearnedCount}
                       </span>
                     ) : null}
-                  </div>
+                  </button>
                 </Tooltip>
               ) : (
                 <div className="flex items-center gap-2.5">
-                  <span className="text-[0.75rem] tabular-nums text-fg-subtle">
-                    {memorizedCount}/{verseIds.length} memorized
-                  </span>
+                  <Tooltip content="Mark all ayahs in this ruku as memorized">
+                    <button
+                      onClick={() => toggleRukuMemorized.mutate({ verseIds, memorized: true })}
+                      className="text-[0.75rem] tabular-nums text-fg-subtle transition-colors hover:text-fg"
+                    >
+                      {memorizedCount}/{verseIds.length} memorized
+                    </button>
+                  </Tooltip>
                   <ProgressBar value={(memorizedCount / verseIds.length) * 100} className="w-20" />
                 </div>
               )
@@ -585,6 +622,13 @@ export function Reader() {
                         read: !(tafsirRead?.has(verse.id) ?? false),
                       })
                     }
+                    wordsLearned={wordsLearned?.has(verse.id) ?? false}
+                    onToggleWordsLearned={() =>
+                      toggleWordsLearned.mutate({
+                        verseIds: [verse.id],
+                        learned: !(wordsLearned?.has(verse.id) ?? false),
+                      })
+                    }
                     selected={selectedAyah === verse.ayah_number}
                     onSelect={() => showTafsirFor(verse.ayah_number)}
                     wordsExpanded={expandedVerses.has(verse.id)}
@@ -592,9 +636,11 @@ export function Reader() {
                     wordStatuses={wordStatuses ?? new Map()}
                     onOpenFocus={() => openFocus(index)}
                     tajweed={prefs.tajweed}
-                    reciting={recitingVerseId === verse.id}
+                    reciting={activeVerseId === verse.id}
                     recitingWordPosition={
-                      prefs.highlightWords ? player.currentWordPosition : null
+                      prefs.highlightWords && !isListenActive
+                        ? player.currentWordPosition
+                        : null
                     }
                     onPlayFromHere={() => player.playVerse(verse.id)}
                     canPlay={player.available}
@@ -637,7 +683,7 @@ export function Reader() {
         />
       )}
 
-      {!rukuLoading && !versesLoading && !isError ? (
+      {!rukuLoading && !versesLoading && !isError && !isListenActive ? (
         <AudioBar
           player={player}
           reciters={reciters}
@@ -651,6 +697,15 @@ export function Reader() {
           }
           download={download}
           compact={!isDesktop}
+        />
+      ) : null}
+
+      {/* Listen & Follow FAB — study mode only, hidden during focus mode. */}
+      {!rukuLoading && !versesLoading && !isError && !focusMode ? (
+        <ListenFAB
+          verses={verses ?? []}
+          onVerseMatch={setListenVerseId}
+          disabled={player.playing}
         />
       ) : null}
 
@@ -670,6 +725,13 @@ export function Reader() {
             toggleTafsirRead.mutate({
               verseIds: [verse.id],
               read: !(tafsirRead?.has(verse.id) ?? false),
+            })
+          }
+          wordsLearned={wordsLearned ?? new Set()}
+          onToggleWordsLearned={(verse) =>
+            toggleWordsLearned.mutate({
+              verseIds: [verse.id],
+              learned: !(wordsLearned?.has(verse.id) ?? false),
             })
           }
           wordStatuses={wordStatuses ?? new Map()}

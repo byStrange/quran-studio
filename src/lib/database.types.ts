@@ -670,6 +670,32 @@ export type Database = {
           },
         ]
       }
+      words_learned_verses: {
+        Row: {
+          learned_at: string
+          user_id: string
+          verse_id: number
+        }
+        Insert: {
+          learned_at?: string
+          user_id: string
+          verse_id: number
+        }
+        Update: {
+          learned_at?: string
+          user_id?: string
+          verse_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "words_learned_verses_verse_id_fkey"
+            columns: ["verse_id"]
+            isOneToOne: false
+            referencedRelation: "quran_verses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_word_progress: {
         Row: {
           correct_count: number

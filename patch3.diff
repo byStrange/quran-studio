@@ -1,0 +1,12 @@
+--- scripts/android-build.sh
++++ scripts/android-build.sh
+@@ -74,6 +74,9 @@
+ 
+ # --- Build -----------------------------------------------------------------
+ 
++export PATH="$(pwd)/scripts:$PATH"
++alias cmake="cmake-wrapper.sh"
++ln -sf $(pwd)/scripts/cmake-wrapper.sh $(pwd)/scripts/cmake
+ cd "$(dirname "$0")/.."
+ 
+ # src-tauri/gen is gitignored, so a fresh clone has no Gradle project to build.

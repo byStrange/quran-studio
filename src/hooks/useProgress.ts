@@ -148,6 +148,39 @@ export function useToggleMemorized() {
   });
 }
 
+export function useToggleRukuMemorized() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ verseIds, memorized }: { verseIds: number[]; memorized: boolean }) => {
+      if (verseIds.length === 0) return;
+      if (memorized) {
+        const { error } = await supabase
+          .from("memorized_verses")
+          .upsert(
+            verseIds.map((verseId) => ({ user_id: user!.id, verse_id: verseId })),
+            { onConflict: "user_id,verse_id" },
+          );
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("memorized_verses")
+          .delete()
+          .eq("user_id", user!.id)
+          .in("verse_id", verseIds);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["memorized"] });
+      queryClient.invalidateQueries({ queryKey: ["memorization-overview"] });
+      queryClient.invalidateQueries({ queryKey: ["memorized-by-surah"] });
+      queryClient.invalidateQueries({ queryKey: ["ruku-progress"] });
+    },
+  });
+}
+
 // --- tafsir read -----------------------------------------------------------
 
 export function useTafsirReadVerses(verseIds?: number[]) {
@@ -212,6 +245,7 @@ export interface RukuProgress {
   verse_count: number;
   memorized_count: number;
   tafsir_read_count: number;
+  words_learned_count: number;
 }
 
 /**
@@ -271,6 +305,54 @@ export function useSetWordStatus() {
       queryClient.invalidateQueries({ queryKey: ["word-progress"] });
       queryClient.invalidateQueries({ queryKey: ["memorization-overview"] });
       queryClient.invalidateQueries({ queryKey: ["vocabulary"] });
+    },
+  });
+}
+
+// --- words learned (verse level) -------------------------------------------
+
+export function useWordsLearnedVerses(verseIds?: number[]) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["words-learned-verses", user?.id, verseIds?.join(",") ?? "all"],
+    enabled: Boolean(user),
+    queryFn: async (): Promise<Set<number>> => {
+      let query = supabase.from("words_learned_verses").select("verse_id");
+      if (verseIds?.length) query = query.in("verse_id", verseIds);
+      const { data, error } = await query;
+      if (error) throw error;
+      return new Set((data ?? []).map((row) => row.verse_id));
+    },
+  });
+}
+
+export function useToggleWordsLearned() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ verseIds, learned }: { verseIds: number[]; learned: boolean }) => {
+      if (verseIds.length === 0) return;
+      if (learned) {
+        const { error } = await supabase
+          .from("words_learned_verses")
+          .upsert(
+            verseIds.map((verseId) => ({ user_id: user!.id, verse_id: verseId })),
+            { onConflict: "user_id,verse_id" },
+          );
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("words_learned_verses")
+          .delete()
+          .eq("user_id", user!.id)
+          .in("verse_id", verseIds);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["words-learned-verses"] });
+      queryClient.invalidateQueries({ queryKey: ["ruku-progress"] });
     },
   });
 }

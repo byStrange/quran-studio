@@ -1,0 +1,12 @@
+--- scripts/android-build.sh
++++ scripts/android-build.sh
+@@ -42,6 +42,9 @@
+ fi
+ [ -d "$NDK_HOME" ] || die "NDK_HOME points at $NDK_HOME, which does not exist"
+ export NDK_HOME
++export ANDROID_NDK_HOME="$NDK_HOME"
++export ANDROID_NDK_ROOT="$NDK_HOME"
++export CMAKE_TOOLCHAIN_FILE="$NDK_HOME/build/cmake/android.toolchain.cmake"
+ 
+ # --- JDK -------------------------------------------------------------------
+ # The Android Gradle plugin wants 17. A newer default JDK on PATH is a common

@@ -41,6 +41,9 @@ if [ -z "${NDK_HOME:-}" ]; then
 fi
 [ -d "$NDK_HOME" ] || die "NDK_HOME points at $NDK_HOME, which does not exist"
 export NDK_HOME
+export ANDROID_NDK_HOME="$NDK_HOME"
+export ANDROID_NDK_ROOT="$NDK_HOME"
+export CMAKE_TOOLCHAIN_FILE="$NDK_HOME/build/cmake/android.toolchain.cmake"
 
 # --- JDK -------------------------------------------------------------------
 # The Android Gradle plugin wants 17. A newer default JDK on PATH is a common
@@ -73,7 +76,18 @@ fi
 
 # --- Build -----------------------------------------------------------------
 
+export PATH="$(cd "$(dirname "$0")" && pwd):$PATH"
+export CMAKE="$(cd "$(dirname "$0")" && pwd)/cmake-wrapper.sh"
+ln -sf "$(cd "$(dirname "$0")" && pwd)/cmake-wrapper.sh" "$(cd "$(dirname "$0")" && pwd)/cmake"
+
 cd "$(dirname "$0")/.."
+
+# Inject RECORD_AUDIO permission if missing
+if [ -f src-tauri/gen/android/app/src/main/AndroidManifest.xml ]; then
+  if ! grep -q "android.permission.RECORD_AUDIO" src-tauri/gen/android/app/src/main/AndroidManifest.xml; then
+    sed -i '/<uses-permission android:name="android.permission.INTERNET"/a \    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />' src-tauri/gen/android/app/src/main/AndroidManifest.xml
+  fi
+fi
 
 # src-tauri/gen is gitignored, so a fresh clone has no Gradle project to build.
 # `--init` generates one; it is a sibling subcommand, not a build flag.

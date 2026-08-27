@@ -371,4 +371,176 @@
     line-height: 1;
     color: var(--fg);
   }
+
+  /* --- Listen & Follow FAB -----------------------------------------------
+
+     A floating action button for the recitation-following feature. Sits in
+     the bottom-right above the audio bar, with visual states that convey
+     what the matcher is doing without reading a label. */
+
+  .listen-fab {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 5.5rem;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--fg-muted);
+    box-shadow: 0 2px 12px hsl(var(--shadow-color) / 0.12);
+    backdrop-filter: blur(8px);
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s,
+                box-shadow 0.2s, transform 0.15s;
+  }
+  .listen-fab:hover {
+    background: var(--surface-2);
+    color: var(--fg);
+    transform: scale(1.06);
+  }
+  .listen-fab:active {
+    transform: scale(0.96);
+  }
+  .listen-fab:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* Searching — amber pulsing ring. */
+  .listen-fab--searching {
+    border-color: var(--warning);
+    color: var(--warning);
+    box-shadow: 0 0 0 0 oklch(0.68 0.13 70 / 0.4);
+    animation: listen-pulse-ring 1.6s ease-out infinite;
+  }
+
+  /* Following — accent colour, gentle breathing. */
+  .listen-fab--following {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent-soft-fg);
+    animation: listen-breathe 2.4s ease-in-out infinite;
+  }
+
+  /* Lost — amber, faster pulse. */
+  .listen-fab--lost {
+    border-color: var(--warning);
+    color: var(--warning);
+    animation: listen-pulse-ring 1s ease-out infinite;
+  }
+
+  /* Error — danger colour, no animation. */
+  .listen-fab--error {
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+
+  @keyframes listen-pulse-ring {
+    0% {
+      box-shadow: 0 0 0 0 oklch(0.68 0.13 70 / 0.35);
+    }
+    70% {
+      box-shadow: 0 0 0 10px oklch(0.68 0.13 70 / 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 oklch(0.68 0.13 70 / 0);
+    }
+  }
+
+  @keyframes listen-breathe {
+    0%, 100% {
+      transform: scale(1);
+      box-shadow: 0 0 0 0 var(--accent-soft);
+    }
+    50% {
+      transform: scale(1.05);
+      box-shadow: 0 0 0 6px oklch(0.53 0.11 165 / 0.15);
+    }
+  }
+
+  /* Transcript badge — small floating pill that shows the last recognised text. */
+  .listen-badge {
+    position: fixed;
+    right: 4.75rem;
+    bottom: 6rem;
+    z-index: 40;
+    max-width: 16rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 9999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 8px hsl(var(--shadow-color) / 0.1);
+    font-family: var(--font-arabic);
+    font-size: 0.875rem;
+    direction: rtl;
+    color: var(--fg-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    animation: listen-badge-in 0.2s ease-out;
+    pointer-events: none;
+  }
+
+  @keyframes listen-badge-in {
+    from {
+      opacity: 0;
+      transform: translateX(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Status label below the FAB. */
+  .listen-status {
+    position: fixed;
+    right: 0.5rem;
+    bottom: 4.25rem;
+    z-index: 40;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.625rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    pointer-events: none;
+    animation: var(--animate-fade-in);
+  }
+  .listen-status--searching {
+    color: var(--warning);
+  }
+  .listen-status--following {
+    color: var(--accent);
+  }
+  .listen-status--lost {
+    color: var(--warning);
+  }
+
+  /* Download progress ring — SVG circle inside the FAB during model download. */
+  .listen-progress-ring {
+    position: absolute;
+    inset: -3px;
+    width: calc(100% + 6px);
+    height: calc(100% + 6px);
+    transform: rotate(-90deg);
+  }
+  .listen-progress-ring__track {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 2.5;
+  }
+  .listen-progress-ring__fill {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.3s ease;
+  }
 }

@@ -1,4 +1,4 @@
-import { BookOpen, Check, ChevronDown, Expand, GraduationCap, Play, Volume2 } from "lucide-react";
+import { BookOpen, Check, ChevronDown, Expand, GraduationCap, Play, Volume2, WholeWord } from "lucide-react";
 import { cn, verseKey } from "@/lib/utils";
 import { verseTranslation } from "@/lib/language";
 import { useContentLanguage } from "@/hooks/useProfile";
@@ -13,6 +13,8 @@ export function VerseCard({
   onToggleMemorized,
   tafsirRead,
   onToggleTafsirRead,
+  wordsLearned,
+  onToggleWordsLearned,
   selected,
   onSelect,
   wordsExpanded,
@@ -31,6 +33,9 @@ export function VerseCard({
   /** Whether the tafsir on this ayah has been read. */
   tafsirRead: boolean;
   onToggleTafsirRead: () => void;
+  /** Whether the words in this ayah have been learned. */
+  wordsLearned: boolean;
+  onToggleWordsLearned: () => void;
   selected: boolean;
   onSelect: () => void;
   wordsExpanded: boolean;
@@ -111,6 +116,25 @@ export function VerseCard({
               )}
             >
               <GraduationCap className="size-3.5" aria-hidden />
+            </button>
+          </Tooltip>
+
+          <Tooltip content={wordsLearned ? "Words learned" : "Mark words as learned"}>
+            <button
+              onClick={onToggleWordsLearned}
+              aria-pressed={wordsLearned}
+              aria-label={`Mark words on ${verseKey(
+                verse.surah_number,
+                verse.ayah_number,
+              )} as learned`}
+              className={cn(
+                "grid size-7 place-items-center rounded-lg border transition-colors",
+                wordsLearned
+                  ? "border-green-500/50 bg-green-500/10 text-green-600 dark:text-green-400"
+                  : "border-border text-fg-subtle hover:border-border-strong hover:text-fg",
+              )}
+            >
+              <WholeWord className="size-3.5" aria-hidden />
             </button>
           </Tooltip>
         </div>

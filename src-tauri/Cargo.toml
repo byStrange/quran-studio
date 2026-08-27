@@ -25,6 +25,7 @@ reqwest = { version = "0.12", default-features = false, features = [
 tokio = { version = "1", features = ["time", "fs", "io-util"] }
 thiserror = "2"
 dotenvy = "0.15"
+whisper-rs = "0.16"
 
 [profile.release]
 codegen-units = 1

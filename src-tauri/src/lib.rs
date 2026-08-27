@@ -1,8 +1,10 @@
 mod audio;
 mod ollama;
+mod whisper;
 
 use audio::DownloadState;
 use ollama::AiState;
+use whisper::WhisperState;
 
 /// On desktop `main` calls this directly. Android has no `main`: the activity
 /// loads this library and calls the entry symbol the macro exports, so without
@@ -19,6 +21,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AiState::default())
         .manage(DownloadState::default())
+        .manage(WhisperState::default())
         // The per-user config file needs Tauri's path resolver, which only
         // exists once there is an app handle — hence a setup step rather than
         // another call alongside `load_project_dotenv`. It still runs before
@@ -37,6 +40,9 @@ pub fn run() {
             audio::recitation_download,
             audio::recitation_cancel_download,
             audio::recitation_remove_download,
+            whisper::whisper_status,
+            whisper::whisper_download_model,
+            whisper::whisper_transcribe,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Quran Studio");

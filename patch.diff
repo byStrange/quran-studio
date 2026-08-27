@@ -1,0 +1,75 @@
+--- src-tauri/src/whisper.rs
++++ src-tauri/src/whisper.rs
+@@ -9,16 +9,10 @@
+     "https://huggingface.co/ram-a-dhan/tarteel-whisper-quran-ggml/resolve/main/tarteel-ai-whisper-base-ar-quran-ggml-q8_0.bin";
+ 
+-#[cfg(not(target_os = "android"))]
+ #[derive(Default)]
+ pub struct WhisperState {
+     context: Mutex<Option<Arc<whisper_rs::WhisperContext>>>,
+     cancel_download: std::sync::Arc<std::sync::atomic::AtomicBool>,
+ }
+ 
+-#[cfg(target_os = "android")]
+-#[derive(Default)]
+-pub struct WhisperState {}
+-
+ #[derive(Debug, thiserror::Error)]
+ pub enum WhisperError {
+@@ -65,7 +59,6 @@
+ }
+ 
+-#[cfg(not(target_os = "android"))]
+ #[tauri::command]
+ pub async fn whisper_status(
+     app: AppHandle,
+@@ -87,7 +80,6 @@
+ }
+ 
+-#[cfg(not(target_os = "android"))]
+ #[tauri::command]
+ pub async fn whisper_download_model(
+     app: AppHandle,
+@@ -180,7 +172,6 @@
+ }
+ 
+-#[cfg(not(target_os = "android"))]
+ #[tauri::command]
+ pub async fn whisper_transcribe(
+     audio_pcm: Vec<f32>,
+@@ -242,34 +233,2 @@
+     Ok(text)
+ }
+-
+-#[cfg(target_os = "android")]
+-#[tauri::command]
+-pub async fn whisper_status(
+-    _app: AppHandle,
+-    _state: State<'_, WhisperState>,
+-) -> Result<WhisperStatusResponse, WhisperError> {
+-    Ok(WhisperStatusResponse {
+-        downloaded: false,
+-        model_size_bytes: None,
+-        ready: false,
+-        supported: false,
+-    })
+-}
+-
+-#[cfg(target_os = "android")]
+-#[tauri::command]
+-pub async fn whisper_download_model(
+-    _app: AppHandle,
+-    _state: State<'_, WhisperState>,
+-) -> Result<(), WhisperError> {
+-    Err(WhisperError::Whisper("Listen & Follow is supported on Desktop".to_string()))
+-}
+-
+-#[cfg(target_os = "android")]
+-#[tauri::command]
+-pub async fn whisper_transcribe(
+-    _audio_pcm: Vec<f32>,
+-    _state: State<'_, WhisperState>,
+-    _app: AppHandle,
+-) -> Result<String, WhisperError> {
+-    Err(WhisperError::Whisper("Listen & Follow is supported on Desktop".to_string()))
+-}

@@ -34,6 +34,7 @@ import {
   SlidersHorizontal,
   Type,
   Volume2,
+  WholeWord,
   X,
 } from "lucide-react";
 import { Dialog } from "radix-ui";
@@ -287,6 +288,8 @@ export function FocusMode({
   onToggleMemorized,
   tafsirRead,
   onToggleTafsirRead,
+  wordsLearned,
+  onToggleWordsLearned,
   wordStatuses,
   sessionSeconds,
   loading,
@@ -308,6 +311,8 @@ export function FocusMode({
   onToggleMemorized: (verse: VerseWithWords) => void;
   tafsirRead: Set<number>;
   onToggleTafsirRead: (verse: VerseWithWords) => void;
+  wordsLearned: Set<number>;
+  onToggleWordsLearned: (verse: VerseWithWords) => void;
   wordStatuses: Map<number, WordStatus>;
   sessionSeconds: number;
   loading: boolean;
@@ -506,6 +511,7 @@ export function FocusMode({
 
   const isMemorized = verse ? memorized.has(verse.id) : false;
   const isTafsirRead = verse ? tafsirRead.has(verse.id) : false;
+  const isWordsLearned = verse ? wordsLearned.has(verse.id) : false;
   const progress = verses.length > 0 ? ((index + 1) / verses.length) * 100 : 0;
 
   return (
@@ -727,6 +733,15 @@ export function FocusMode({
               {isTafsirRead ? "Tafsir read" : "Mark tafsir"}
             </ControlButton>
 
+            <ControlButton
+              onClick={() => verse && onToggleWordsLearned(verse)}
+              active={isWordsLearned}
+              label={isWordsLearned ? "Unmark words as learned" : "Mark words as learned"}
+            >
+              <WholeWord className="size-4" aria-hidden />
+              {isWordsLearned ? "Words learned" : "Mark words"}
+            </ControlButton>
+
             <ControlButton onClick={() => setShowWords((current) => !current)} active={showWords}>
               <ScanText className="size-4" aria-hidden />
               Words
@@ -866,6 +881,14 @@ export function FocusMode({
                   checked={isTafsirRead}
                   onCheckedChange={() => verse && onToggleTafsirRead(verse)}
                   label="Mark tafsir as read"
+                />
+              </SheetRow>
+
+              <SheetRow icon={WholeWord} label="Words learned">
+                <Toggle
+                  checked={isWordsLearned}
+                  onCheckedChange={() => verse && onToggleWordsLearned(verse)}
+                  label="Mark words as learned"
                 />
               </SheetRow>
 

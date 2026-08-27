@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronRight, GraduationCap, Search, Sparkles } from "lucide-react";
+import { ChevronRight, GraduationCap, Search, Sparkles, WholeWord } from "lucide-react";
 import { useRukus, useSurahs } from "@/hooks/useQuranData";
 import { useRukuProgress, type RukuProgress } from "@/hooks/useProgress";
 import { Page } from "@/components/layout/AppShell";
@@ -177,8 +177,10 @@ function RukuTile({
   const total = progress?.verse_count ?? 0;
   const memorized = progress?.memorized_count ?? 0;
   const tafsirRead = progress?.tafsir_read_count ?? 0;
+  const wordsLearned = progress?.words_learned_count ?? 0;
   const complete = total > 0 && memorized === total;
   const tafsirComplete = total > 0 && tafsirRead === total;
+  const wordsComplete = total > 0 && wordsLearned === total;
   const started = memorized > 0 && !complete;
 
   const tile = (
@@ -203,6 +205,9 @@ function RukuTile({
         {complete ? <Sparkles className="size-3.5 shrink-0 text-accent" aria-hidden /> : null}
         {tafsirComplete ? (
           <GraduationCap className="size-3.5 shrink-0 text-gold" aria-hidden />
+        ) : null}
+        {wordsComplete ? (
+          <WholeWord className="size-3.5 shrink-0 text-green-500" aria-hidden />
         ) : null}
       </div>
 
@@ -234,10 +239,10 @@ function RukuTile({
     <Tooltip
       content={
         complete
-          ? tafsirComplete
-            ? "Memorized, and the tafsir read on every ayah."
-            : `Memorized. Tafsir read on ${tafsirRead} of ${total} ayahs.`
-          : `${memorized} of ${total} ayahs memorized · tafsir read on ${tafsirRead}.`
+          ? tafsirComplete && wordsComplete
+            ? "Memorized, tafsir read, and all words learned."
+            : `Memorized. Tafsir read on ${tafsirRead}/${total}. Words learned on ${wordsLearned}/${total}.`
+          : `${memorized}/${total} ayahs memorized. Tafsir read on ${tafsirRead}. Words learned on ${wordsLearned}.`
       }
     >
       {tile}

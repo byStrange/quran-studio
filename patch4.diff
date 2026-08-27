@@ -1,0 +1,10 @@
+--- scripts/android-build.sh
++++ scripts/android-build.sh
+@@ -77,6 +77,7 @@
+ # --- Build -----------------------------------------------------------------
+ 
+ export PATH="$(cd "$(dirname "$0")" && pwd):$PATH"
++export CMAKE="$(cd "$(dirname "$0")" && pwd)/cmake-wrapper.sh"
+ ln -sf "$(cd "$(dirname "$0")" && pwd)/cmake-wrapper.sh" "$(cd "$(dirname "$0")" && pwd)/cmake"
+ 
+ cd "$(dirname "$0")/.."
