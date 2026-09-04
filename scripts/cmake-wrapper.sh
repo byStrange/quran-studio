@@ -26,4 +26,14 @@ if [[ "$IS_BUILD" == "0" ]]; then
     fi
 fi
 
-exec /usr/bin/cmake "${ARGS[@]}"
+REAL_CMAKE="/usr/bin/cmake"
+if [ ! -x "$REAL_CMAKE" ]; then
+    ANDROID_HOME="${ANDROID_HOME:-/opt/android-sdk}"
+    REAL_CMAKE="$(ls -1d "$ANDROID_HOME/cmake/"*"/bin/cmake" 2>/dev/null | sort -V | tail -n 1)"
+fi
+if [ -z "$REAL_CMAKE" ] || [ ! -x "$REAL_CMAKE" ]; then
+    echo "cmake not found in /usr/bin/cmake or Android SDK." >&2
+    exit 127
+fi
+
+exec "$REAL_CMAKE" "${ARGS[@]}"
