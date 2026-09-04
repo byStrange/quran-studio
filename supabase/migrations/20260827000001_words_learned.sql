@@ -13,6 +13,8 @@ alter table public.words_learned_verses enable row level security;
 create policy "own rows" on public.words_learned_verses
   for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+drop function if exists public.ruku_progress();
+
 create or replace function public.ruku_progress()
 returns table (
   ruku_number       smallint,

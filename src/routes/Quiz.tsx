@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, GraduationCap, RotateCcw, X } from "lucide-react";
+import { Check, GraduationCap, X, Settings2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { useContentLanguage } from "@/hooks/useProfile";
@@ -11,8 +11,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, LoadingBlock } from "@/components/ui/feedback";
 import { ProgressBar } from "@/components/ui/primitives";
 import { cn, shuffle, verseKey } from "@/lib/utils";
-
-const QUESTION_COUNT = 10;
+import { Input, Field } from "@/components/ui/field";
 
 interface QuizWord {
   word_id: number;
@@ -20,6 +19,7 @@ interface QuizWord {
   transliteration: string | null;
   /** The answer, in whichever content language the round was drawn for. */
   gloss: string;
+  status: "new" | "learning" | "learned";
   surah_number: number;
   ayah_number: number;
 }
@@ -33,20 +33,29 @@ export function Quiz() {
   const queryClient = useQueryClient();
   const language = useContentLanguage();
 
+  const [started, setStarted] = useState(false);
+  const [limit, setLimit] = useState<number>(10);
+  const [status, setStatus] = useState<"learning" | "learned" | "all">("all");
+  const [surah, setSurah] = useState<number | "">("");
+  const [ruku, setRuku] = useState<number | "">("");
+
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<string | null>(null);
   const [score, setScore] = useState({ correct: 0, answered: 0 });
   const [finished, setFinished] = useState(false);
 
   const quiz = useQuery({
-    queryKey: ["quiz-pool", user?.id, language],
-    enabled: Boolean(user),
+    queryKey: ["quiz-pool", user?.id, language, limit, status, surah, ruku],
+    enabled: Boolean(user) && started,
     staleTime: 0,
     gcTime: 0,
     queryFn: async (): Promise<Question[]> => {
       const { data: pool, error } = await supabase.rpc("quiz_pool", {
-        p_limit: QUESTION_COUNT,
+        p_limit: limit,
         p_language: language,
+        p_status: status === "all" ? undefined : status,
+        p_surah: surah === "" ? undefined : surah,
+        p_ruku: ruku === "" ? undefined : ruku,
       });
       if (error) throw error;
       const words = (pool ?? []) as QuizWord[];
@@ -74,32 +83,11 @@ export function Quiz() {
 
   const record = useMutation({
     mutationFn: async ({ wordId, correct }: { wordId: number; correct: boolean }) => {
-      await supabase.from("quiz_attempts").insert({
-        user_id: user!.id,
-        word_id: wordId,
-        correct,
+      const { error } = await supabase.rpc("record_quiz_attempt", {
+        p_word_id: wordId,
+        p_correct: correct,
       });
-
-      // Keep the per-word counters in step so future rounds can prioritise
-      // words the user keeps missing.
-      const { data: current } = await supabase
-        .from("user_word_progress")
-        .select("review_count, correct_count")
-        .eq("user_id", user!.id)
-        .eq("word_id", wordId)
-        .maybeSingle();
-
-      await supabase.from("user_word_progress").upsert(
-        {
-          user_id: user!.id,
-          word_id: wordId,
-          review_count: (current?.review_count ?? 0) + 1,
-          correct_count: (current?.correct_count ?? 0) + (correct ? 1 : 0),
-          last_reviewed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,word_id" },
-      );
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vocabulary"] });
@@ -130,7 +118,7 @@ export function Quiz() {
   // Keyboard play: 1-4 to answer, Enter to advance.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (finished || !question) return;
+      if (!started || finished || !question) return;
       if (picked === null) {
         const n = Number(event.key);
         if (n >= 1 && n <= question.choices.length) answer(question.choices[n - 1]!);
@@ -141,14 +129,14 @@ export function Quiz() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [answer, next, picked, question, finished]);
+  }, [answer, next, picked, question, finished, started]);
 
   const restart = () => {
     setIndex(0);
     setPicked(null);
     setScore({ correct: 0, answered: 0 });
     setFinished(false);
-    void quiz.refetch();
+    setStarted(false);
   };
 
   const accuracy = useMemo(
@@ -156,10 +144,116 @@ export function Quiz() {
     [score],
   );
 
-  if (quiz.isLoading) {
+  if (!started) {
+    return (
+      <Page title="Quiz Configuration" description="Customize your next vocabulary quiz.">
+        <Card>
+          <CardBody className="pt-6 space-y-6">
+            <Field label="Number of Questions">
+              {({ id }) => (
+                <select
+                  id={id}
+                  value={limit}
+                  onChange={(e) => setLimit(Number(e.target.value))}
+                  className={cn(
+                    "h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-fg",
+                    "focus:border-accent focus:outline-none focus:ring-4 focus:ring-[var(--ring)]"
+                  )}
+                >
+                  <option value={10}>10 Questions</option>
+                  <option value={25}>25 Questions</option>
+                  <option value={50}>50 Questions</option>
+                </select>
+              )}
+            </Field>
+
+            <Field label="Word Status">
+              {({ id }) => (
+                <select
+                  id={id}
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as any)}
+                  className={cn(
+                    "h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-fg",
+                    "focus:border-accent focus:outline-none focus:ring-4 focus:ring-[var(--ring)]"
+                  )}
+                >
+                  <option value="all">All Saved Words</option>
+                  <option value="learning">Learning Only (Needs Practice)</option>
+                  <option value="learned">Learned Only (Review)</option>
+                </select>
+              )}
+            </Field>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Surah (Optional)" hint="Leave empty for all">
+                {({ id }) => (
+                  <Input
+                    id={id}
+                    type="number"
+                    min={1}
+                    max={114}
+                    value={surah}
+                    onChange={(e) => setSurah(e.target.value === "" ? "" : Number(e.target.value))}
+                    placeholder="e.g. 2"
+                  />
+                )}
+              </Field>
+
+              <Field label="Ruku (Optional)" hint="Leave empty for all">
+                {({ id }) => (
+                  <Input
+                    id={id}
+                    type="number"
+                    min={1}
+                    max={600}
+                    value={ruku}
+                    onChange={(e) => setRuku(e.target.value === "" ? "" : Number(e.target.value))}
+                    placeholder="e.g. 15"
+                  />
+                )}
+              </Field>
+            </div>
+
+            <Button
+              variant="primary"
+              className="w-full"
+              onClick={() => {
+                setStarted(true);
+                void quiz.refetch();
+              }}
+            >
+              Start Quiz
+            </Button>
+          </CardBody>
+        </Card>
+      </Page>
+    );
+  }
+
+  if (quiz.isLoading || quiz.isFetching) {
     return (
       <Page title="Quiz">
         <LoadingBlock label="Building your quiz…" />
+      </Page>
+    );
+  }
+
+  if (quiz.isError) {
+    return (
+      <Page title="Quiz">
+        <Card>
+          <EmptyState
+            icon={<X className="size-5" />}
+            title="Error loading quiz"
+            description={String(quiz.error)}
+            action={
+              <Button variant="primary" onClick={() => setStarted(false)}>
+                Back
+              </Button>
+            }
+          />
+        </Card>
       </Page>
     );
   }
@@ -170,12 +264,18 @@ export function Quiz() {
         <Card>
           <EmptyState
             icon={<GraduationCap className="size-5" />}
-            title="No words to quiz yet"
-            description="Mark some words as learning or learned while reading, and they'll show up here."
+            title="No words matched your criteria"
+            description="Try adjusting your filters or go read to save more words."
             action={
-              <Button asChild variant="primary">
-                <Link to="/browse">Go read a ruku</Link>
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="primary" onClick={() => setStarted(false)}>
+                  <Settings2 className="size-4" aria-hidden />
+                  Adjust Filters
+                </Button>
+                <Button asChild variant="outline">
+                  <Link to="/browse">Go read</Link>
+                </Button>
+              </div>
             }
           />
         </Card>
@@ -201,8 +301,8 @@ export function Quiz() {
             </p>
             <div className="mt-6 flex justify-center gap-2">
               <Button variant="primary" onClick={restart}>
-                <RotateCcw className="size-4" aria-hidden />
-                Another round
+                <Settings2 className="size-4" aria-hidden />
+                New Quiz
               </Button>
               <Button asChild variant="outline">
                 <Link to="/vocabulary">Back to vocabulary</Link>
@@ -216,11 +316,17 @@ export function Quiz() {
 
   return (
     <Page title="Quiz" description="What does this word mean?">
-      <div className="mb-5 flex items-center gap-4">
-        <ProgressBar value={((index + (picked ? 1 : 0)) / questions.length) * 100} />
-        <span className="shrink-0 text-[0.8125rem] tabular-nums text-fg-subtle">
-          {index + 1} / {questions.length}
-        </span>
+      <div className="mb-5 flex items-center justify-between gap-4">
+        <div className="flex flex-1 items-center gap-4">
+          <ProgressBar value={((index + (picked ? 1 : 0)) / questions.length) * 100} />
+          <span className="shrink-0 text-[0.8125rem] tabular-nums text-fg-subtle">
+            {index + 1} / {questions.length}
+          </span>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => setStarted(false)}>
+          <Settings2 className="size-4 mr-1.5" />
+          Settings
+        </Button>
       </div>
 
       <Card>
