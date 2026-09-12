@@ -6,6 +6,13 @@ Uzbek,
 a word-by-word breakdown with AI-generated context for each word, memorization
 tracking, vocabulary quizzing, and reading streaks.
 
+Words are learned by saying whether you know them: a miss opens the ayah the
+word came from, with its translation and the word picked out inside it. A round
+covers one ruku, one surah's memorized ayahs, or everything memorized — and
+every ruku has a quiz button beside it. The app opens with the next tafsir you
+haven't read for an ayah you have memorized, and a whole surah can be read end
+to end in one continuous scroll.
+
 Recitation plays from the reciter's own continuous surah recording — the reader
 follows the ayah, and the word, as it is sung — with 13 reciters, per-surah
 offline downloads, and separate markers for what you have memorized and what
@@ -123,7 +130,7 @@ pnpm dev         # browser preview — no AI, since that needs the Rust backend
 | `pnpm seed:verify` | Re-run the 14 data integrity checks |
 | `pnpm test` | Run both test suites |
 | `pnpm test:streak` | Verify the streak/grace rules (8 scenarios) |
-| `pnpm test:smoke` | Verify every query, RPC, and RLS policy (26 checks) |
+| `pnpm test:smoke` | Verify every query, RPC, and RLS policy (29 checks) |
 | `pnpm test:mushaf` | Re-derive and verify the mushaf layout for all 604 pages |
 | `pnpm test:mushaf-fonts` | Check every stored glyph resolves in its page font |
 | `pnpm typecheck` | `tsc --noEmit` |
@@ -142,8 +149,8 @@ src/
   lib/              Supabase client, generated DB types, AI bridge
   hooks/            Data access, reading timer, progress mutations
   components/       UI kit (Radix + Tailwind), reader components
-  routes/           Dashboard, Browse, Reader, Vocabulary, Quiz,
-                    Memorization, Settings, About
+  routes/           Dashboard, Browse, Reader, SurahReader, Vocabulary,
+                    Quiz, Memorization, Settings, About
 
 scripts/seed/       One-time content import + validation
 scripts/test/       Streak rules and data-layer smoke tests

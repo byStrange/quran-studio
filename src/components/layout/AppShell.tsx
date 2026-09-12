@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStreakStatus } from "@/hooks/useProgress";
+import { TafsirNudge } from "./TafsirNudge";
 import { Tooltip } from "@/components/ui/primitives";
 
 interface NavItem {
@@ -187,6 +188,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
       </div>
+
+      {/* Mounted once at the shell, so it raises on the app's first render and
+          never again until the app is reopened. */}
+      <TafsirNudge />
     </div>
   );
 }

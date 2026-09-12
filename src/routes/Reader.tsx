@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   BookMarked,
   BookOpen,
@@ -9,10 +9,12 @@ import {
   Columns2,
   Coffee,
   Expand,
+  GraduationCap,
   LayoutList,
   ListTree,
   MoreHorizontal,
   Palette,
+  Rows3,
   Sparkles,
 } from "lucide-react";
 import { useRuku, useRukuVerses, useSurahs, useSurahVerseIds } from "@/hooks/useQuranData";
@@ -21,7 +23,6 @@ import {
   useTafsirReadVerses,
   useWordsLearnedVerses,
   useToggleMemorized,
-  useToggleRukuMemorized,
   useToggleTafsirRead,
   useToggleWordsLearned,
   useWordProgress,
@@ -73,21 +74,33 @@ export function Reader() {
   const verseIds = useMemo(() => (verses ?? []).map((v) => v.id), [verses]);
   const wordIds = useMemo(() => (verses ?? []).flatMap((v) => v.words.map((w) => w.id)), [verses]);
   const { data: memorized } = useMemorizedVerses(verseIds);
+  /**
+   * The ayahs still being memorized. Repeat mode "unmemorized" loops these and
+   * skips the rest, which is what a half-finished ruku needs drilled.
+   */
+  const unmemorizedVerseIds = useMemo(
+    () => verseIds.filter((id) => !memorized?.has(id)),
+    [verseIds, memorized],
+  );
   const { data: wordsLearned } = useWordsLearnedVerses(verseIds);
   const { data: wordStatuses } = useWordProgress(wordIds);
   const toggleMemorized = useToggleMemorized();
-  const toggleRukuMemorized = useToggleRukuMemorized();
   const toggleWordsLearned = useToggleWordsLearned();
 
   const surahNumber = ruku?.surah_number ?? null;
 
-  // Unfiltered on purpose. Every marked ayah in the Quran is a few thousand
-  // integers at most, and the tafsir panel needs ids the ruku does not hold —
-  // scoping the query to the ruku would just mean a second one beside it.
-  const { data: tafsirRead } = useTafsirReadVerses();
   const { data: surahVerseIds } = useSurahVerseIds(surahNumber);
+  /**
+   * The tafsir marker covers the whole surah, not just the ruku: a commentary
+   * often runs past the ruku's last ayah, so the panel needs ids the ruku does
+   * not hold. Scoping it here rather than to every marked ayah in the Quran
+   * keeps the request at most 286 ids and clear of the REST layer's row cap.
+   */
+  const surahVerseIdList = useMemo(() => [...(surahVerseIds?.values() ?? [])], [surahVerseIds]);
+  const { data: tafsirRead } = useTafsirReadVerses(surahVerseIdList);
   const toggleTafsirRead = useToggleTafsirRead();
 
+  const [searchParams] = useSearchParams();
   const [selectedAyah, setSelectedAyah] = useState<number | null>(null);
   const [expandedVerses, setExpandedVerses] = useState<Set<number>>(new Set());
   const [focusMode, setFocusMode] = useState(false);
@@ -123,6 +136,7 @@ export function Reader() {
     timings,
     rate: prefs.playbackRate,
     repeatMode: prefs.repeatMode,
+    repeatUnmemorizedVerseIds: unmemorizedVerseIds,
   });
 
   const recitingVerseId = player.currentVerseId;
@@ -168,6 +182,40 @@ export function Reader() {
     setExpandedVerses(prefs.wordsExpanded ? new Set(verseIds) : new Set());
     document.querySelector("[data-verse-scroll]")?.scrollTo({ top: 0 });
   }, [rukuNumber, prefs.wordsExpanded, verseIds]);
+
+  /**
+   * `?ayah=255` opens the reader pointed at that ayah.
+   *
+   * This is how the tafsir nudge hands over: it knows the ayah whose commentary
+   * it offered, and the reader should already be looking at it when it opens
+   * rather than at the top of the ruku.
+   *
+   * Runs after the reset above, so a ruku change and an ayah deep link in the
+   * same navigation resolve to the deep link.
+   */
+  const requestedAyah = useMemo(() => {
+    const raw = Number(searchParams.get("ayah"));
+    return Number.isFinite(raw) && raw > 0 ? raw : null;
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (requestedAyah !== null) setSelectedAyah(requestedAyah);
+  }, [requestedAyah, rukuNumber]);
+
+  // Only the first landing scrolls; after that the reader's own scrolling owns
+  // the viewport, and yanking it back would fight the ayah being read.
+  const ayahJumpDone = useRef<number | null>(null);
+  useEffect(() => {
+    if (requestedAyah === null || !verses?.length || ayahJumpDone.current === requestedAyah) {
+      return;
+    }
+    const verse = verses.find((v) => v.ayah_number === requestedAyah);
+    if (!verse) return;
+    ayahJumpDone.current = requestedAyah;
+    requestAnimationFrame(() =>
+      document.getElementById(`verse-${verse.id}`)?.scrollIntoView({ block: "center" }),
+    );
+  }, [requestedAyah, verses]);
 
   // Focus mode can walk off either end of a ruku into the next one. Which end
   // of the new ruku it lands on depends on the direction it left in — and the
@@ -338,6 +386,18 @@ export function Reader() {
   // is width).
   const mobileActions: MenuAction[] = [
     {
+      label: "Quiz this ruku's words",
+      icon: <GraduationCap className="size-4" aria-hidden />,
+      disabled: !verses?.length,
+      onSelect: () => navigate(`/quiz?scope=ruku&ruku=${rukuNumber}&start=1`),
+    },
+    {
+      label: "Read the whole surah",
+      icon: <Rows3 className="size-4" aria-hidden />,
+      disabled: surahNumber === null,
+      onSelect: () => navigate(`/read/surah/${surahNumber}`),
+    },
+    {
       label: "Mushaf page view",
       icon: <BookMarked className="size-4" aria-hidden />,
       disabled: !verses?.length,
@@ -418,10 +478,12 @@ export function Reader() {
               tafsir toggle and an overflow menu. */}
           <div className="hidden items-center gap-3 md:flex">
             {verseIds.length > 0 ? (
+              // Read-only, and deliberately so. The ruku is memorized when its
+              // ayahs are — every one of them marked, one at a time, as they
+              // actually were. A button that could stamp the whole ruku says
+              // nothing about which ayahs the reader really knows, which is
+              // exactly the thing worth knowing.
               rukuMemorized ? (
-                // A finished ruku stops being a progress bar and becomes a
-                // result. The tafsir line is kept because it is the gap the
-                // second marker exists to show: memorized, not yet understood.
                 <Tooltip
                   content={
                     rukuTafsirRead && rukuWordsLearned
@@ -429,10 +491,7 @@ export function Reader() {
                       : `Memorized. Tafsir ${tafsirReadCount}/${verseIds.length}. Words ${wordsLearnedCount}/${verseIds.length}.`
                   }
                 >
-                  <button
-                    onClick={() => toggleRukuMemorized.mutate({ verseIds, memorized: false })}
-                    className="flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent-soft px-2.5 py-1.5 text-[0.75rem] font-medium text-accent-soft-fg transition-colors hover:bg-accent-soft/80"
-                  >
+                  <div className="flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent-soft px-2.5 py-1.5 text-[0.75rem] font-medium text-accent-soft-fg">
                     <Sparkles className="size-3.5" aria-hidden />
                     Ruku memorized
                     {!rukuTafsirRead || !rukuWordsLearned ? (
@@ -440,17 +499,14 @@ export function Reader() {
                         · tafsir {tafsirReadCount} · words {wordsLearnedCount}
                       </span>
                     ) : null}
-                  </button>
+                  </div>
                 </Tooltip>
               ) : (
                 <div className="flex items-center gap-2.5">
-                  <Tooltip content="Mark all ayahs in this ruku as memorized">
-                    <button
-                      onClick={() => toggleRukuMemorized.mutate({ verseIds, memorized: true })}
-                      className="text-[0.75rem] tabular-nums text-fg-subtle transition-colors hover:text-fg"
-                    >
+                  <Tooltip content="Mark ayahs as memorized one by one as you learn them">
+                    <span className="text-[0.75rem] tabular-nums text-fg-subtle">
                       {memorizedCount}/{verseIds.length} memorized
-                    </button>
+                    </span>
                   </Tooltip>
                   <ProgressBar value={(memorizedCount / verseIds.length) * 100} className="w-20" />
                 </div>
@@ -479,6 +535,30 @@ export function Reader() {
                 )}
                 {formatClock(sessionSeconds)}
               </div>
+            </Tooltip>
+
+            <Tooltip content="Quiz this ruku's words">
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Quiz this ruku's words"
+                disabled={!verses?.length}
+                onClick={() => navigate(`/quiz?scope=ruku&ruku=${rukuNumber}&start=1`)}
+              >
+                <GraduationCap className="size-4" aria-hidden />
+              </Button>
+            </Tooltip>
+
+            <Tooltip content="Read the whole surah, top to bottom">
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Read the whole surah"
+                disabled={surahNumber === null}
+                onClick={() => navigate(`/read/surah/${surahNumber}`)}
+              >
+                <Rows3 className="size-4" aria-hidden />
+              </Button>
             </Tooltip>
 
             <Tooltip content="Read this as a mushaf page — the printed Madani layout">
@@ -656,9 +736,14 @@ export function Reader() {
                     <ChevronLeft className="size-4" aria-hidden />
                     Previous ruku
                   </Button>
-                  <Button asChild variant="ghost">
-                    <Link to="/browse">All rukus</Link>
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button asChild variant="ghost">
+                      <Link to="/browse">All rukus</Link>
+                    </Button>
+                    <Button asChild variant="ghost" disabled={surahNumber === null}>
+                      <Link to={`/read/surah/${surahNumber}`}>Whole surah</Link>
+                    </Button>
+                  </div>
                   <Button
                     variant="primary"
                     disabled={rukuNumber >= TOTAL_RUKUS}
@@ -696,6 +781,7 @@ export function Reader() {
             updateProfile.mutate({ ui_prefs: { repeatMode: mode } })
           }
           download={download}
+          unmemorizedCount={unmemorizedVerseIds.length}
           compact={!isDesktop}
         />
       ) : null}

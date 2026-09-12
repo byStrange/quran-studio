@@ -3,6 +3,7 @@ import {
   AudioLines,
   Download,
   Gauge,
+  GraduationCap,
   Loader2,
   Pause,
   Play,
@@ -21,17 +22,19 @@ import { MenuButton, SelectField, Tooltip, type MenuAction } from "@/components/
 
 const RATES = [0.75, 0.9, 1, 1.25, 1.5];
 
-/** Cycles off → repeat the passage → repeat one ayah → off. */
+/** Cycles off → repeat the passage → repeat one ayah → only unmemorized → off. */
 const NEXT_REPEAT: Record<RepeatMode, RepeatMode> = {
   off: "range",
   range: "ayah",
-  ayah: "off",
+  ayah: "unmemorized",
+  unmemorized: "off",
 };
 
 const REPEAT_LABEL: Record<RepeatMode, string> = {
   off: "Repeat off",
   range: "Repeating this ruku",
   ayah: "Repeating this ayah",
+  unmemorized: "Repeating unmemorized ayahs",
 };
 
 export function AudioBar({
@@ -44,6 +47,7 @@ export function AudioBar({
   repeatMode,
   onRepeatModeChange,
   download,
+  unmemorizedCount = 0,
   compact,
 }: {
   player: RecitationPlayer;
@@ -55,6 +59,8 @@ export function AudioBar({
   repeatMode: RepeatMode;
   onRepeatModeChange: (mode: RepeatMode) => void;
   download: SurahDownload | null;
+  /** How many ayahs the "unmemorized only" mode has to loop. */
+  unmemorizedCount?: number;
   /** Below md, where the bar keeps only the controls that earn their width. */
   compact?: boolean;
 }) {
@@ -69,11 +75,26 @@ export function AudioBar({
     [reciters],
   );
 
-  const RepeatIcon = repeatMode === "ayah" ? Repeat1 : Repeat;
+  const RepeatIcon =
+    repeatMode === "ayah" ? Repeat1 : repeatMode === "unmemorized" ? GraduationCap : Repeat;
+
+  /**
+   * A mode with nothing to loop is the one case where the control has to say
+   * so: "repeat unmemorized ayahs" on a fully memorized ruku would otherwise
+   * look identical to the passage repeat.
+   */
+  const repeatLabel =
+    repeatMode === "unmemorized" && unmemorizedCount === 0
+      ? "Unmemorized repeat — every ayah is memorized, so this repeats the passage"
+      : repeatMode === "unmemorized"
+        ? `Repeating ${unmemorizedCount} unmemorized ${
+            unmemorizedCount === 1 ? "ayah" : "ayahs"
+          } — click to change`
+        : `${REPEAT_LABEL[repeatMode]} — click to change`;
 
   const overflow: MenuAction[] = [
     {
-      label: REPEAT_LABEL[repeatMode],
+      label: repeatLabel,
       icon: <RepeatIcon className="size-4" aria-hidden />,
       active: repeatMode !== "off",
       onSelect: () => onRepeatModeChange(NEXT_REPEAT[repeatMode]),
@@ -152,11 +173,11 @@ export function AudioBar({
           </MenuButton>
         ) : (
           <>
-            <Tooltip content={`${REPEAT_LABEL[repeatMode]} — click to change`}>
+            <Tooltip content={repeatLabel}>
               <Button
                 size="icon"
                 variant={repeatMode === "off" ? "ghost" : "outline"}
-                aria-label={REPEAT_LABEL[repeatMode]}
+                aria-label={repeatLabel}
                 onClick={() => onRepeatModeChange(NEXT_REPEAT[repeatMode])}
               >
                 <RepeatIcon className="size-4" aria-hidden />

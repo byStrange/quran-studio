@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { useProfile } from "@/hooks/useProfile";
+import type { Database } from "@/lib/database.types";
 import { daysBetween, todayInTimezone } from "@/lib/utils";
 import type {
   MemorizationOverview,
@@ -103,14 +104,22 @@ export function useMemorizationOverview() {
 
 // --- memorized verses ------------------------------------------------------
 
+/**
+ * The marked ayahs, optionally narrowed to a set of ids.
+ *
+ * `undefined` means the whole table; an empty array means nothing, which is
+ * what a caller waiting on its scope should pass — treating "no ids yet" as
+ * "everything" would flash every ayah as memorized and then take it back.
+ */
 export function useMemorizedVerses(verseIds?: number[]) {
   const { user } = useAuth();
   return useQuery({
     queryKey: ["memorized", user?.id, verseIds?.join(",") ?? "all"],
     enabled: Boolean(user),
     queryFn: async (): Promise<Set<number>> => {
+      if (verseIds?.length === 0) return new Set();
       let query = supabase.from("memorized_verses").select("verse_id");
-      if (verseIds?.length) query = query.in("verse_id", verseIds);
+      if (verseIds) query = query.in("verse_id", verseIds);
       const { data, error } = await query;
       if (error) throw error;
       return new Set((data ?? []).map((row) => row.verse_id));
@@ -148,39 +157,6 @@ export function useToggleMemorized() {
   });
 }
 
-export function useToggleRukuMemorized() {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ verseIds, memorized }: { verseIds: number[]; memorized: boolean }) => {
-      if (verseIds.length === 0) return;
-      if (memorized) {
-        const { error } = await supabase
-          .from("memorized_verses")
-          .upsert(
-            verseIds.map((verseId) => ({ user_id: user!.id, verse_id: verseId })),
-            { onConflict: "user_id,verse_id" },
-          );
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("memorized_verses")
-          .delete()
-          .eq("user_id", user!.id)
-          .in("verse_id", verseIds);
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["memorized"] });
-      queryClient.invalidateQueries({ queryKey: ["memorization-overview"] });
-      queryClient.invalidateQueries({ queryKey: ["memorized-by-surah"] });
-      queryClient.invalidateQueries({ queryKey: ["ruku-progress"] });
-    },
-  });
-}
-
 // --- tafsir read -----------------------------------------------------------
 
 export function useTafsirReadVerses(verseIds?: number[]) {
@@ -189,8 +165,9 @@ export function useTafsirReadVerses(verseIds?: number[]) {
     queryKey: ["tafsir-read", user?.id, verseIds?.join(",") ?? "all"],
     enabled: Boolean(user),
     queryFn: async (): Promise<Set<number>> => {
+      if (verseIds?.length === 0) return new Set();
       let query = supabase.from("tafsir_read_verses").select("verse_id");
-      if (verseIds?.length) query = query.in("verse_id", verseIds);
+      if (verseIds) query = query.in("verse_id", verseIds);
       const { data, error } = await query;
       if (error) throw error;
       return new Set((data ?? []).map((row) => row.verse_id));
@@ -229,6 +206,86 @@ export function useToggleTafsirRead() {
           .in("verse_id", verseIds);
         if (error) throw error;
       }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tafsir-read"] });
+      queryClient.invalidateQueries({ queryKey: ["ruku-progress"] });
+    },
+  });
+}
+
+/** Word totals for every ruku, keyed by ruku number — for the quiz buttons. */
+export function useRukuWordStats() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["ruku-word-stats", user?.id],
+    enabled: Boolean(user),
+    queryFn: async (): Promise<Map<number, RukuWordStats>> => {
+      const { data, error } = await supabase.rpc("word_progress_by_ruku");
+      if (error) throw error;
+      return new Map((data ?? []).map((row) => [row.ruku_number, row as RukuWordStats]));
+    },
+  });
+}
+
+/** The counts behind one ruku's "words" line. */
+export interface RukuWordStats {
+  ruku_number: number;
+  word_count: number;
+  learned_count: number;
+  learning_count: number;
+  untouched_count: number;
+}
+
+// --- tafsir nudge ----------------------------------------------------------
+
+/** One memorized ayah whose tafsir has not been read, with the entry text. */
+export type PendingTafsir = Database["public"]["Functions"]["next_unread_tafsir"]["Returns"][number];
+
+/**
+ * The next tafsir to offer on app open, or null when there is nothing left.
+ *
+ * Read once per launch rather than watched: the nudge is a single prompt, and
+ * re-running it after the user dismisses the dialog would bring it straight
+ * back — the row would still be unread until they act on it.
+ */
+export function usePendingTafsir(edition: string) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["pending-tafsir", user?.id, edition],
+    enabled: Boolean(user) && Boolean(edition),
+    staleTime: Infinity,
+    gcTime: 0,
+    retry: false,
+    queryFn: async (): Promise<PendingTafsir | null> => {
+      const { data, error } = await supabase.rpc("next_unread_tafsir", { p_edition: edition });
+      if (error) throw error;
+      return (data ?? [])[0] ?? null;
+    },
+  });
+}
+
+/**
+ * Marks a whole tafsir entry read — the range of ayahs one passage covers.
+ *
+ * The nudge works in entries rather than ayahs, so it needs to mark 2:1-5 in
+ * one write; without this it would either mark one ayah and be offered the
+ * same passage again, or loop five requests.
+ */
+export function useMarkTafsirEntryRead() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ verseIds }: { verseIds: number[] }) => {
+      if (verseIds.length === 0) return;
+      const { error } = await supabase
+        .from("tafsir_read_verses")
+        .upsert(
+          verseIds.map((verseId) => ({ user_id: user!.id, verse_id: verseId })),
+          { onConflict: "user_id,verse_id" },
+        );
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tafsir-read"] });
@@ -284,6 +341,38 @@ export function useWordProgress(wordIds?: number[]) {
   });
 }
 
+/**
+ * Every word the user has progress on, one page of rows at a time.
+ *
+ * The continuous reader shows word statuses across a surah and cannot name the
+ * words up front without a request per ayah. A plain unfiltered select would do
+ * it in one call — until the reader has marked a thousand words, at which
+ * point the REST layer's row cap truncates the result silently and words start
+ * reading as unmarked. Walking the table in pages has no such cliff.
+ */
+export function useAllWordProgress() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["word-progress", user?.id, "all"],
+    enabled: Boolean(user),
+    queryFn: async (): Promise<Map<number, WordStatus>> => {
+      const PAGE = 1000;
+      const map = new Map<number, WordStatus>();
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from("user_word_progress")
+          .select("word_id, status")
+          .order("word_id")
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        for (const row of data ?? []) map.set(row.word_id, row.status);
+        if ((data ?? []).length < PAGE) break;
+      }
+      return map;
+    },
+  });
+}
+
 export function useSetWordStatus() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -317,8 +406,9 @@ export function useWordsLearnedVerses(verseIds?: number[]) {
     queryKey: ["words-learned-verses", user?.id, verseIds?.join(",") ?? "all"],
     enabled: Boolean(user),
     queryFn: async (): Promise<Set<number>> => {
+      if (verseIds?.length === 0) return new Set();
       let query = supabase.from("words_learned_verses").select("verse_id");
-      if (verseIds?.length) query = query.in("verse_id", verseIds);
+      if (verseIds) query = query.in("verse_id", verseIds);
       const { data, error } = await query;
       if (error) throw error;
       return new Set((data ?? []).map((row) => row.verse_id));

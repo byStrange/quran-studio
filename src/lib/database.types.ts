@@ -798,10 +798,22 @@ export type Database = {
           surah_number: number
         }[]
       }
-      quiz_distractors: {
-        Args: { p_exclude: string[]; p_language?: string; p_limit?: number }
+      next_unread_tafsir: {
+        Args: { p_edition?: string }
         Returns: {
-          gloss: string
+          arabic_text: string
+          ayah_end: number
+          ayah_number: number
+          ayah_start: number
+          content: string
+          edition: string
+          ruku_number: number
+          surah_name: string
+          surah_number: number
+          translation_en: string
+          translation_ru: string
+          verse_id: number
+          verse_ids: number[]
         }[]
       }
       quiz_pool: {
@@ -809,16 +821,23 @@ export type Database = {
           p_language?: string
           p_limit?: number
           p_ruku?: number
-          p_status?: Database["public"]["Enums"]["word_status"]
+          p_scope?: Database["public"]["Enums"]["quiz_scope"]
           p_surah?: number
         }
         Returns: {
           arabic: string
           ayah_number: number
           gloss: string
+          pool_size: number
+          ruku_number: number
           status: Database["public"]["Enums"]["word_status"]
           surah_number: number
+          tracked: boolean
+          translation_en: string
+          translation_ru: string
           transliteration: string
+          verse_arabic: string
+          verse_id: number
           word_id: number
         }[]
       }
@@ -841,8 +860,19 @@ export type Database = {
       }
       set_word_glosses_ru: { Args: { p_rows: Json }; Returns: number }
       vocabulary_overview: { Args: never; Returns: Json }
+      word_progress_by_ruku: {
+        Args: never
+        Returns: {
+          learned_count: number
+          learning_count: number
+          ruku_number: number
+          untouched_count: number
+          word_count: number
+        }[]
+      }
     }
     Enums: {
+      quiz_scope: "ruku" | "surah" | "global"
       word_status: "new" | "learning" | "learned"
     }
     CompositeTypes: {

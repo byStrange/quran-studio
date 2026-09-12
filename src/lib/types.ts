@@ -40,8 +40,17 @@ export interface RecitationTiming {
   segments: WordSegment[];
 }
 
-/** What repeats when the player reaches the end of what it is playing. */
-export type RepeatMode = "off" | "ayah" | "range";
+/**
+ * What repeats when the player reaches the end of what it is playing.
+ *
+ * `unmemorized` walks only the ayahs of the passage that are not marked
+ * memorized, skipping the ones already known — the mode for drilling a ruku
+ * where a few ayahs are still shaky.
+ */
+export type RepeatMode = "off" | "ayah" | "range" | "unmemorized";
+
+/** How much of the memorized Quran one quiz round draws from. */
+export type QuizScope = Database["public"]["Enums"]["quiz_scope"];
 
 /**
  * The verse fields the word explainer needs to describe a word in place.

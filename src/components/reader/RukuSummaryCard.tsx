@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, Sparkles, WandSparkles } from "lucide-react";
+import { Link } from "react-router-dom";
+import { GraduationCap, RefreshCw, Sparkles, WandSparkles } from "lucide-react";
 import { describeAiError, fetchCachedRukuSummary, getRukuSummary, isTauri } from "@/lib/ai";
 import type { VerseWithWords } from "@/lib/types";
 import { useContentLanguage } from "@/hooks/useProfile";
@@ -113,6 +114,20 @@ export function RukuSummaryCard({
             ) : null}
           </div>
         )}
+      </div>
+
+      {/* Finishing the ruku is where the words are worth learning, so the quiz
+          is offered here rather than only from the browser. */}
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-accent/20 pt-3">
+        <Button asChild size="sm" variant="outline">
+          <Link to={`/quiz?scope=ruku&ruku=${rukuNumber}&start=1`}>
+            <GraduationCap className="size-3.5" aria-hidden />
+            Quiz this ruku's words
+          </Link>
+        </Button>
+        <span className="text-[0.6875rem] text-fg-subtle">
+          Words you don't know open the ayah they came from.
+        </span>
       </div>
     </Card>
   );

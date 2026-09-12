@@ -402,38 +402,132 @@ async function main(): Promise<void> {
         : `encountered=${overview.encountered} rukus_read=${overview.rukus_read}`;
     });
 
-    await check("quiz_pool returns the user's words", async () => {
-      const { data, error } = await client.rpc("quiz_pool", { p_limit: 5 });
-      if (error) return error.message;
-      return (data ?? []).length > 0 ? null : "empty pool despite tracked words";
-    });
-
-    await check("quiz_distractors returns wrong answers", async () => {
-      const { data, error } = await client.rpc("quiz_distractors", {
-        p_exclude: ["In (the) name"],
-        p_limit: 3,
+    await check("quiz_pool draws a ruku's words, asked or not", async () => {
+      const { data, error } = await client.rpc("quiz_pool", {
+        p_scope: "ruku",
+        p_ruku: 1,
+        p_limit: 30,
       });
       if (error) return error.message;
-      const glosses = ((data ?? []) as Array<{ gloss: string }>).map((d) => d.gloss);
-      if (glosses.length !== 3) return `got ${glosses.length} distractors`;
-      return glosses.includes("In (the) name") ? "excluded gloss leaked through" : null;
+      const rows = (data ?? []) as Array<{
+        ruku_number: number;
+        tracked: boolean;
+        verse_arabic: string;
+        translation_en: string;
+        pool_size: number;
+      }>;
+      if (rows.length === 0) return "no words for ruku 1";
+      if (rows.some((r) => r.ruku_number !== 1)) return "words leaked in from outside the ruku";
+      if (rows.some((r) => !r.verse_arabic || !r.translation_en)) {
+        return "a word came without the ayah a miss has to show";
+      }
+      if (!rows.some((r) => r.pool_size > 0)) return "pool_size missing";
+      // Only one word in ruku 1 was ever marked, so a pool of the ruku's words
+      // must contain words that were never touched — that is the point of
+      // scoping the round to the ruku rather than to the marked list.
+      return rows.some((r) => !r.tracked) ? null : "every word was already tracked";
     });
 
-    await check("quiz_distractors answers in Russian", async () => {
-      const { data, error } = await client.rpc("quiz_distractors", {
-        p_exclude: [],
-        p_limit: 5,
-        p_language: "ru",
+    await check("quiz_pool asks only memorized ayahs outside ruku scope", async () => {
+      const { data, error } = await client.rpc("quiz_pool", { p_scope: "global", p_limit: 30 });
+      if (error) return error.message;
+      const rows = (data ?? []) as Array<{ surah_number: number; ayah_number: number }>;
+      if (rows.length === 0) return "no words from the one memorized ayah";
+      const stray = rows.filter((r) => r.surah_number !== 1 || r.ayah_number !== 1);
+      return stray.length === 0 ? null : `${stray.length} words came from unmemorized ayahs`;
+    });
+
+    await check("record_quiz_attempt teaches, then demotes, a word", async () => {
+      const { data: pool, error: poolError } = await client.rpc("quiz_pool", {
+        p_scope: "ruku",
+        p_ruku: 1,
+        p_limit: 30,
+      });
+      if (poolError) return poolError.message;
+      const fresh = (pool ?? []).find((w) => !w.tracked);
+      if (!fresh) return "no untracked word to answer";
+
+      const statusOf = async (): Promise<string | undefined> => {
+        const { data } = await client
+          .from("user_word_progress")
+          .select("status")
+          .eq("word_id", fresh.word_id)
+          .maybeSingle();
+        return data?.status;
+      };
+
+      // A miss is how a word gets onto the list in the first place.
+      const miss = await client.rpc("record_quiz_attempt", {
+        p_word_id: fresh.word_id,
+        p_correct: false,
+      });
+      if (miss.error) return miss.error.message;
+      const afterMiss = await statusOf();
+      if (afterMiss !== "learning") return `a miss left status ${afterMiss}`;
+
+      const hit = await client.rpc("record_quiz_attempt", {
+        p_word_id: fresh.word_id,
+        p_correct: true,
+      });
+      if (hit.error) return hit.error.message;
+      const afterHit = await statusOf();
+      if (afterHit !== "learned") return `knowing a word left status ${afterHit}`;
+
+      // Knowing it once is not forever: missing it again drops it back.
+      const lapse = await client.rpc("record_quiz_attempt", {
+        p_word_id: fresh.word_id,
+        p_correct: false,
+      });
+      if (lapse.error) return lapse.error.message;
+      const afterLapse = await statusOf();
+      return afterLapse === "learning" ? null : `a learned word did not demote (${afterLapse})`;
+    });
+
+    await check("word_progress_by_ruku totals a ruku's words", async () => {
+      const { data, error } = await client.rpc("word_progress_by_ruku");
+      if (error) return error.message;
+      const rows = (data ?? []) as Array<{
+        ruku_number: number;
+        word_count: number;
+        learned_count: number;
+        learning_count: number;
+        untouched_count: number;
+      }>;
+      if (rows.length !== 558) return `got ${rows.length} rukus`;
+      const first = rows.find((r) => r.ruku_number === 1);
+      if (!first) return "ruku 1 missing";
+      if (first.word_count === 0) return "ruku 1 has no words";
+      const counted = first.learned_count + first.learning_count + first.untouched_count;
+      return counted === first.word_count ? null : `counts sum to ${counted}, expected ${first.word_count}`;
+    });
+
+    await check("next_unread_tafsir offers a memorized ayah's commentary", async () => {
+      // 2:3 is memorized here and nothing in its range has been marked read.
+      // Al-Fatiha's entry may or may not collapse across ayah 2, which is
+      // marked read above — 2:3 keeps this check independent of that.
+      const { error: memorizeError } = await client
+        .from("memorized_verses")
+        .insert({ user_id: userId, verse_id: 10 });
+      if (memorizeError) return memorizeError.message;
+
+      const { data, error } = await client.rpc("next_unread_tafsir", {
+        p_edition: "en-tafisr-ibn-kathir",
       });
       if (error) return error.message;
-      const glosses = ((data ?? []) as Array<{ gloss: string }>).map((d) => d.gloss);
-      if (glosses.length === 0) return "no distractors";
-      // The Russian corpus falls back to English for words it doesn't cover,
-      // so some Latin text is expected; a round with *no* Cyrillic at all
-      // means the language argument was ignored.
-      return glosses.some((g) => /[А-Яа-яЁё]/.test(g))
-        ? null
-        : "no Russian glosses — p_language was ignored";
+      const row = (data ?? [])[0];
+      if (!row) return "no pending tafsir despite a memorized ayah with unread commentary";
+      if (!row.content) return "the offered entry has no text";
+      if (!row.verse_ids.includes(row.verse_id)) return "verse_ids does not cover the offered ayah";
+      if (row.ayah_number < row.ayah_start || row.ayah_number > row.ayah_end) {
+        return "the offered ayah falls outside its own entry's range";
+      }
+
+      // And it must not offer a passage that has already been read.
+      const { data: alreadyRead } = await client
+        .from("tafsir_read_verses")
+        .select("verse_id")
+        .in("verse_id", row.verse_ids);
+      return (alreadyRead ?? []).length === 0 ? null : "offered an entry that is already marked read";
     });
 
     await check("memorized_by_surah reports per-surah progress", async () => {

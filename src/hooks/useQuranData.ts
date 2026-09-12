@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import type { Ruku, Surah, TafsirEdition, TafsirEntry, VerseWithWords } from "@/lib/types";
 
@@ -65,6 +65,44 @@ export function useRukuVerses(rukuNumber: number | null) {
         words: [...(verse.words ?? [])].sort((a, b) => a.position - b.position),
       })) as VerseWithWords[];
     },
+  });
+}
+
+/** How many ayahs of a surah each page of the continuous reader holds. */
+export const SURAH_PAGE_SIZE = 40;
+
+/**
+ * A whole surah, one page of ayahs at a time.
+ *
+ * The continuous reader walks a surah from top to bottom, and Al-Baqarah is
+ * 286 ayahs of text, translation and word-by-word breakdown — a single request
+ * for that is several megabytes before a single line is drawn. Paging by ayah
+ * number rather than offset keeps each page's boundary stable as the reader
+ * scrolls, so a page can never repeat or skip an ayah of the surah.
+ */
+export function useSurahVerses(surahNumber: number | null) {
+  return useInfiniteQuery({
+    ...CONTENT_QUERY,
+    queryKey: ["surah-verses", surahNumber],
+    enabled: surahNumber !== null,
+    initialPageParam: null as number | null,
+    queryFn: async ({ pageParam }): Promise<VerseWithWords[]> => {
+      let query = supabase
+        .from("quran_verses")
+        .select("*, words:quran_words(*)")
+        .eq("surah_number", surahNumber!)
+        .order("ayah_number")
+        .limit(SURAH_PAGE_SIZE);
+      if (pageParam !== null) query = query.gt("ayah_number", pageParam);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []).map((verse) => ({
+        ...verse,
+        words: [...(verse.words ?? [])].sort((a, b) => a.position - b.position),
+      })) as VerseWithWords[];
+    },
+    getNextPageParam: (lastPage) =>
+      lastPage.length < SURAH_PAGE_SIZE ? undefined : lastPage[lastPage.length - 1]!.ayah_number,
   });
 }
 

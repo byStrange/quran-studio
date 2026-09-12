@@ -7,6 +7,7 @@ import { Dashboard } from "./routes/Dashboard";
 import { Browse } from "./routes/Browse";
 import { Reader } from "./routes/Reader";
 import { MushafReader } from "./routes/MushafReader";
+import { SurahReader } from "./routes/SurahReader";
 import { Vocabulary } from "./routes/Vocabulary";
 import { Quiz } from "./routes/Quiz";
 import { Memorization } from "./routes/Memorization";
@@ -34,6 +35,8 @@ export default function App() {
             <Route path="/browse" element={<Browse />} />
             {/* Ordered before the ruku route so "page" is never read as one. */}
             <Route path="/read/page/:pageNumber" element={<MushafReader />} />
+            {/* The continuous reader: one surah, top to bottom. */}
+            <Route path="/read/surah/:surahNumber" element={<SurahReader />} />
             <Route path="/read/:rukuNumber" element={<Reader />} />
             <Route path="/vocabulary" element={<Vocabulary />} />
             <Route path="/quiz" element={<Quiz />} />

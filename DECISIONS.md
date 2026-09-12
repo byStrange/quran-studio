@@ -577,6 +577,94 @@ if more than 1% fail. In practice ~1,100 words have no Russian upstream and a
 handful more sit in ayahs the two corpora segment differently (2:181, 8:6);
 those fall back to English rather than importing shifted.
 
+## The learning loop
+
+**A quiz names a scope, not a word list.** The first version drew its questions
+from `user_word_progress`, which meant the deck only ever held words the reader
+had remembered to mark — so "finish this ruku, then learn its words" began with
+a dozen taps before a single question could be asked. `quiz_pool` now takes a
+scope: `ruku` (every word in the ruku), `surah` (words in that surah's
+memorized ayahs), `global` (every memorized ayah). Answers still write to
+`user_word_progress`; that is where they are *recorded*, not where the
+questions are chosen from. Ruku scope deliberately does not require the ruku to
+be marked memorized — reciting it and knowing its vocabulary are separate
+steps, and the second follows the first.
+
+**The multiple-choice round is gone.** Four options drawn from a shared gloss
+pool can be narrowed down without knowing the word: eliminate the two that are
+obviously wrong for an Arabic noun, and the odds are even money on a question
+you cannot answer. It measured elimination. The round is now a blind recall —
+the word is shown, the reader answers "I know it" or "I don't" — and a miss
+opens the ayah the word came from, with its translation and the word picked out
+inside it. That is the whole point of asking in context: the word is learned
+where it is used, not as a glossary entry. `quiz_distractors` was dropped with
+the format it served, and `quiz_pool` returns the verse instead of three wrong
+answers.
+
+Answers are graded the way the reader asked for: knowing a word marks it
+*learned*, missing it marks it *learning* — including from *learned*, which is
+what makes revisiting a word worth anything. A word that was never tracked
+enters the list at the answer it was given, so the ruku round is also how words
+get onto the list. The pool prioritises words already being learned, then ones
+never asked, then ones already known, and reports `pool_size` alongside the
+page of words so "10 of 43" needs no second request.
+
+**A ruku's memorized state is computed, never stamped.** The header used to
+carry a button that marked every ayah in the ruku memorized at once, which read
+as a status and acted as a switch — and said nothing about which ayahs are
+actually known. It is now a read-only account of the ayahs that were marked,
+one at a time, as they were learned: a count and a bar while it is in
+progress, the accent badge once the count reaches the ruku's length.
+
+**The app opens by offering one unread tafsir.** The failure mode this
+addresses is not that commentary is hard to reach, it is that nothing ever
+asks, so the memorized-but-unread gap grows quietly. `next_unread_tafsir`
+returns the first memorized ayah, in mushaf order, whose commentary has not
+been read — positional rather than random, because the aim is to finish them.
+It is offered in a dialog that can be read in place, marked read, or opened in
+the reader at that ayah (which the reader accepts as `?ayah=`). "Not read" is
+judged over the entry's whole range, so a passage covering 2:1-5 is not
+re-offered against a different ayah number, and the range comes back as
+`verse_ids` so marking it read is one write. The prompt is once per launch: the
+guard is a module-level flag, which dies with the JavaScript context — exactly
+what "closed the app and reopened it" means — while coming back from another
+app leaves it set and the reader undisturbed.
+
+**Repeat can walk only the ayahs that are not memorized yet.** `unmemorized` is
+a fourth repeat mode beside off, this-passage and this-ayah. It hops over the
+ayahs already known and loops the rest, so a ruku with three shaky ayahs is
+drilled on those three rather than played start to finish. With nothing left to
+loop it falls back to the passage and says so in its tooltip, rather than
+looking identical to the mode it is not.
+
+**The whole surah reads in one continuous scroll.** The ruku reader answers
+"what am I memorizing"; `/read/surah/:n` answers "let me read the surah". It is
+one column of ayahs with the ruku divisions marked — each division carrying its
+own word-quiz action, which is where a reader finishing a ruku is standing —
+the recitation underneath, and the tafsir panel on whichever ayah is selected.
+Ayahs arrive 40 at a time and the next page loads as the reader nears the
+bottom: Al-Baqarah is 286 ayahs of text, translation and word-by-word
+breakdown, and nothing should wait on several megabytes of it. The scroll
+position drives the loading, so reading straight down never blocks.
+
+**Progress reads are scoped, and word statuses are paged.** Three of the
+user-progress reads used to be unfiltered selects — "every marked ayah in the
+Quran is only a few thousand integers". True of the data, and still wrong: the
+REST layer caps a response at 1,000 rows by default, so past a thousand marked
+ayahs the result is silently truncated and verses start reading as unmarked.
+The readers now name the surah's own ayah ids (at most 286) for the verse-level
+markers, and the continuous reader walks `user_word_progress` a page at a time
+rather than naming thousands of word ids in a query string or trusting one
+response to hold them all.
+
+**The browser remembers which surah was open.** The open surah is a `?surah=`
+parameter rather than component state, so stepping into a ruku and coming back
+lands on the same surah with its rukus still showing. The list is how a reader
+picks the next ruku, and collapsing it on every return made that two steps
+every time.
+
+---
+
 ## Deliberately not built (v1)
 
 - **OAuth providers.** Email/password only; adding providers is Supabase

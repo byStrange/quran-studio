@@ -41,8 +41,11 @@ export function VerseCard({
   wordsExpanded: boolean;
   onToggleWords: () => void;
   wordStatuses: Map<number, WordStatus>;
-  /** Opens focus mode on this ayah. */
-  onOpenFocus: () => void;
+  /**
+   * Opens focus mode on this ayah. Absent in the continuous surah reader,
+   * where a ruku's single-ayah view is not the mode being read in.
+   */
+  onOpenFocus?: () => void;
   /** Colour the Arabic by tajweed rule. */
   tajweed: boolean;
   /** This ayah is the one currently being recited. */
@@ -195,6 +198,7 @@ export function VerseCard({
               Tafsir
             </button>
 
+            {onOpenFocus ? (
             <Tooltip content="Read this ayah on its own, fullscreen">
               <button
                 onClick={onOpenFocus}
@@ -207,6 +211,7 @@ export function VerseCard({
                 Focus
               </button>
             </Tooltip>
+            ) : null}
           </div>
         </div>
       </div>

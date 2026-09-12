@@ -46,6 +46,7 @@ export function useRecitationPlayer({
   timings,
   rate,
   repeatMode,
+  repeatUnmemorizedVerseIds,
   onVerseChange,
 }: {
   src: string | null;
@@ -54,6 +55,12 @@ export function useRecitationPlayer({
   timings: Map<number, RecitationTiming> | undefined;
   rate: number;
   repeatMode: RepeatMode;
+  /**
+   * The passage's ayahs that are not marked memorized, in recitation order.
+   * Only consulted by `repeatMode: "unmemorized"`, which loops these and
+   * skips everything else.
+   */
+  repeatUnmemorizedVerseIds?: number[];
   onVerseChange?: (verseId: number) => void;
 }): RecitationPlayer {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -176,6 +183,17 @@ export function useRecitationPlayer({
   boundsRef.current = { start, end };
   const verseChangeRef = useRef(onVerseChange);
   verseChangeRef.current = onVerseChange;
+  const unmemorizedRef = useRef<number[]>([]);
+  unmemorizedRef.current = repeatUnmemorizedVerseIds ?? [];
+
+  /** The passage's not-yet-memorized ayahs, as spans, in play order. */
+  const unmemorizedSpans = useCallback(() => {
+    const spans = orderedRef.current;
+    const ids = unmemorizedRef.current;
+    if (ids.length === 0) return [];
+    const wanted = new Set(ids);
+    return spans.filter((s) => wanted.has(s.verseId));
+  }, []);
 
   useEffect(() => {
     if (!playing) return;
@@ -191,6 +209,29 @@ export function useRecitationPlayer({
       const bounds = boundsRef.current;
       if (spans.length === 0) return;
 
+      // "Unmemorized" hops over the ayahs already known and loops the rest. A
+      // jump rather than a skip is what makes it a drill: the reciter's voice
+      // resumes exactly at the ayah being learned.
+      if (repeatRef.current === "unmemorized") {
+        const targets = unmemorizedSpans();
+        if (targets.length > 0) {
+          let current: RecitationTiming | null = null;
+          for (const target of targets) {
+            if (target.startMs <= ms) current = target;
+          }
+          // Playhead before the first one, or past the end of the one it is in.
+          if (current === null) {
+            audio.currentTime = targets[0]!.startMs / 1000;
+            return;
+          }
+          if (ms >= current.endMs) {
+            const at = targets.indexOf(current);
+            audio.currentTime = targets[(at + 1) % targets.length]!.startMs / 1000;
+            return;
+          }
+        }
+      }
+
       // Repeat of a single ayah loops that ayah's own span, which is a
       // tighter boundary than the passage's and so is checked first.
       const repeatVerse = repeatVerseRef.current;
@@ -203,7 +244,13 @@ export function useRecitationPlayer({
       }
 
       if (ms >= bounds.end) {
-        if (repeatRef.current === "range") {
+        // "Unmemorized" with nothing left to drill is the passage loop — the
+        // alternative would be stopping at the end while the control claims to
+        // repeat, which is the one thing a repeat control must not do.
+        const loopsPassage =
+          repeatRef.current === "range" ||
+          (repeatRef.current === "unmemorized" && unmemorizedSpans().length === 0);
+        if (loopsPassage) {
           audio.currentTime = bounds.start / 1000;
           return;
         }
@@ -243,7 +290,7 @@ export function useRecitationPlayer({
 
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [playing]);
+  }, [playing, unmemorizedSpans]);
 
   // --- controls ------------------------------------------------------------
 
@@ -254,7 +301,12 @@ export function useRecitationPlayer({
     // Landing outside the passage means the playhead belongs to a previous
     // selection; restart rather than play something the reader did not choose.
     const ms = audio.currentTime * 1000;
-    if (ms < from || ms >= to) {
+    const targets = repeatRef.current === "unmemorized" ? unmemorizedSpans() : [];
+    if (targets.length > 0 && !targets.some((t) => ms >= t.startMs && ms < t.endMs)) {
+      // The mode means "drill what isn't memorized", so play starts on the
+      // first such ayah whenever the playhead is sitting on a known one.
+      seekMs(targets[0]!.startMs);
+    } else if (ms < from || ms >= to) {
       seekMs(from);
     }
     void audio.play().catch(() => {
@@ -262,7 +314,7 @@ export function useRecitationPlayer({
       setPlaying(false);
     });
     setPlaying(true);
-  }, [available, seekMs]);
+  }, [available, seekMs, unmemorizedSpans]);
 
   const pause = useCallback(() => {
     audioRef.current?.pause();

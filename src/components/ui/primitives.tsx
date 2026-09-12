@@ -23,6 +23,7 @@ export function Modal({
   description,
   children,
   footer,
+  size = "md",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -30,6 +31,8 @@ export function Modal({
   description?: string;
   children?: ReactNode;
   footer?: ReactNode;
+  /** `lg` is for dialogs that hold reading matter rather than a question. */
+  size?: "md" | "lg";
 }) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -37,9 +40,9 @@ export function Modal({
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] animate-fade-in" />
         <Dialog.Content
           className={cn(
-            "fixed left-1/2 top-1/2 z-50 w-[min(30rem,calc(100vw-2rem))]",
-            "-translate-x-1/2 -translate-y-1/2 animate-rise",
-            "rounded-2xl border border-border bg-surface p-6 shadow-2xl shadow-black/30",
+            "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 animate-rise",
+            "max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl border border-border bg-surface p-6 shadow-2xl shadow-black/30",
+            size === "lg" ? "w-[min(46rem,calc(100vw-2rem))]" : "w-[min(30rem,calc(100vw-2rem))]",
           )}
         >
           <div className="flex items-start justify-between gap-4">
