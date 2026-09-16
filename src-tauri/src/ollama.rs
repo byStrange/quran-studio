@@ -224,6 +224,12 @@ struct ChatRequest<'a> {
     messages: Vec<ChatMessage<'a>>,
     stream: bool,
     options: ChatOptions,
+    /// A JSON schema the reply must satisfy. Ollama constrains decoding to it,
+    /// which is worth much more than asking for JSON in the prompt: the reply
+    /// cannot come back as prose that happens to mention a brace. Omitted for
+    /// the prose generators, which want no constraint at all.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    format: Option<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -250,6 +256,17 @@ async fn chat(
     user: &str,
     max_tokens: u32,
 ) -> AiResult<(String, String)> {
+    chat_with(state, system, user, max_tokens, 0.3, None).await
+}
+
+async fn chat_with(
+    state: &AiState,
+    system: &str,
+    user: &str,
+    max_tokens: u32,
+    temperature: f32,
+    format: Option<serde_json::Value>,
+) -> AiResult<(String, String)> {
     let key = api_key().ok_or(AiError::NotConfigured)?;
     let model = resolve_model(state).await?;
 
@@ -260,7 +277,8 @@ async fn chat(
             ChatMessage { role: "user", content: user },
         ],
         stream: false,
-        options: ChatOptions { temperature: 0.3, num_predict: max_tokens },
+        options: ChatOptions { temperature, num_predict: max_tokens },
+        format,
     };
 
     let resp = client()?
@@ -420,12 +438,20 @@ fn language_name(code: &str) -> &'static str {
 
 fn word_system(language: &str) -> String {
     format!(
-        "You are a precise Quranic Arabic teacher writing for a {language}-speaking \
-student who is memorizing the Quran. Explain why a specific word form is used in a specific ayah: \
-its grammatical role, the nuance that distinguishes it from a near-synonym, or its thematic \
-significance in that passage. Write two or three sentences of plain prose. Do not restate the \
-translation, do not use markdown, headings, or lists, and do not add any preamble. \
-Write your entire answer in {language}."
+        "You are a Quranic Arabic teacher helping a {language}-speaking student understand \
+individual words while reading the Quran. You will be given one specific word as it appears in a \
+specific ayah.\n\n\
+First, give the plain meaning of this word in context, in a short, simple phrase — no jargon.\n\n\
+Then, in one or two more sentences, add whatever actually helps the student's understanding of THIS \
+word: that might be a nuance vs. a near-synonym, why this grammatical form was chosen, or a \
+connotation the plain meaning misses. If the word is grammatically simple (a pronoun, particle, or \
+common function word) and there is nothing meaningful to add, stop after the plain meaning — do not \
+invent significance.\n\n\
+Stay scoped to this one word. Do not explain the verse's broader argument, theology, or how this \
+word relates to other groups or clauses mentioned elsewhere in the ayah — that belongs to a \
+different, verse-level explanation, not a word-level one.\n\n\
+Do not use markdown, headings, or lists, and do not add any preamble. Write your entire answer in \
+{language}."
     )
 }
 
@@ -480,4 +506,278 @@ pub async fn ai_generate_ruku_summary(
     );
     let (summary, model_used) = chat(&state, &ruku_system(language), &prompt, 500).await?;
     Ok(RukuSummary { summary, model_used })
+}
+
+// --- knowledge quizzes -----------------------------------------------------
+
+/// One ayah, as the app drew it from `quiz_verse_pool`.
+#[derive(Deserialize)]
+pub struct QuizVerse {
+    pub verse_id: i32,
+    pub surah_number: i32,
+    pub ayah_number: i32,
+    pub surah_name: String,
+    pub arabic: String,
+    pub translation: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct GeneratedQuestion {
+    pub verse_id: i32,
+    /// One of `KINDS`; anything else is rewritten to "meaning" on the way out.
+    pub kind: String,
+    pub question: String,
+    pub answer: String,
+    /// The stretch of the ayah's Arabic that carries the answer, verbatim.
+    /// Empty when the model did not supply one, or supplied one that is not
+    /// actually in the ayah — see `validate_questions`.
+    #[serde(default)]
+    pub evidence: String,
+}
+
+#[derive(Deserialize)]
+struct GeneratedQuiz {
+    #[serde(default)]
+    questions: Vec<GeneratedQuestion>,
+}
+
+#[derive(Serialize)]
+pub struct KnowledgeQuiz {
+    pub questions: Vec<GeneratedQuestion>,
+    pub model_used: String,
+}
+
+const KINDS: &[&str] = &["locate", "wording", "meaning", "continuation", "detail"];
+
+/// The instructions the round is built from.
+///
+/// Long, and deliberately so. Every paragraph here is load-bearing against a
+/// specific way this goes wrong: a model asked for Quran questions without
+/// being pinned to supplied text will reach for tafsir it half-remembers,
+/// invent a number that sounds Quranic, or ask something whose answer is the
+/// question restated. The grounding rules, the worked examples per kind, and
+/// the closing self-check are each there because the alternative is a quiz
+/// that teaches the reader something false about scripture — which is worse
+/// than no quiz.
+///
+/// `evidence` is the part that makes the rest checkable: a question whose
+/// evidence is not literally in the ayah did not come from the ayah, and the
+/// app can drop it without having to judge the content itself.
+fn knowledge_system(language: &str, count: usize) -> String {
+    format!(
+        "ROLE\n\
+You write examination questions for a student who is memorizing the Quran. They \
+are tested from memory: they do not have the text in front of them while answering. \
+They mark their own answer afterwards, so your answer text has to settle the matter \
+on its own.\n\n\
+INPUT\n\
+You are given exactly {count} ayahs, each labelled:\n\
+  [n] verse_id=<id>  <Surah> <surah>:<ayah>\n\
+  ARABIC: ...\n\
+  TRANSLATION: ...\n\n\
+TASK\n\
+Write exactly one question per ayah, in the order given — {count} questions in total. \
+Copy each question's verse_id from the ayah you wrote it from.\n\n\
+GROUNDING — these rules come before everything else\n\
+1. Every question must be answerable from the ayahs supplied above and from nothing \
+else. For this task you have no other source. Do not draw on tafsir, hadith, \
+occasions of revelation, or any other ayah of the Quran, including ones you remember.\n\
+2. The answer must be something actually present in that ayah's Arabic or its \
+translation. If you cannot point to where in the ayah the answer sits, the question \
+is wrong — write an easier one about the same ayah.\n\
+3. Never invent a number, a name, a place or an attribute. If the ayah does not \
+state one, do not ask for one.\n\
+4. Ask what the text says, which word it uses, and where it sits. Do not ask for a \
+legal ruling, a theological verdict, or the student's opinion.\n\
+5. Do not put the answer inside the question.\n\
+6. In a 'locate' question, do not name the ayah number — that is what is being asked.\n\n\
+QUESTION KINDS — spread them across the round; use no kind more than three times\n\
+locate        You describe the content in your own words; the student names the ayah.\n\
+              e.g. \"Which ayah of al-Baqara describes those who trade guidance away for error?\"\n\
+wording       You give a meaning in {language}; the student names the Arabic word the ayah uses for it.\n\
+              e.g. \"In al-Baqara 2:7, which word is used for the covering over their eyes?\"\n\
+meaning       You name the ayah; the student states what it says.\n\
+              e.g. \"What does al-Baqara 2:3 say the God-conscious do with what they have been provided?\"\n\
+continuation  You quote the opening of the ayah in Arabic; the student says what follows.\n\
+              e.g. \"How does al-Baqara 2:2 continue after ذَٰلِكَ ٱلْكِتَـٰبُ ?\"\n\
+detail        You ask for one specific item the ayah names — a number, a name, an attribute.\n\
+              e.g. \"Which two groups does al-Baqara 2:6 say the warning does not reach?\"\n\n\
+WRITING THE QUESTION\n\
+- One sentence, under 30 words, ending in '?'.\n\
+- Written in {language}. Arabic quoted inside it stays in Arabic script.\n\
+- Specific enough to have one right answer. \"What is this ayah about?\" is not a \
+question; \"Which two things does 2:3 pair with belief in the unseen?\" is.\n\n\
+WRITING THE ANSWER\n\
+- One or two sentences in {language}, complete enough that a student can tell \
+whether what they recalled was right.\n\
+- Name the ayah in it, as <surah>:<ayah>.\n\
+- An Arabic word in the answer is written in Arabic script, followed by its \
+transliteration and meaning in parentheses.\n\n\
+EVIDENCE\n\
+For each question, copy the exact stretch of that ayah's supplied ARABIC that carries \
+the answer — character for character, a short phrase at most. If the whole ayah is \
+the evidence, copy its opening words. Never put Arabic in `evidence` that does not \
+appear verbatim in that ayah.\n\n\
+OUTPUT\n\
+Return JSON only — no explanation, no markdown fence:\n\
+{{\"questions\":[{{\"verse_id\":0,\"kind\":\"locate\",\"question\":\"…\",\"answer\":\"…\",\"evidence\":\"…\"}}]}}\n\
+`kind` is exactly one of: locate, wording, meaning, continuation, detail.\n\n\
+BEFORE YOU ANSWER, check every question against this list and rewrite any that fails:\n\
+- Is its verse_id one of the ids given above?\n\
+- Can it be answered from that ayah alone, with no outside knowledge?\n\
+- Is the answer visible in that ayah's Arabic or translation?\n\
+- Does the evidence appear verbatim in that ayah's Arabic?\n\
+- Is the answer kept out of the question?\n\
+- Is the whole reply in {language}, apart from quoted Arabic?"
+    )
+}
+
+/// The shape the reply is decoded against. Ollama constrains generation to it,
+/// so the parse below is a formality rather than the first line of defence.
+fn knowledge_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "questions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "verse_id": { "type": "integer" },
+                        "kind": { "type": "string", "enum": KINDS },
+                        "question": { "type": "string" },
+                        "answer": { "type": "string" },
+                        "evidence": { "type": "string" }
+                    },
+                    "required": ["verse_id", "kind", "question", "answer"]
+                }
+            }
+        },
+        "required": ["questions"]
+    })
+}
+
+/// Pulls the JSON object out of a reply that carried anything else with it.
+///
+/// `format` should make this unnecessary, but a model that ignores it returns
+/// prose with an object somewhere inside, and a round is worth recovering.
+fn extract_json(text: &str) -> Option<&str> {
+    let start = text.find('{')?;
+    let end = text.rfind('}')?;
+    if end > start { Some(&text[start..=end]) } else { None }
+}
+
+/// Keeps the questions that are about the ayahs we actually sent.
+///
+/// Four things are enforced, in order of how badly they go wrong unchecked:
+/// a question must belong to a verse from this round (otherwise it is about
+/// scripture the reader was never shown); there is at most one per verse (the
+/// round is built one-to-one, and a model that writes three about ayah 1 has
+/// lost the plot); question and answer must be non-empty; and `evidence` must
+/// appear verbatim in that ayah's Arabic, or it is dropped rather than shown,
+/// because evidence that is not in the text is the one thing here that could
+/// teach a false reading.
+fn validate_questions(
+    raw: Vec<GeneratedQuestion>,
+    verses: &[QuizVerse],
+) -> Vec<GeneratedQuestion> {
+    let mut out: Vec<GeneratedQuestion> = Vec::new();
+
+    for mut q in raw {
+        let Some(verse) = verses.iter().find(|v| v.verse_id == q.verse_id) else {
+            continue;
+        };
+        if out.iter().any(|kept| kept.verse_id == q.verse_id) {
+            continue;
+        }
+
+        q.question = q.question.trim().to_string();
+        q.answer = q.answer.trim().to_string();
+        q.evidence = q.evidence.trim().to_string();
+        if q.question.is_empty() || q.answer.is_empty() {
+            continue;
+        }
+
+        let kind = q.kind.trim().to_lowercase();
+        q.kind = if KINDS.contains(&kind.as_str()) { kind } else { "meaning".to_string() };
+
+        if !q.evidence.is_empty() && !verse.arabic.contains(&q.evidence) {
+            q.evidence = String::new();
+        }
+
+        out.push(q);
+    }
+
+    // Back into the order the verses were drawn in, so the round walks the
+    // passage the way the reader read it rather than the way the model replied.
+    out.sort_by_key(|q| {
+        verses.iter().position(|v| v.verse_id == q.verse_id).unwrap_or(usize::MAX)
+    });
+    out
+}
+
+/// Builds one round of knowledge questions from the ayahs the app drew.
+///
+/// Returns whatever survived validation rather than failing on a partial
+/// reply: nine good questions is a round, and the tenth being dropped is not
+/// worth making the reader wait through a second generation.
+#[tauri::command]
+pub async fn ai_generate_knowledge_quiz(
+    state: tauri::State<'_, AiState>,
+    verses: Vec<QuizVerse>,
+    language: String,
+) -> Result<KnowledgeQuiz, AiError> {
+    if verses.is_empty() {
+        return Err(AiError::BadResponse);
+    }
+    let language = language_name(&language);
+
+    let passage = verses
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            format!(
+                "[{}] verse_id={}  {} {}:{}\nARABIC: {}\nTRANSLATION: {}",
+                i + 1,
+                v.verse_id,
+                v.surah_name,
+                v.surah_number,
+                v.ayah_number,
+                v.arabic,
+                v.translation
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    let prompt = format!(
+        "{passage}\n\n\
+         Write exactly {} questions — one per ayah above, in that order.",
+        verses.len()
+    );
+
+    // Budgeted per question rather than fixed: a 30-ayah round truncated
+    // half way through would fail validation for reasons the reader cannot
+    // act on. Warmer than the prose generators because ten questions off one
+    // passage should not all be the same question.
+    let budget = (verses.len() as u32 * 220).clamp(600, 8_000);
+    let (content, model_used) = chat_with(
+        &state,
+        &knowledge_system(language, verses.len()),
+        &prompt,
+        budget,
+        0.6,
+        Some(knowledge_schema()),
+    )
+    .await?;
+
+    let json = extract_json(&content).ok_or(AiError::BadResponse)?;
+    let parsed: GeneratedQuiz = serde_json::from_str(json).map_err(|_| AiError::BadResponse)?;
+
+    let questions = validate_questions(parsed.questions, &verses);
+    if questions.is_empty() {
+        return Err(AiError::BadResponse);
+    }
+
+    Ok(KnowledgeQuiz { questions, model_used })
 }
