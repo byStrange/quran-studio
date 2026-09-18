@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Download, Mic, MicOff, AlertCircle } from "lucide-react";
 import { useListenMode } from "@/hooks/useListenMode";
 import type { VerseWithWords } from "@/lib/types";
+import { useT } from "@/providers/I18nProvider";
 
 /**
  * Floating action button for the Listen & Follow feature.
@@ -25,6 +26,7 @@ export function ListenFAB({
   /** True when the recitation player is active (mutual exclusion). */
   disabled: boolean;
 }) {
+  const t = useT();
   const listenMode = useListenMode(verses);
   const { status, matchedVerseId, matcherState, isSupported, modelReady, transcript, error } = listenMode;
   const [showUnsupportedNotice, setShowUnsupportedNotice] = useState(false);
@@ -112,10 +114,10 @@ export function ListenFAB({
   // --- Status label ---
   const statusLabel = isListening
     ? matcherState === "searching"
-      ? "Listening…"
+      ? t("listen.listening")
       : matcherState === "following"
-        ? "Following"
-        : "Re-searching…"
+        ? t("listen.following")
+        : t("listen.researching")
     : null;
 
   // --- Progress ring (for model download) ---
@@ -147,18 +149,14 @@ export function ListenFAB({
           className="fixed right-16 bottom-[5.75rem] z-50 max-w-[13rem] rounded-xl border border-border bg-surface p-3 text-[0.75rem] text-fg-muted shadow-lg"
           style={{ animation: "var(--animate-rise)" }}
         >
-          <p className="mb-2 font-medium text-fg">
-            Download speech model?
-          </p>
-          <p className="mb-2.5 text-[0.6875rem] leading-relaxed">
-            A one-time ~75 MB download is needed for offline voice recognition. Tap the mic again to start.
-          </p>
+          <p className="mb-2 font-medium text-fg">{t("listen.downloadTitle")}</p>
+          <p className="mb-2.5 text-[0.6875rem] leading-relaxed">{t("listen.downloadBody")}</p>
           <button
             className="w-full rounded-lg bg-accent px-3 py-1.5 text-[0.75rem] font-medium text-accent-fg transition-colors hover:bg-accent-hover"
             onClick={handleDownload}
           >
             <Download className="mr-1.5 inline size-3" aria-hidden />
-            Download
+            {t("listen.download")}
           </button>
         </div>
       ) : null}
@@ -184,9 +182,7 @@ export function ListenFAB({
         >
           <div className="flex items-start gap-2">
             <Mic className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
-            <p className="leading-relaxed">
-              Listen & Follow (Offline Speech Recognition) is currently supported on Desktop platforms.
-            </p>
+            <p className="leading-relaxed">{t("listen.unsupported")}</p>
           </div>
         </div>
       ) : null}
@@ -198,15 +194,13 @@ export function ListenFAB({
         disabled={disabled}
         aria-label={
           isListening
-            ? "Stop listening"
+            ? t("listen.stop")
             : isDownloading
-              ? "Downloading speech model…"
-              : "Listen & follow my recitation"
+              ? t("listen.downloadingModel")
+              : t("listen.start")
         }
         title={
-          disabled
-            ? "Stop playback first to use Listen & Follow"
-            : error ?? undefined
+          disabled ? t("listen.stopPlaybackFirst") : (error ?? undefined)
         }
       >
         {/* Progress ring during download */}

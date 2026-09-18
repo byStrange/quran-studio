@@ -11,11 +11,12 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
-import { useContentLanguage } from "@/hooks/useProfile";
+import { useLanguage, useT } from "@/providers/I18nProvider";
 import { useRukus, useSurahs } from "@/hooks/useQuranData";
 import { getAiStatus, isTauri } from "@/lib/ai";
 import type { QuizScope } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import type { TranslationKey } from "@/locales/en";
 import { Page } from "@/components/layout/AppShell";
 import { Card, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,46 +32,46 @@ const LIMITS = [10, 20, 30] as const;
 
 const MODES: Array<{
   value: QuizMode;
-  title: string;
-  description: string;
+  title: TranslationKey;
+  description: TranslationKey;
   icon: typeof Library;
 }> = [
   {
     value: "vocabulary",
-    title: "Vocabulary",
-    description: "One word at a time. Do you know what it means?",
+    title: "quiz.modeVocabulary",
+    description: "quiz.modeVocabularyDescription",
     icon: Library,
   },
   {
     value: "knowledge",
-    title: "Comprehension",
-    description: "Questions about the passage, written for this round.",
+    title: "quiz.modeKnowledge",
+    description: "quiz.modeKnowledgeDescription",
     icon: BrainCircuit,
   },
 ];
 
 const SCOPES: Array<{
   value: QuizScope;
-  title: string;
-  description: string;
+  title: TranslationKey;
+  description: TranslationKey;
   icon: typeof Layers;
 }> = [
   {
     value: "ruku",
-    title: "This ruku",
-    description: "One ruku, whole — the round to run after memorizing it.",
+    title: "quiz.scopeRuku",
+    description: "quiz.scopeRukuDescription",
     icon: Layers,
   },
   {
     value: "surah",
-    title: "This surah",
-    description: "The ayahs you've memorized in one surah.",
+    title: "quiz.scopeSurah",
+    description: "quiz.scopeSurahDescription",
     icon: BookMarked,
   },
   {
     value: "global",
-    title: "Everything memorized",
-    description: "Every ayah you've memorized, across the whole Quran.",
+    title: "quiz.scopeGlobal",
+    description: "quiz.scopeGlobalDescription",
     icon: Globe2,
   },
 ];
@@ -90,8 +91,9 @@ const SCOPES: Array<{
  * straight into a round rather than dropping the reader on a form.
  */
 export function Quiz() {
+  const t = useT();
   const { user } = useAuth();
-  const language = useContentLanguage();
+  const language = useLanguage();
   const { data: surahs } = useSurahs();
   const { data: rukus } = useRukus();
   const [params] = useSearchParams();
@@ -178,9 +180,12 @@ export function Quiz() {
   // --- a round in progress -------------------------------------------------
 
   if (run !== null) {
-    const label = scopeLabel(run, surahs?.find((s) => s.number === run.surah)?.name_english);
+    const label = scopeLabel(t, run, surahs?.find((s) => s.number === run.surah)?.name_english);
     return (
-      <Page title={mode === "knowledge" ? "Comprehension" : "Quiz"} description={label}>
+      <Page
+        title={mode === "knowledge" ? t("quiz.modeKnowledge") : t("quiz.title")}
+        description={label}
+      >
         {mode === "knowledge" ? (
           <KnowledgeRound config={run} onSetup={() => setRun(null)} />
         ) : (
@@ -193,34 +198,39 @@ export function Quiz() {
   // --- setup ---------------------------------------------------------------
 
   const surahOptions = [
-    { value: "", label: "Choose a surah…" },
-    ...(surahs ?? []).map((s) => ({ value: String(s.number), label: `${s.number}. ${s.name_english}` })),
+    { value: "", label: t("quiz.chooseSurah") },
+    ...(surahs ?? []).map((s) => ({
+      value: String(s.number),
+      label: t("quiz.surahOption", { number: s.number, name: s.name_english }),
+    })),
   ];
   const rukuOptions = [
-    { value: "", label: surahNumber === null ? "Choose a surah first" : "Choose a ruku…" },
+    {
+      value: "",
+      label: surahNumber === null ? t("quiz.chooseSurahFirst") : t("quiz.chooseRuku"),
+    },
     ...surahRukus.map((r) => ({
       value: String(r.ruku_number),
-      label: `Ruku ${r.ruku_in_surah} · ayahs ${r.ayah_start}–${r.ayah_end}`,
+      label: t("quiz.rukuOption", {
+        number: r.ruku_in_surah,
+        range: `${r.ayah_start}–${r.ayah_end}`,
+      }),
     })),
   ];
 
-  const unit = mode === "knowledge" ? "ayah" : "word";
-  const startDisabled = !ready || poolSize.data === 0 || (mode === "knowledge" && !aiReady);
+  const knowledge = mode === "knowledge";
+  const startDisabled = !ready || poolSize.data === 0 || (knowledge && !aiReady);
 
   return (
     <Page
-      title="Quiz"
-      description={
-        mode === "knowledge"
-          ? "Answer from memory, then check yourself against the ayah."
-          : "Say whether you know each word, then check yourself against the gloss."
-      }
+      title={t("quiz.title")}
+      description={knowledge ? t("quiz.descriptionKnowledge") : t("quiz.descriptionVocabulary")}
     >
       <div className="space-y-4">
         <Card>
           <CardBody className="pt-6 space-y-6">
             <div>
-              <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">What kind of round?</p>
+              <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">{t("quiz.modeQuestion")}</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {MODES.map((option) => (
                   <Choice
@@ -228,27 +238,26 @@ export function Quiz() {
                     selected={mode === option.value}
                     onSelect={() => setMode(option.value)}
                     icon={<option.icon className="size-4 shrink-0" aria-hidden />}
-                    title={option.title}
-                    description={option.description}
+                    title={t(option.title)}
+                    description={t(option.description)}
                   />
                 ))}
               </div>
             </div>
 
-            {mode === "knowledge" && !aiReady ? (
+            {knowledge && !aiReady ? (
               <div className="flex gap-3 rounded-xl border border-warning/40 bg-warning/10 p-3.5">
                 <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
                 <div className="min-w-0 text-[0.8125rem] leading-relaxed text-fg-muted">
-                  <p className="font-medium text-fg">Comprehension rounds need AI set up</p>
+                  <p className="font-medium text-fg">{t("quiz.aiNeeded")}</p>
                   <p className="mt-0.5">
                     {!isTauri()
-                      ? "Questions are written in the desktop backend. Launch the app with `pnpm app:dev` rather than the browser preview."
-                      : (aiStatus.data?.error ??
-                        "Add an Ollama Cloud key in Settings and this round can be generated.")}
+                      ? t("ai.notInTauri")
+                      : (aiStatus.data?.error ?? t("quiz.aiNeedsKey"))}
                   </p>
                   {isTauri() ? (
                     <Button asChild variant="outline" size="sm" className="mt-2.5">
-                      <Link to="/settings">Open settings</Link>
+                      <Link to="/settings">{t("quiz.openSettings")}</Link>
                     </Button>
                   ) : null}
                 </div>
@@ -256,7 +265,9 @@ export function Quiz() {
             ) : null}
 
             <div>
-              <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">What should it cover?</p>
+              <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">
+                {t("quiz.scopeQuestion")}
+              </p>
               <div className="grid gap-2 sm:grid-cols-3">
                 {SCOPES.map((option) => (
                   <Choice
@@ -264,8 +275,8 @@ export function Quiz() {
                     selected={scope === option.value}
                     onSelect={() => setScope(option.value)}
                     icon={<option.icon className="size-4 shrink-0" aria-hidden />}
-                    title={option.title}
-                    description={option.description}
+                    title={t(option.title)}
+                    description={t(option.description)}
                   />
                 ))}
               </div>
@@ -273,7 +284,7 @@ export function Quiz() {
 
             {scope === "surah" ? (
               <div>
-                <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">Which surah?</p>
+                <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">{t("quiz.whichSurah")}</p>
                 <SelectField
                   value={surahNumber === null ? "" : String(surahNumber)}
                   onValueChange={(value) => {
@@ -281,7 +292,7 @@ export function Quiz() {
                     setRukuNumber(null);
                   }}
                   options={surahOptions}
-                  placeholder="Choose a surah…"
+                  placeholder={t("quiz.chooseSurah")}
                 />
               </div>
             ) : null}
@@ -289,7 +300,7 @@ export function Quiz() {
             {scope === "ruku" ? (
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">Surah</p>
+                  <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">{t("quiz.surah")}</p>
                   <SelectField
                     value={surahNumber === null ? "" : String(surahNumber)}
                     onValueChange={(value) => {
@@ -297,16 +308,16 @@ export function Quiz() {
                       setRukuNumber(null);
                     }}
                     options={surahOptions}
-                    placeholder="Choose a surah…"
+                    placeholder={t("quiz.chooseSurah")}
                   />
                 </div>
                 <div>
-                  <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">Ruku</p>
+                  <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">{t("quiz.ruku")}</p>
                   <SelectField
                     value={rukuNumber === null ? "" : String(rukuNumber)}
                     onValueChange={(value) => setRukuNumber(value === "" ? null : Number(value))}
                     options={rukuOptions}
-                    placeholder="Choose a ruku…"
+                    placeholder={t("quiz.chooseRuku")}
                   />
                 </div>
               </div>
@@ -314,7 +325,7 @@ export function Quiz() {
 
             <div>
               <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">
-                {mode === "knowledge" ? "Questions this round" : "Words this session"}
+                {knowledge ? t("quiz.questionsThisRound") : t("quiz.wordsThisSession")}
               </p>
               <div className="flex gap-2">
                 {LIMITS.map((value) => (
@@ -336,26 +347,31 @@ export function Quiz() {
               {ready ? (
                 <p className="mt-2 text-[0.75rem] text-fg-subtle">
                   {poolSize.isLoading
-                    ? `Counting the ${unit}s in this scope…`
+                    ? knowledge
+                      ? t("quiz.countingAyahs")
+                      : t("quiz.countingWords")
                     : poolSize.data === 0
                       ? scope === "surah"
-                        ? "You haven't memorized any ayahs in this surah yet."
+                        ? t("quiz.noneInSurah")
                         : scope === "ruku"
-                          ? `That ruku has no ${unit}s to quiz.`
-                          : "Nothing memorized yet — mark ayahs as memorized while reading."
-                      : `${poolSize.data} ${poolSize.data === 1 ? unit : `${unit}s`} in this scope${
-                          (poolSize.data ?? 0) > limit ? ` · ${limit} per round` : ""
-                        }`}
+                          ? knowledge
+                            ? t("quiz.noneInRukuAyahs")
+                            : t("quiz.noneInRuku")
+                          : t("quiz.noneMemorized")
+                      : (knowledge
+                          ? t("quiz.poolSizeAyahs", { count: poolSize.data ?? 0 })
+                          : t("quiz.poolSize", { count: poolSize.data ?? 0 })) +
+                        ((poolSize.data ?? 0) > limit ? t("quiz.perRound", { limit }) : "")}
                 </p>
               ) : (
                 <p className="mt-2 text-[0.75rem] text-fg-subtle">
-                  Pick {scope === "ruku" ? "a ruku" : "a surah"} to start.
+                  {scope === "ruku" ? t("quiz.pickRuku") : t("quiz.pickSurah")}
                 </p>
               )}
             </div>
 
             <Button variant="primary" className="w-full" disabled={startDisabled} onClick={begin}>
-              Start round
+              {t("quiz.start")}
             </Button>
           </CardBody>
         </Card>

@@ -49,113 +49,54 @@ export interface TajweedSpan {
 
 export type TajweedGroup = "madd" | "ghunnah" | "qalqalah" | "tafkhim" | "silent" | "other";
 
-export interface TajweedRuleInfo {
-  label: string;
-  /** What the rule asks the reciter to do, in one line. */
-  hint: string;
-  group: TajweedGroup;
-}
-
-export const TAJWEED_GROUPS: Array<{ id: TajweedGroup; title: string }> = [
-  { id: "madd", title: "Prolongation (Madd)" },
-  { id: "ghunnah", title: "Nasalization (Ghunnah)" },
-  { id: "qalqalah", title: "Echoing Sound (Qalqalah)" },
-  { id: "tafkhim", title: "Emphatic Pronunciation (Tafkhim)" },
-  { id: "silent", title: "Silent Letters" },
-  { id: "other", title: "Other Rules" },
+/**
+ * The legend's sections, in order.
+ *
+ * Ids only. Their titles — and every rule's label and one-line hint — are
+ * translated strings and live in `locales/*`, keyed `tajweed.group.<id>` and
+ * `tajweed.<rule>.label` / `.hint`. What stays here is the part that is not
+ * presentation: which rules exist, and which section each belongs to.
+ */
+export const TAJWEED_GROUPS: readonly TajweedGroup[] = [
+  "madd",
+  "ghunnah",
+  "qalqalah",
+  "tafkhim",
+  "silent",
+  "other",
 ];
 
-export const TAJWEED_INFO: Record<TajweedRule, TajweedRuleInfo> = {
-  madda_normal: {
-    label: "Madd Ṭabīʿī",
-    hint: "Normal prolongation — hold for 2 vowel counts.",
-    group: "madd",
-  },
-  madda_permissible: {
-    label: "Madd ʿĀriḍ li-Sukūn",
-    hint: "Permissible prolongation — 2, 4, or 6 counts when pausing at end of verse.",
-    group: "madd",
-  },
-  madda_obligatory: {
-    label: "Madd Wājib Muttaṣil",
-    hint: "Obligatory prolongation — 4 to 5 counts; Madd letter followed by Hamzah in same word.",
-    group: "madd",
-  },
-  madda_necessary: {
-    label: "Madd Lāzim",
-    hint: "Necessary prolongation — must hold for 6 vowel counts.",
-    group: "madd",
-  },
-  ghunnah: {
-    label: "Ghunnah",
-    hint: "Nasalization from the nose lasting 2 vowel counts — on ن and م.",
-    group: "ghunnah",
-  },
-  qalaqah: {
-    label: "Qalqalah",
-    hint: "Echoing bounce on ق ط ب ج د when carrying sukūn; especially audible when stopping.",
-    group: "qalqalah",
-  },
-  ikhafa: {
-    label: "Ikhfāʾ",
-    hint: "Nūn sākinah or tanwīn hidden before certain letters, with nasalisation.",
-    group: "other",
-  },
-  ikhafa_shafawi: {
-    label: "Ikhfāʾ shafawī",
-    hint: "Mīm sākinah hidden before bāʾ.",
-    group: "other",
-  },
-  idgham_ghunnah: {
-    label: "Idghām with ghunnah",
-    hint: "Merged into the next letter, nasalised.",
-    group: "other",
-  },
-  idgham_wo_ghunnah: {
-    label: "Idghām without ghunnah",
-    hint: "Merged into the next letter, no nasalisation.",
-    group: "other",
-  },
-  idgham_shafawi: {
-    label: "Idghām shafawī",
-    hint: "Mīm sākinah merged into a following mīm.",
-    group: "other",
-  },
-  idgham_mutajanisayn: {
-    label: "Idghām mutajānisayn",
-    hint: "Merged between letters sharing a point of articulation.",
-    group: "other",
-  },
-  idgham_mutaqaribayn: {
-    label: "Idghām mutaqāribayn",
-    hint: "Merged between letters with close points of articulation.",
-    group: "other",
-  },
-  iqlab: {
-    label: "Iqlāb",
-    hint: "Nūn or tanwīn becomes a mīm sound before bāʾ.",
-    group: "other",
-  },
-  ham_wasl: {
-    label: "Hamzat al-waṣl",
-    hint: "Connecting hamza — written but silent when joined to the preceding word.",
-    group: "silent",
-  },
-  laam_shamsiyah: {
-    label: "Lām shamsiyyah",
-    hint: "Silent lām; the following letter doubles.",
-    group: "silent",
-  },
-  slnt: {
-    label: "Silent",
-    hint: "Written but not pronounced during recitation.",
-    group: "silent",
-  },
+/**
+ * Which section each rule belongs to.
+ *
+ * `tafkhim` is a section with no rule in it: the quran.com spans carry no
+ * tafkhim class, but the colour is part of the Tarteel system and a reader
+ * meets it in the text, so the legend shows it as a standalone swatch rather
+ * than leaving a colour unexplained.
+ */
+const RULE_GROUP: Record<TajweedRule, TajweedGroup> = {
+  madda_normal: "madd",
+  madda_permissible: "madd",
+  madda_obligatory: "madd",
+  madda_necessary: "madd",
+  ghunnah: "ghunnah",
+  qalaqah: "qalqalah",
+  ikhafa: "other",
+  ikhafa_shafawi: "other",
+  idgham_ghunnah: "other",
+  idgham_wo_ghunnah: "other",
+  idgham_shafawi: "other",
+  idgham_mutajanisayn: "other",
+  idgham_mutaqaribayn: "other",
+  iqlab: "other",
+  ham_wasl: "silent",
+  laam_shamsiyah: "silent",
+  slnt: "silent",
 };
 
 /** Rules in the order the legend lists them, grouped. */
 export function rulesByGroup(group: TajweedGroup): TajweedRule[] {
-  return TAJWEED_RULES.filter((rule) => TAJWEED_INFO[rule].group === group);
+  return TAJWEED_RULES.filter((rule) => RULE_GROUP[rule] === group);
 }
 
 /**

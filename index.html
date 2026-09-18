@@ -5,8 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Quran Studio</title>
     <script>
-      // Apply the persisted theme before first paint to avoid a flash.
+      // Apply the persisted theme and language before first paint to avoid a
+      // flash. The language matters here for the same reason the theme does:
+      // `lang` drives font selection, so setting it only once React has
+      // mounted means the first paint of a Russian interface picks its fonts
+      // as if it were English.
       (function () {
+        try {
+          var lang = localStorage.getItem("qs.language");
+          if (lang === "ru" || lang === "en") document.documentElement.lang = lang;
+          else if (lang === "uz") document.documentElement.lang = "uz-Latn";
+        } catch (e) {
+          /* localStorage unavailable — the provider sets it on mount */
+        }
         try {
           var stored = localStorage.getItem("qs.theme");
           var theme =

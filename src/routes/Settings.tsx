@@ -3,18 +3,15 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Check, KeyRound, LogOut, Monitor, Moon, Sun } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTheme } from "@/providers/ThemeProvider";
-import { useContentLanguage, useProfile, useUiPrefs, useUpdateProfile } from "@/hooks/useProfile";
+import { useProfile, useUiPrefs, useUpdateProfile } from "@/hooks/useProfile";
 import { useActiveReciter, useReciters } from "@/hooks/useRecitation";
 import { useTafsirEditions } from "@/hooks/useQuranData";
 import { useDownloadedSurahs } from "@/hooks/useAudioDownloads";
 import { describeAiError, getAiStatus, isTauri, setAiApiKey } from "@/lib/ai";
-import {
-  CONTENT_LANGUAGES,
-  contentLanguageInfo,
-  DEFAULT_CONTENT_LANGUAGE,
-  editionMatchesLanguage,
-  isContentLanguage,
-} from "@/lib/language";
+import { editionMatchesLanguage } from "@/lib/language";
+import { DEFAULT_LANGUAGE, isLanguage, LANGUAGES, languageInfo } from "@/lib/i18n";
+import { useLanguage, useT, type TFunction } from "@/providers/I18nProvider";
+import type { ReaderMode } from "@/lib/types";
 import { Page } from "@/components/layout/AppShell";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,11 +20,12 @@ import { SelectField, Toggle } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { cn, detectTimezone } from "@/lib/utils";
 
-const THEMES = [
-  { value: "light", label: "Light", icon: <Sun className="size-3.5" /> },
-  { value: "dark", label: "Dark", icon: <Moon className="size-3.5" /> },
-  { value: "system", label: "System", icon: <Monitor className="size-3.5" /> },
-] as const;
+const themes = (t: TFunction) =>
+  [
+    { value: "light", label: t("settings.themeLight"), icon: <Sun className="size-3.5" /> },
+    { value: "dark", label: t("settings.themeDark"), icon: <Moon className="size-3.5" /> },
+    { value: "system", label: t("settings.themeSystem"), icon: <Monitor className="size-3.5" /> },
+  ] as const;
 
 /** A short list covers the common cases; anything else can be typed in. */
 const TIMEZONES = [
@@ -46,13 +44,14 @@ const TIMEZONES = [
 ];
 
 export function Settings() {
+  const t = useT();
   const { user, signOut } = useAuth();
   const { data: reciters } = useReciters();
   const { data: downloaded } = useDownloadedSurahs();
   const { theme, setTheme } = useTheme();
   const { data: profile } = useProfile();
   const prefs = useUiPrefs();
-  const language = useContentLanguage();
+  const language = useLanguage();
   const { data: editions } = useTafsirEditions();
   const updateProfile = useUpdateProfile();
   // Resolved rather than read straight from prefs, so the picker shows the
@@ -75,15 +74,15 @@ export function Settings() {
       void aiStatus.refetch();
       toast(
         status.model
-          ? `Connected to Ollama Cloud using ${status.model}.`
-          : status.error ?? "Key saved.",
+          ? t("settings.connectedToast", { model: status.model })
+          : (status.error ?? t("settings.keySaved")),
         status.model ? "success" : "error",
       );
     },
     // A rejected `invoke` throws the serialized Rust error as a plain string,
     // not an Error, so an `instanceof` check would discard every backend
     // message and report a useless generic failure.
-    onError: (error) => toast(describeAiError(error), "error"),
+    onError: (error) => toast(describeAiError(error, t), "error"),
   });
 
   // Offer to correct a profile timezone that no longer matches the machine.
@@ -98,13 +97,16 @@ export function Settings() {
     .map((tz) => ({ value: tz, label: tz }));
 
   return (
-    <Page title="Settings" description="Appearance, reading layout, account, and AI.">
+    <Page title={t("settings.title")} description={t("settings.description")}>
       <div className="space-y-4">
         <Card>
-          <CardHeader title="Appearance" description="Theme applies immediately." />
+          <CardHeader
+            title={t("settings.appearance")}
+            description={t("settings.appearanceDescription")}
+          />
           <CardBody>
             <div className="flex gap-1 rounded-xl bg-surface-2 p-1">
-              {THEMES.map((option) => (
+              {themes(t).map((option) => (
                 <button
                   key={option.value}
                   onClick={() => {
@@ -129,23 +131,25 @@ export function Settings() {
 
         <Card>
           <CardHeader
-            title="Language"
-            description="The language of the scripture material. The interface stays in English."
+            title={t("settings.language")}
+            description={t("settings.languageDescription")}
           />
           <CardBody className="space-y-4">
             <div className="flex items-center justify-between gap-6">
               <div>
-                <div className="text-[0.8125rem] font-medium text-fg">Translation and study</div>
+                <div className="text-[0.8125rem] font-medium text-fg">
+                  {t("settings.languageRow")}
+                </div>
                 <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
-                  Sets the verse translation, the word-by-word glosses, the tafsir edition, and the
-                  language the AI writes its explanations in. Currently reading{" "}
-                  {contentLanguageInfo(language).translator}.
+                  {t("settings.languageRowDescription", {
+                    translator: languageInfo(language).translator,
+                  })}
                 </p>
               </div>
               <SelectField
                 value={language}
                 onValueChange={(value) => {
-                  const next = isContentLanguage(value) ? value : DEFAULT_CONTENT_LANGUAGE;
+                  const next = isLanguage(value) ? value : DEFAULT_LANGUAGE;
                   // The tafsir edition moves with the language rather than
                   // being left behind on the previous one, which would leave a
                   // reader who switched to Russian with a Russian translation
@@ -155,49 +159,59 @@ export function Settings() {
                   const edition = editions?.find((e) => editionMatchesLanguage(e, next))?.slug;
                   updateProfile.mutate({
                     ui_prefs: {
-                      contentLanguage: next,
+                      language: next,
                       ...(edition ? { tafsirEdition: edition } : {}),
                     },
                   });
                 }}
-                options={CONTENT_LANGUAGES.map((l) => ({
-                  value: l.code,
-                  label: l.code === "en" ? l.label : `${l.label} · ${l.nativeLabel}`,
-                }))}
+                // Native names only. Someone looking for their own language
+                // recognises it written in itself; an English gloss beside it
+                // helps nobody who needs the row.
+                options={LANGUAGES.map((l) => ({ value: l.code, label: l.nativeLabel }))}
                 className="w-44"
               />
             </div>
 
+            {/* Each language says what it does not yet have, rather than the
+                picker pretending all three are equally complete. */}
             {language === "ru" ? (
               <p className="border-t border-border pt-4 text-[0.75rem] text-fg-subtle">
-                About 1.5% of words have no Russian gloss in the upstream corpus and show the
-                English one instead.
+                {t("settings.russianGlossNote")}
+              </p>
+            ) : language === "uz" ? (
+              <p className="border-t border-border pt-4 text-[0.75rem] text-fg-subtle">
+                {t("settings.uzbekDataNote")}
               </p>
             ) : null}
           </CardBody>
         </Card>
 
         <Card>
-          <CardHeader title="Reader" description="How the lesson view is laid out." />
+          <CardHeader
+            title={t("settings.reader")}
+            description={t("settings.readerDescription")}
+          />
           <CardBody className="space-y-4">
             <div className="flex items-center justify-between gap-6">
               <div>
-                <div className="text-[0.8125rem] font-medium text-fg">Default layout</div>
+                <div className="text-[0.8125rem] font-medium text-fg">
+                  {t("settings.defaultLayout")}
+                </div>
                 <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
-                  Study shows translation and word-by-word. Mushaf reproduces the printed Madani
-                  page, for revising from the layout you memorised.
+                  {t("settings.defaultLayoutDescription")}
                 </p>
               </div>
               <SelectField
                 value={prefs.readerMode}
                 onValueChange={(value) =>
                   updateProfile.mutate({
-                    ui_prefs: { readerMode: value as "study" | "mushaf" },
+                    ui_prefs: { readerMode: value as ReaderMode },
                   })
                 }
                 options={[
-                  { value: "study", label: "Study" },
-                  { value: "mushaf", label: "Mushaf" },
+                  { value: "study", label: t("settings.modeStudy") },
+                  { value: "surah", label: t("settings.modeSurah") },
+                  { value: "mushaf", label: t("settings.modeMushaf") },
                 ]}
                 className="w-32"
               />
@@ -205,9 +219,11 @@ export function Settings() {
 
             <div className="flex items-center justify-between gap-6 border-t border-border pt-4">
               <div>
-                <div className="text-[0.8125rem] font-medium text-fg">Tafsir panel side</div>
+                <div className="text-[0.8125rem] font-medium text-fg">
+                  {t("settings.tafsirSide")}
+                </div>
                 <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
-                  Which side of the reader the commentary sits on.
+                  {t("settings.tafsirSideDescription")}
                 </p>
               </div>
               <SelectField
@@ -218,8 +234,8 @@ export function Settings() {
                   })
                 }
                 options={[
-                  { value: "left", label: "Left" },
-                  { value: "right", label: "Right" },
+                  { value: "left", label: t("settings.left") },
+                  { value: "right", label: t("settings.right") },
                 ]}
                 className="w-32"
               />
@@ -227,10 +243,9 @@ export function Settings() {
 
             <div className="flex items-center justify-between gap-6 border-t border-border pt-4">
               <div>
-                <div className="text-[0.8125rem] font-medium text-fg">Tajweed colouring</div>
+                <div className="text-[0.8125rem] font-medium text-fg">{t("settings.tajweed")}</div>
                 <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
-                  Colour the Arabic by recitation rule, with a legend in the reader. Colour only —
-                  the text itself is unchanged.
+                  {t("settings.tajweedDescription")}
                 </p>
               </div>
               <Toggle
@@ -238,17 +253,17 @@ export function Settings() {
                 onCheckedChange={(checked) =>
                   updateProfile.mutate({ ui_prefs: { tajweed: checked } })
                 }
-                label="Tajweed colouring"
+                label={t("settings.tajweed")}
               />
             </div>
 
             <div className="flex items-center justify-between gap-6 border-t border-border pt-4">
               <div>
                 <div className="text-[0.8125rem] font-medium text-fg">
-                  Expand word-by-word by default
+                  {t("settings.expandWords")}
                 </div>
                 <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
-                  Show every word breakdown as soon as a ruku opens.
+                  {t("settings.expandWordsDescription")}
                 </p>
               </div>
               <Toggle
@@ -256,7 +271,7 @@ export function Settings() {
                 onCheckedChange={(checked) =>
                   updateProfile.mutate({ ui_prefs: { wordsExpanded: checked } })
                 }
-                label="Expand word-by-word by default"
+                label={t("settings.expandWords")}
               />
             </div>
           </CardBody>
@@ -264,18 +279,15 @@ export function Settings() {
 
         <Card>
           <CardHeader
-            title="Recitation"
-            description="Which reciter plays, and how closely the reader follows along."
+            title={t("settings.recitation")}
+            description={t("settings.recitationDescription")}
           />
           <CardBody className="space-y-4">
             <div className="flex items-center justify-between gap-6">
               <div className="min-w-0">
-                <div className="text-[0.8125rem] font-medium text-fg">Reciter</div>
+                <div className="text-[0.8125rem] font-medium text-fg">{t("settings.reciter")}</div>
                 <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
-                  {reciters?.length
-                    ? "Each recitation is one continuous file per surah, so phrasing across " +
-                      "ayah boundaries is the reciter's own."
-                    : "No recitations imported yet — run `pnpm seed:audio`."}
+                  {reciters?.length ? t("settings.reciterDescription") : t("settings.noReciters")}
                 </p>
               </div>
               {reciters?.length ? (
@@ -288,7 +300,7 @@ export function Settings() {
                     value: String(r.id),
                     label: r.style ? `${r.name} · ${r.style}` : r.name,
                   }))}
-                  placeholder="Reciter"
+                  placeholder={t("settings.reciter")}
                   className="w-56 shrink-0"
                 />
               ) : null}
@@ -296,10 +308,11 @@ export function Settings() {
 
             <div className="flex items-center justify-between gap-6 border-t border-border pt-4">
               <div>
-                <div className="text-[0.8125rem] font-medium text-fg">Follow the recitation</div>
+                <div className="text-[0.8125rem] font-medium text-fg">
+                  {t("settings.followRecitation")}
+                </div>
                 <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
-                  Scroll to the ayah being recited as it plays. Turn off to read one place while
-                  listening to another.
+                  {t("settings.followRecitationDescription")}
                 </p>
               </div>
               <Toggle
@@ -307,15 +320,17 @@ export function Settings() {
                 onCheckedChange={(checked) =>
                   updateProfile.mutate({ ui_prefs: { followRecitation: checked } })
                 }
-                label="Follow the recitation"
+                label={t("settings.followRecitation")}
               />
             </div>
 
             <div className="flex items-center justify-between gap-6 border-t border-border pt-4">
               <div>
-                <div className="text-[0.8125rem] font-medium text-fg">Highlight words</div>
+                <div className="text-[0.8125rem] font-medium text-fg">
+                  {t("settings.highlightWords")}
+                </div>
                 <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
-                  Light up each word in the word-by-word row as it is recited.
+                  {t("settings.highlightWordsDescription")}
                 </p>
               </div>
               <Toggle
@@ -323,17 +338,15 @@ export function Settings() {
                 onCheckedChange={(checked) =>
                   updateProfile.mutate({ ui_prefs: { highlightWords: checked } })
                 }
-                label="Highlight words"
+                label={t("settings.highlightWords")}
               />
             </div>
 
             {isTauri() ? (
               <div className="border-t border-border pt-4 text-[0.75rem] text-fg-subtle">
                 {downloaded?.size
-                  ? `${downloaded.size} ${
-                      downloaded.size === 1 ? "surah is" : "surahs are"
-                    } saved for offline listening. Remove one from the player bar in the reader.`
-                  : "Nothing saved for offline yet — use the download button in the reader's player bar."}
+                  ? t("settings.downloadedCount", { count: downloaded.size })
+                  : t("settings.nothingDownloaded")}
               </div>
             ) : null}
           </CardBody>
@@ -341,8 +354,8 @@ export function Settings() {
 
         <Card>
           <CardHeader
-            title="Timezone"
-            description="Sets the day boundary used for reading streaks."
+            title={t("settings.timezone")}
+            description={t("settings.timezoneDescription")}
           />
           <CardBody className="space-y-3">
             <div className="flex items-center gap-3">
@@ -358,13 +371,13 @@ export function Settings() {
               {profile?.timezone === timezone ? (
                 <span className="flex items-center gap-1 text-[0.75rem] text-fg-subtle">
                   <Check className="size-3.5 text-accent" aria-hidden />
-                  Saved
+                  {t("common.saved")}
                 </span>
               ) : null}
             </div>
             {profile && profile.timezone !== detected ? (
               <p className="text-[0.75rem] text-fg-subtle">
-                This machine reports <strong className="text-fg-muted">{detected}</strong>.{" "}
+                {t("settings.machineReports", { timezone: detected })}{" "}
                 <button
                   onClick={() => {
                     setTimezone(detected);
@@ -372,7 +385,7 @@ export function Settings() {
                   }}
                   className="text-accent underline-offset-2 hover:underline"
                 >
-                  Use it
+                  {t("settings.useIt")}
                 </button>
               </p>
             ) : null}
@@ -381,8 +394,8 @@ export function Settings() {
 
         <Card>
           <CardHeader
-            title="Ollama Cloud"
-            description="Powers word explanations and ruku summaries. The key stays in the desktop backend and never reaches the interface."
+            title={t("settings.ollama")}
+            description={t("settings.ollamaDescription")}
           />
           <CardBody className="space-y-3">
             <div
@@ -395,10 +408,10 @@ export function Settings() {
             >
               <KeyRound className="size-3.5 shrink-0" aria-hidden />
               {aiStatus.isLoading
-                ? "Checking…"
+                ? t("common.checking")
                 : aiStatus.data?.model
-                  ? `Connected · ${aiStatus.data.model}`
-                  : (aiStatus.data?.error ?? "Not configured")}
+                  ? t("settings.connected", { model: aiStatus.data.model })
+                  : (aiStatus.data?.error ?? t("settings.notConfigured"))}
             </div>
 
             {isTauri() ? (
@@ -407,7 +420,7 @@ export function Settings() {
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="Paste your Ollama Cloud API key"
+                  placeholder={t("settings.apiKeyPlaceholder")}
                   autoComplete="off"
                 />
                 <Button
@@ -416,31 +429,29 @@ export function Settings() {
                   loading={saveKey.isPending}
                   onClick={() => saveKey.mutate()}
                 >
-                  Save
+                  {t("common.save")}
                 </Button>
               </div>
             ) : (
               <p className="text-[0.75rem] leading-relaxed text-fg-subtle">
-                Run the desktop app (<code className="text-fg-muted">pnpm app:dev</code>) to
-                configure the key, or set <code className="text-fg-muted">OLLAMA_API_KEY</code>{" "}
-                in your <code className="text-fg-muted">.env</code>.
+                {t("settings.keyNeedsDesktop")}
               </p>
             )}
           </CardBody>
         </Card>
 
         <Card>
-          <CardHeader title="Account" />
+          <CardHeader title={t("settings.account")} />
           <CardBody className="flex items-center justify-between gap-6">
             <div className="min-w-0">
               <div className="truncate text-[0.8125rem] font-medium text-fg">{user?.email}</div>
               <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
-                All your progress is scoped to this account.
+                {t("settings.accountDescription")}
               </p>
             </div>
             <Button variant="outline" onClick={() => void signOut()}>
               <LogOut className="size-4" aria-hidden />
-              Sign out
+              {t("settings.signOut")}
             </Button>
           </CardBody>
         </Card>

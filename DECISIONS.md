@@ -563,13 +563,15 @@ page. Any validation query that spans a table now pages explicitly.
 
 ## Russian mode
 
-**Content language, not interface language.** The setting picks the language of
-the *scripture material* — verse translation, word-by-word glosses, tafsir
+**Content language, not interface language.** ~~The setting picks the language
+of the *scripture material* — verse translation, word-by-word glosses, tafsir
 edition, AI explanations, quiz answers — and leaves the interface chrome in
 English. Wanting the Quran in Russian is not the same request as wanting the
 settings screen in Russian, and a single switch doing both would be much harder
-to back out of. `src/lib/language.ts` owns every read that used to go straight
-to `translation_en` or `gloss_en`.
+to back out of.~~ **Reversed — see "Localization" below.** The reasoning held
+up only while the alternative was hypothetical: in practice nobody asked for a
+Russian Quran inside an English app. `src/lib/language.ts` still owns every
+read that used to go straight to `translation_en` or `gloss_en`.
 
 **Sibling columns, not a translations table.** `translation_ru` and `gloss_ru`
 sit next to their English counterparts. A `quran_translations` table is the
@@ -765,12 +767,80 @@ already legible there are left at their printed value.
 
 ---
 
+## Localization
+
+**One language, not two.** The picker sets the interface, the verse
+translation, the word-by-word glosses, the tafsir edition and the language the
+AI writes in — all of it, from one row in Settings. That reverses the Russian
+mode decision above, which kept the interface English on the theory that the
+two are separate requests. They are not, often enough to matter: a reader who
+picks Russian wants a Russian app, and making them find a second switch to get
+one served the rare case at the common one's expense. Two settings also have to
+be explained; one does not.
+
+**English, Russian, Uzbek.** Uzbek in the Latin alphabet, which is what the
+country writes in today. The bundled Al-Mukhtasar tafsir is Cyrillic, because
+that is how it was published, so the two scripts do sit side by side in the
+reader — that is a fact about the edition, not something the interface should
+paper over by picking the minority script for everything.
+
+**A typed dictionary, not an i18n library.** The app needs interpolation and
+plurals; both are a few lines over `Intl.PluralRules`. What a library would not
+have given is the thing that actually matters here — `locales/en.ts` defines
+the key set and every other locale is typed against it, so a missing string is
+a compile error rather than a blank label somebody finds in production. Plural
+keys stay plural across locales for the same reason: Russian has three counted
+forms and the type will not let one of them be dropped.
+
+**Whole sentences in the dictionary.** A string that reads as one sentence is
+stored as one, with `{placeholders}`, rather than assembled from fragments in
+JSX. Fragments carry no grammar, and the grammar is exactly what changes:
+Russian needs the case, Uzbek needs the suffix, and the word order moves in
+both. Where a sentence has an emphasised span inside it, the component splits
+the translated string on its own placeholder (`Emphasised`, in `Dashboard`)
+rather than being handed three pieces to reassemble.
+
+**The language is mirrored into `localStorage`.** The profile is the source of
+truth, but it is behind auth and a round trip: the sign-in screen has no
+profile at all, and after a reload the first paint happens before the query
+resolves. Without the mirror the app opens in English for every Russian and
+Uzbek reader and then swaps, which reads as a bug rather than as a preference
+being applied. Same mechanism as the theme, for the same reason.
+
+**A language ships when the interface and the AI can speak it, not when every
+corpus has caught up.** Uzbek has its interface strings, its AI explanations
+and its tafsir today; the verse translation lands with
+`pnpm seed:translation-uz` and the word-by-word glosses may never land, because
+no Uzbek word-by-word corpus exists upstream to import. Each falls back to
+English per item, Settings says so plainly under the picker, and `seed:verify`
+reports an unimported Uzbek translation as a note rather than a failure. The
+alternative — holding the language back until it is complete — trades an app
+that is Uzbek in most places for one that is Uzbek in none.
+
+**No `gloss_uz` column.** There is nothing upstream to fill it with, and a
+column that is null for all 77,429 rows is a promise the data cannot keep.
+Uzbek reads the English glosses, and `lib/language.ts` says so.
+
+**The Uzbek prompt carries writing notes; English and Russian do not.**
+`language_guidance` in `src-tauri/src/ollama.rs` appends three things to the
+system prompt for Uzbek: write Latin, not Cyrillic; use the settled Arabic-derived
+religious vocabulary (Alloh, oyat, sura, iymon, taqvo) rather than calquing it
+through Russian or English; and avoid Russian loanwords where an Uzbek word
+exists. English and Russian need none of this — both have a large body of
+Quranic writing in any training corpus, so asking for the language already gets
+the register. Uzbek has far less, and the failure mode is a fluent paragraph in
+the wrong register or the wrong alphabet.
+
+---
+
 ## Deliberately not built (v1)
 
 - **OAuth providers.** Email/password only; adding providers is Supabase
   configuration, not app code.
-- **Interface translation.** The content language covers scripture material;
-  buttons, headings and settings labels stay English. See "Russian mode".
+- **Right-to-left interface.** The three interface languages are all
+  left-to-right. Arabic and the tafsir already set `dir`/`lang` where they
+  need to; mirroring the whole layout is a separate piece of work and would be
+  the first thing an Arabic or Urdu interface needs.
 - **Offline write queue.** Reads are cached aggressively by TanStack Query, but
   writes require connectivity. Unflushed reading time is retained in memory and
   retried rather than silently dropped.

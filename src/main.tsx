@@ -5,6 +5,7 @@ import { HashRouter } from "react-router-dom";
 import App from "./App";
 import { AuthProvider } from "./providers/AuthProvider";
 import { ThemeProvider } from "./providers/ThemeProvider";
+import { I18nProvider } from "./providers/I18nProvider";
 import { ToastProvider } from "./components/ui/toast";
 import "./index.css";
 
@@ -25,12 +26,17 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <ThemeProvider>
-          <ToastProvider>
-            {/* Hash routing avoids deep-link 404s under Tauri's asset protocol. */}
-            <HashRouter>
-              <App />
-            </HashRouter>
-          </ToastProvider>
+          {/* Inside AuthProvider and the query client, because the chosen
+              language lives in the profile; outside everything that renders
+              a string, because all of them ask it for one. */}
+          <I18nProvider>
+            <ToastProvider>
+              {/* Hash routing avoids deep-link 404s under Tauri's asset protocol. */}
+              <HashRouter>
+                <App />
+              </HashRouter>
+            </ToastProvider>
+          </I18nProvider>
         </ThemeProvider>
       </AuthProvider>
     </QueryClientProvider>

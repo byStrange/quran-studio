@@ -9,6 +9,7 @@
 import type { ReactNode } from "react";
 import { Settings2 } from "lucide-react";
 import type { QuizScope } from "@/lib/types";
+import { useT, type TFunction } from "@/providers/I18nProvider";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/primitives";
@@ -34,17 +35,18 @@ export function RoundHeader({
   answered: boolean;
   onSetup: () => void;
 }) {
+  const t = useT();
   return (
     <div className="mb-5 flex items-center justify-between gap-4">
       <div className="flex flex-1 items-center gap-4">
         <ProgressBar value={((index + (answered ? 1 : 0)) / Math.max(1, total)) * 100} />
         <span className="shrink-0 text-[0.8125rem] tabular-nums text-fg-subtle">
-          {index + 1} / {total}
+          {t("quiz.progress", { index: index + 1, total })}
         </span>
       </div>
       <Button variant="ghost" size="sm" onClick={onSetup}>
         <Settings2 className="size-4 mr-1.5" />
-        Setup
+        {t("quiz.setup")}
       </Button>
     </div>
   );
@@ -57,22 +59,30 @@ export function RoundHeader({
  * because it is: an answer the reader claimed and then conceded is the round
  * doing exactly what the confirm step is for. Hiding it would quietly teach
  * them to claim everything.
+ *
+ * The three verdicts arrive already translated rather than as a stem this
+ * composes with a per-round note. Composing them meant lower-casing the note's
+ * first letter to graft it onto "Solid progress — ", which is an English
+ * sentence habit: Russian and Uzbek want their own whole sentence, and a round
+ * type's verdict is three strings a translator can read, not a joint.
  */
 export function RoundSummary({
   correct,
   answered,
   revised,
-  note,
+  verdicts,
   children,
   actions,
 }: {
   correct: number;
   answered: number;
   revised: number;
-  note: string;
+  /** Already translated: the round type supplies its own three sentences. */
+  verdicts: { strong: string; solid: string; weak: string };
   children?: ReactNode;
   actions: ReactNode;
 }) {
+  const t = useT();
   const accuracy = answered > 0 ? (correct / answered) * 100 : 0;
 
   return (
@@ -84,16 +94,11 @@ export function RoundSummary({
             <span className="text-fg-subtle">/{answered}</span>
           </div>
           <p className="mt-2 text-sm text-fg-muted">
-            {accuracy >= 80
-              ? `Strong round. ${note}`
-              : accuracy >= 50
-                ? `Solid progress — ${note.charAt(0).toLowerCase()}${note.slice(1)}`
-                : `Worth another pass. ${note}`}
+            {accuracy >= 80 ? verdicts.strong : accuracy >= 50 ? verdicts.solid : verdicts.weak}
           </p>
           {revised > 0 ? (
             <p className="mt-2 text-[0.75rem] text-fg-subtle">
-              You changed your mind on {revised} {revised === 1 ? "answer" : "answers"} after
-              seeing it — that is the check working.
+              {t("quiz.revised", { count: revised })}
             </p>
           ) : null}
         </div>
@@ -108,12 +113,13 @@ export function RoundSummary({
 
 /** Where the scope picker's choice is spelled out for a round in progress. */
 export function scopeLabel(
+  t: TFunction,
   config: Pick<RoundConfig, "scope" | "surah" | "ruku">,
   surahName: string | undefined,
 ): string {
-  if (config.scope === "ruku") return `Ruku ${config.ruku ?? ""}`.trim();
-  if (config.scope === "surah") return surahName ?? "Surah";
-  return "All memorized ayahs";
+  if (config.scope === "ruku") return t("browse.rukuLabel", { number: config.ruku ?? "" }).trim();
+  if (config.scope === "surah") return surahName ?? t("quiz.surah");
+  return t("quiz.allMemorized");
 }
 
 /**

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BookOpen, Check, GraduationCap } from "lucide-react";
-import { useContentLanguage, useProfile, useUiPrefs } from "@/hooks/useProfile";
+import { useProfile, useUiPrefs } from "@/hooks/useProfile";
+import { useLanguage, useT } from "@/providers/I18nProvider";
 import { useMarkTafsirEntryRead, usePendingTafsir } from "@/hooks/useProgress";
 import { verseTranslation } from "@/lib/language";
 import { toParagraphs, verseKey } from "@/lib/utils";
@@ -31,10 +32,11 @@ let promptedThisLaunch = false;
  * without leaving what they were doing, mark it read, and carry on.
  */
 export function TafsirNudge() {
+  const t = useT();
   const navigate = useNavigate();
   const { data: profile } = useProfile();
   const prefs = useUiPrefs();
-  const language = useContentLanguage();
+  const language = useLanguage();
   // Held until the profile lands: the edition is a stored preference, so
   // asking before it loads would offer the default edition's text instead of
   // the reader's own.
@@ -73,20 +75,20 @@ export function TafsirNudge() {
       open={open}
       onOpenChange={(next) => setOpen(next)}
       size="lg"
-      title="A tafsir you haven't read"
-      description={`You've memorized ${reference}. Here's what the commentary says about it.`}
+      title={t("nudge.title")}
+      description={t("nudge.description", { reference })}
       footer={
         <>
           <Button variant="ghost" onClick={close}>
-            Not now
+            {t("common.notNow")}
           </Button>
           <Button variant="outline" onClick={openInReader}>
             <BookOpen className="size-4" aria-hidden />
-            Open in reader
+            {t("nudge.openInReader")}
           </Button>
           <Button variant="primary" onClick={markAsRead} disabled={markRead.isPending}>
             <Check className="size-4" aria-hidden />
-            Mark as read
+            {t("nudge.markAsRead")}
           </Button>
         </>
       }
@@ -97,7 +99,11 @@ export function TafsirNudge() {
         </p>
         <p className="mt-3 text-[0.9375rem] leading-relaxed text-fg-muted">
           {verseTranslation(
-            { translation_en: row.translation_en, translation_ru: row.translation_ru },
+            {
+              translation_en: row.translation_en,
+              translation_ru: row.translation_ru,
+              translation_uz: row.translation_uz,
+            },
             language,
           )}
         </p>

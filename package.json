@@ -21,6 +21,7 @@
     "tafsir:uz:review": "tsx scripts/tafsir-uz/review.ts",
     "tafsir:uz:import": "tsx scripts/tafsir-uz/import.ts",
     "seed:translation-ru": "tsx scripts/seed/translation-ru.ts",
+    "seed:translation-uz": "tsx scripts/seed/translation-uz.ts",
     "seed:wbw-ru": "tsx scripts/seed/wbw-russian.ts",
     "seed:mushaf": "tsx scripts/seed/mushaf-import.ts",
     "seed:audio": "tsx scripts/seed/audio-import.ts",

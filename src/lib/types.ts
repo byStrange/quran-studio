@@ -1,5 +1,5 @@
 import type { Database } from "./database.types";
-import type { ContentLanguage } from "./language";
+import type { Language } from "./i18n";
 import type { TajweedSpan } from "./tajweed";
 
 type Tables = Database["public"]["Tables"];
@@ -49,6 +49,13 @@ export interface RecitationTiming {
  */
 export type RepeatMode = "off" | "ayah" | "range" | "unmemorized";
 
+/**
+ * Which of the three readers a ruku opens in. Stored as a preference rather
+ * than chosen per visit: it is a way of reading, not a per-lesson decision, so
+ * the toggle in the reader's header sticks until it is turned off again.
+ */
+export type ReaderMode = "study" | "surah" | "mushaf";
+
 /** How much of the memorized Quran one quiz round draws from. */
 export type QuizScope = Database["public"]["Enums"]["quiz_scope"];
 
@@ -59,7 +66,12 @@ export type QuizScope = Database["public"]["Enums"]["quiz_scope"];
  */
 export type VerseContext = Pick<
   Verse,
-  "surah_number" | "ayah_number" | "arabic_text" | "translation_en" | "translation_ru"
+  | "surah_number"
+  | "ayah_number"
+  | "arabic_text"
+  | "translation_en"
+  | "translation_ru"
+  | "translation_uz"
 >;
 
 /**
@@ -77,13 +89,15 @@ export interface VerseWithWords extends Omit<Verse, "tajweed"> {
 /** UI preferences persisted in `profiles.ui_prefs`. */
 export interface UiPrefs {
   /**
-   * Which language the scripture material is shown in — translation,
+   * The one language the app speaks: interface chrome, verse translation,
    * word-by-word gloss, tafsir edition, and AI explanations.
    *
-   * Interface chrome is unaffected and stays English; see `lib/language.ts`
-   * for why the two are kept apart.
+   * Replaces the earlier `contentLanguage`, which set the scripture alone
+   * while the interface stayed English. `useProfileLanguage` still reads that
+   * older key so a profile written before the split was undone keeps its
+   * choice; nothing writes it any more.
    */
-  contentLanguage: ContentLanguage;
+  language: Language;
   /** Which side of the reader the tafsir panel occupies. */
   tafsirSide: "left" | "right";
   /**
@@ -108,12 +122,14 @@ export interface UiPrefs {
    * Which reader opening a ruku lands in.
    *
    * "study" is the ruku reader: translation, word-by-word, tafsir alongside.
-   * "mushaf" is the printed Madani page, which is what someone revising from
-   * memory wants — the same words in the same places as the paper copy they
-   * memorised from. Study is the default because it is the one that teaches;
-   * the mushaf is a page turn away either way.
+   * "surah" is the same reader with the whole surah in one scroll, for someone
+   * reading rather than drilling a lesson. "mushaf" is the printed Madani
+   * page, which is what someone revising from memory wants — the same words in
+   * the same places as the paper copy they memorised from. Study is the
+   * default because it is the one that teaches; the other two are one toggle
+   * away in the reader's header either way.
    */
-  readerMode: "study" | "mushaf";
+  readerMode: ReaderMode;
   /**
    * Which reciter to play, as a `reciters.id`.
    *
@@ -138,7 +154,7 @@ export interface UiPrefs {
 export const DEFAULT_TAFSIR_EDITION = "en-tafisr-ibn-kathir";
 
 export const DEFAULT_UI_PREFS: UiPrefs = {
-  contentLanguage: "en",
+  language: "en",
   tafsirSide: "right",
   tafsirEdition: DEFAULT_TAFSIR_EDITION,
   theme: "system",

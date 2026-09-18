@@ -11,6 +11,7 @@ import { Card, CardBody, CardHeader, StatTile } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/primitives";
 import { LoadingBlock } from "@/components/ui/feedback";
 import { cn, formatPercent } from "@/lib/utils";
+import { useT } from "@/providers/I18nProvider";
 
 interface SurahProgress {
   surah_number: number;
@@ -20,13 +21,14 @@ interface SurahProgress {
 
 type Filter = "all" | "started" | "completed";
 
-const FILTERS: Array<{ value: Filter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "started", label: "In progress" },
-  { value: "completed", label: "Completed" },
+const FILTERS: Array<{ value: Filter; labelKey: "memorization.filterAll" | "memorization.filterStarted" | "memorization.filterCompleted" }> = [
+  { value: "all", labelKey: "memorization.filterAll" },
+  { value: "started", labelKey: "memorization.filterStarted" },
+  { value: "completed", labelKey: "memorization.filterCompleted" },
 ];
 
 export function Memorization() {
+  const t = useT();
   const { user } = useAuth();
   const { data: surahs } = useSurahs();
   const { data: rukus } = useRukus();
@@ -77,39 +79,39 @@ export function Memorization() {
 
   return (
     <Page
-      title="Memorization"
-      description="Ayahs you've marked as memorized, surah by surah."
+      title={t("memorization.title")}
+      description={t("memorization.description")}
       wide
     >
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile
-          label="Ayahs memorized"
+          label={t("memorization.ayahsMemorized")}
           value={overview?.verses_memorized ?? 0}
-          hint={`of ${overview?.total_verses ?? 6236}`}
+          hint={t("memorization.ofTotal", { total: overview?.total_verses ?? 6236 })}
           icon={<BookMarked className="size-4" />}
           accent={(overview?.verses_memorized ?? 0) > 0}
         />
         <StatTile
-          label="Of the Quran"
+          label={t("memorization.ofTheQuran")}
           value={formatPercent(percentTotal, 2)}
-          hint="Overall progress"
+          hint={t("memorization.overallProgress")}
         />
         <StatTile
-          label="Surahs completed"
+          label={t("memorization.surahsCompleted")}
           value={overview?.surahs_completed ?? 0}
-          hint="Every ayah marked"
+          hint={t("memorization.everyAyahMarked")}
           icon={<CheckCircle2 className="size-4" />}
         />
         <StatTile
-          label="Surahs started"
+          label={t("memorization.surahsStarted")}
           value={rows.filter((r) => r.memorized > 0).length}
-          hint="At least one ayah"
+          hint={t("memorization.atLeastOne")}
         />
       </div>
 
       <Card className="mt-6">
         <CardHeader
-          title="By surah"
+          title={t("memorization.bySurah")}
           action={
             <div className="flex gap-1 rounded-lg bg-surface-2 p-1">
               {FILTERS.map((f) => (
@@ -123,7 +125,7 @@ export function Memorization() {
                       : "text-fg-subtle hover:text-fg",
                   )}
                 >
-                  {f.label}
+                  {t(f.labelKey)}
                 </button>
               ))}
             </div>
@@ -134,7 +136,7 @@ export function Memorization() {
             <LoadingBlock />
           ) : rows.length === 0 ? (
             <p className="py-8 text-center text-sm text-fg-subtle">
-              Nothing here yet. Mark ayahs as memorized while reading.
+              {t("memorization.empty")}
             </p>
           ) : (
             <div className="divide-y divide-border">

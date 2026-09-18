@@ -385,6 +385,7 @@ export type Database = {
           tajweed: Json | null
           translation_en: string
           translation_ru: string | null
+          translation_uz: string | null
         }
         Insert: {
           arabic_text: string
@@ -397,6 +398,7 @@ export type Database = {
           tajweed?: Json | null
           translation_en: string
           translation_ru?: string | null
+          translation_uz?: string | null
         }
         Update: {
           arabic_text?: string
@@ -409,6 +411,7 @@ export type Database = {
           tajweed?: Json | null
           translation_en?: string
           translation_ru?: string | null
+          translation_uz?: string | null
         }
         Relationships: [
           {
@@ -948,6 +951,7 @@ export type Database = {
           surah_number: number
           translation_en: string
           translation_ru: string
+          translation_uz: string
           verse_id: number
           verse_ids: number[]
         }[]
@@ -971,6 +975,7 @@ export type Database = {
           tracked: boolean
           translation_en: string
           translation_ru: string
+          translation_uz: string
           transliteration: string
           verse_arabic: string
           verse_id: number

@@ -13,6 +13,7 @@ import {
 } from "radix-ui";
 import { Check, ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/providers/I18nProvider";
 
 // --- Modal -----------------------------------------------------------------
 
@@ -34,6 +35,7 @@ export function Modal({
   /** `lg` is for dialogs that hold reading matter rather than a question. */
   size?: "md" | "lg";
 }) {
+  const t = useT();
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -58,7 +60,7 @@ export function Modal({
             </div>
             <Dialog.Close className="rounded-lg p-1 text-fg-subtle transition-colors hover:bg-surface-2 hover:text-fg">
               <X className="size-4" aria-hidden />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{t("common.close")}</span>
             </Dialog.Close>
           </div>
           {children ? <div className="mt-5">{children}</div> : null}
@@ -80,7 +82,7 @@ export function SelectField({
   value,
   onValueChange,
   options,
-  placeholder = "Select…",
+  placeholder,
   className,
   id,
 }: {
@@ -91,6 +93,7 @@ export function SelectField({
   className?: string;
   id?: string;
 }) {
+  const t = useT();
   return (
     <Select.Root value={value} onValueChange={onValueChange}>
       <Select.Trigger
@@ -102,7 +105,7 @@ export function SelectField({
           className,
         )}
       >
-        <Select.Value placeholder={placeholder} />
+        <Select.Value placeholder={placeholder ?? t("common.select")} />
         <Select.Icon>
           <ChevronDown className="size-4 text-fg-subtle" aria-hidden />
         </Select.Icon>

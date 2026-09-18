@@ -432,11 +432,56 @@ pub async fn ai_set_api_key(
 fn language_name(code: &str) -> &'static str {
     match code {
         "ru" => "Russian",
+        "uz" => "Uzbek",
         _ => "English",
     }
 }
 
-fn word_system(language: &str) -> String {
+/// Per-language writing notes, appended to whichever system prompt is in use.
+///
+/// Empty for English and Russian. Both are languages the model writes fluently
+/// and, more to the point, both have a large body of Quranic writing in them —
+/// asking for "Russian" already gets Russian Islamic register, with `аят` and
+/// `сура` rather than calques.
+///
+/// Uzbek is the case that needs saying out loud, for three reasons, and each
+/// line below answers one of them:
+///
+///   - Script. Uzbek is written in both Latin and Cyrillic, and the model will
+///     otherwise pick. The interface is Latin, so the explanations beside it
+///     must be too — a paragraph in the other alphabet is not a style blemish,
+///     it is unreadable to half the audience.
+///   - Register. There is far less Uzbek than Russian or English in any
+///     training corpus, so the failure mode is calquing: Russian words in
+///     Uzbek endings, or Turkish forms that an Uzbek reader finds archaic. The
+///     religious vocabulary is the part that matters, and Uzbek already has a
+///     settled one — Alloh, oyat, sura, iymon, taqvo — taken from Arabic
+///     directly and used in every Uzbek translation and tafsir in print.
+///   - Audience. These explanations sit next to a Cyrillic tafsir edition and
+///     an English gloss, so the one thing that must not happen is a sentence
+///     that mixes all three.
+fn language_guidance(code: &str) -> &'static str {
+    match code {
+        "uz" => {
+            "\n\nUZBEK WRITING NOTES\n\
+- Write in modern standard Uzbek in the LATIN alphabet (o'zbek lotin yozuvi). Never \
+use Cyrillic.\n\
+- Use the established Uzbek Islamic vocabulary, which is borrowed from Arabic \
+directly: Alloh, oyat, sura, ruku, tafsir, iymon, taqvo, ibodat, rahmat, shukr, \
+sabr, halol, harom. Do not translate these into everyday words and do not route \
+them through Russian or English equivalents.\n\
+- Do not use a Russian loanword where an ordinary Uzbek word exists.\n\
+- Write the way Uzbek religious books are written today — plain, clear literary \
+Uzbek. Avoid archaic Chagatai forms and avoid Turkish words that are not Uzbek.\n\
+- Quoted Arabic stays in Arabic script. When transliterating Arabic, use Uzbek \
+Latin spelling.\n\
+- Use the apostrophe forms o' and g' (as in so'z, o'rganish, bog'liq)."
+        }
+        _ => "",
+    }
+}
+
+fn word_system(language: &str, guidance: &str) -> String {
     format!(
         "You are a Quranic Arabic teacher helping a {language}-speaking student understand \
 individual words while reading the Quran. You will be given one specific word as it appears in a \
@@ -451,7 +496,7 @@ Stay scoped to this one word. Do not explain the verse's broader argument, theol
 word relates to other groups or clauses mentioned elsewhere in the ayah — that belongs to a \
 different, verse-level explanation, not a word-level one.\n\n\
 Do not use markdown, headings, or lists, and do not add any preamble. Write your entire answer in \
-{language}."
+{language}.{guidance}"
     )
 }
 
@@ -467,6 +512,7 @@ pub async fn ai_generate_word_context(
     verse_translation: String,
     language: String,
 ) -> Result<WordContext, AiError> {
+    let guidance = language_guidance(&language);
     let language = language_name(&language);
     let prompt = format!(
         "Word: {arabic} ({transliteration}) — commonly glossed as \"{gloss}\".\n\
@@ -475,17 +521,18 @@ pub async fn ai_generate_word_context(
          Full ayah ({language}): {verse_translation}\n\n\
          Explain why this particular word and form is used here."
     );
-    let (explanation, model_used) = chat(&state, &word_system(language), &prompt, 300).await?;
+    let (explanation, model_used) =
+        chat(&state, &word_system(language, guidance), &prompt, 300).await?;
     Ok(WordContext { explanation, model_used })
 }
 
-fn ruku_system(language: &str) -> String {
+fn ruku_system(language: &str, guidance: &str) -> String {
     format!(
         "You are a Quran study guide writing for a {language}-speaking student \
 memorizing the Quran ruku by ruku. Given a passage, write one short paragraph — four to six \
 sentences — covering its central theme, how the passage develops, and what a student should take \
 away from it. Write plain prose. Do not use markdown, headings, or lists, do not number the \
-ayahs, and do not add any preamble. Write your entire answer in {language}."
+ayahs, and do not add any preamble. Write your entire answer in {language}.{guidance}"
     )
 }
 
@@ -498,13 +545,15 @@ pub async fn ai_generate_ruku_summary(
     passage: String,
     language: String,
 ) -> Result<RukuSummary, AiError> {
+    let guidance = language_guidance(&language);
     let language = language_name(&language);
     let prompt = format!(
         "Ruku {ruku_number} of the Quran — Surah {surah_name}, ayahs {verse_range}.\n\n\
          Passage ({language} translation):\n{passage}\n\n\
          Summarize what a student should learn and take away from this ruku."
     );
-    let (summary, model_used) = chat(&state, &ruku_system(language), &prompt, 500).await?;
+    let (summary, model_used) =
+        chat(&state, &ruku_system(language, guidance), &prompt, 500).await?;
     Ok(RukuSummary { summary, model_used })
 }
 
@@ -563,7 +612,7 @@ const KINDS: &[&str] = &["locate", "wording", "meaning", "continuation", "detail
 /// `evidence` is the part that makes the rest checkable: a question whose
 /// evidence is not literally in the ayah did not come from the ayah, and the
 /// app can drop it without having to judge the content itself.
-fn knowledge_system(language: &str, count: usize) -> String {
+fn knowledge_system(language: &str, guidance: &str, count: usize) -> String {
     format!(
         "ROLE\n\
 You write examination questions for a student who is memorizing the Quran. They \
@@ -628,7 +677,7 @@ BEFORE YOU ANSWER, check every question against this list and rewrite any that f
 - Is the answer visible in that ayah's Arabic or translation?\n\
 - Does the evidence appear verbatim in that ayah's Arabic?\n\
 - Is the answer kept out of the question?\n\
-- Is the whole reply in {language}, apart from quoted Arabic?"
+- Is the whole reply in {language}, apart from quoted Arabic?{guidance}"
     )
 }
 
@@ -730,6 +779,7 @@ pub async fn ai_generate_knowledge_quiz(
     if verses.is_empty() {
         return Err(AiError::BadResponse);
     }
+    let guidance = language_guidance(&language);
     let language = language_name(&language);
 
     let passage = verses
@@ -763,7 +813,7 @@ pub async fn ai_generate_knowledge_quiz(
     let budget = (verses.len() as u32 * 220).clamp(600, 8_000);
     let (content, model_used) = chat_with(
         &state,
-        &knowledge_system(language, verses.len()),
+        &knowledge_system(language, guidance, verses.len()),
         &prompt,
         budget,
         0.6,

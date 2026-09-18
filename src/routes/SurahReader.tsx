@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
+  ArrowLeft,
   BookMarked,
   BookOpen,
   ChevronLeft,
@@ -14,6 +15,7 @@ import {
   Loader2,
   Palette,
   Rows3,
+  ScrollText,
 } from "lucide-react";
 import { useRukus, useSurahVerseIds, useSurahs, useSurahVerses } from "@/hooks/useQuranData";
 import {
@@ -38,6 +40,7 @@ import { useReadingTimer } from "@/hooks/useReadingTimer";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
 import type { RepeatMode } from "@/lib/types";
 import { ayahRangeLabel, cn, formatClock } from "@/lib/utils";
+import { useT, type TFunction } from "@/providers/I18nProvider";
 import { AudioBar } from "@/components/reader/AudioBar";
 import { VerseCard } from "@/components/reader/VerseCard";
 import { SplitPane } from "@/components/reader/SplitPane";
@@ -64,6 +67,7 @@ const TOTAL_SURAHS = 114;
  * straight down never blocks.
  */
 export function SurahReader() {
+  const t = useT();
   const params = useParams<{ surahNumber: string }>();
   const navigate = useNavigate();
   const surahNumber = Number(params.surahNumber);
@@ -108,12 +112,37 @@ export function SurahReader() {
   const [visibleVerseId, setVisibleVerseId] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const [searchParams] = useSearchParams();
+  /**
+   * The ayah to open on, from `?ayah=`.
+   *
+   * This is how the ruku reader hands over when the continuous view is toggled
+   * on: switching lands where the reader was rather than at the top of a
+   * 286-ayah surah. It is held in state and cleared once reached, because the
+   * ayahs arrive a page at a time — an ayah deep in the surah can only be
+   * scrolled to after the pages up to it have been pulled in.
+   */
+  const anchorParam = Number(searchParams.get("ayah"));
+  const anchorAyah = Number.isInteger(anchorParam) && anchorParam > 0 ? anchorParam : null;
+  const [pendingAnchor, setPendingAnchor] = useState<number | null>(anchorAyah);
+
   // --- recitation ----------------------------------------------------------
 
   const { data: reciters } = useReciters();
   const reciter = useActiveReciter(prefs.reciterId);
   const { data: recitation } = useRecitationFile(reciter?.id ?? null, surahNumber);
-  const { data: timings } = useRecitationTimings(reciter?.id ?? null, verseIds);
+  /**
+   * The recitation covers the surah, not the ayahs that happen to be rendered.
+   *
+   * The player stops at the last ayah it has a timing for, so handing it the
+   * loaded page would end the audio at ayah 40 of Al-Baqarah while the reader
+   * is still scrolling — and the ayahs arrive a page at a time precisely so
+   * that nobody has to wait for all 286 before pressing play. The surah's ids
+   * are one small request that is already made for the progress markers, so
+   * playback is scoped to them and the passage is the whole surah from the
+   * first press onward.
+   */
+  const { data: timings } = useRecitationTimings(reciter?.id ?? null, surahVerseIdList);
 
   const download = useSurahDownload({
     reciterId: reciter?.id ?? null,
@@ -123,13 +152,13 @@ export function SurahReader() {
   });
 
   const unmemorizedVerseIds = useMemo(
-    () => verseIds.filter((id) => !memorized?.has(id)),
-    [verseIds, memorized],
+    () => surahVerseIdList.filter((id) => !memorized?.has(id)),
+    [surahVerseIdList, memorized],
   );
 
   const player = useRecitationPlayer({
     src: download.localSrc ?? recitation?.audio_url ?? null,
-    verseIds,
+    verseIds: surahVerseIdList,
     timings,
     rate: prefs.playbackRate,
     repeatMode: prefs.repeatMode,
@@ -147,13 +176,35 @@ export function SurahReader() {
     verses.find((v) => v.id === currentVerseId)?.ruku_number ?? verses[0]?.ruku_number ?? null;
   const { sessionSeconds, idle } = useReadingTimer(valid ? currentRuku : null);
 
-  // Keep the ayah being recited on screen, exactly as the ruku reader does.
+  const loadedVerseIds = useMemo(() => new Set(verseIds), [verseIds]);
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = query;
+
+  /**
+   * Keeps the ayah being recited on screen — and rendered at all.
+   *
+   * The recitation runs the whole surah while the reader holds 40 ayahs at a
+   * time, so playback reaching past the last loaded ayah has to pull the next
+   * page in. Without that, the audio keeps going while the highlight, the word
+   * following and the ruku the time is logged against all stop at the last
+   * ayah that happens to be on screen.
+   */
   useEffect(() => {
-    if (!prefs.followRecitation) return;
     const id = player.currentVerseId;
     if (id === null) return;
+    if (!loadedVerseIds.has(id)) {
+      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+      return;
+    }
+    if (!prefs.followRecitation) return;
     document.getElementById(`verse-${id}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [player.currentVerseId, prefs.followRecitation]);
+  }, [
+    player.currentVerseId,
+    prefs.followRecitation,
+    loadedVerseIds,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  ]);
 
   // --- which ayah is on screen --------------------------------------------
 
@@ -188,7 +239,6 @@ export function SurahReader() {
   // --- page loading --------------------------------------------------------
 
   const loadMoreRef = useRef<HTMLDivElement>(null);
-  const { fetchNextPage, hasNextPage, isFetchingNextPage } = query;
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -211,6 +261,24 @@ export function SurahReader() {
     setExpandedVerses(new Set());
     setVisibleVerseId(null);
   }, [surahNumber]);
+
+  useEffect(() => setPendingAnchor(anchorAyah), [surahNumber, anchorAyah]);
+
+  // Pages load in order, so reaching an anchor deep in the surah means asking
+  // for the next page until the ayah is there to scroll to.
+  useEffect(() => {
+    if (pendingAnchor === null) return;
+    const verse = verses.find((v) => v.ayah_number === pendingAnchor);
+    if (!verse) {
+      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+      return;
+    }
+    const element = document.getElementById(`verse-${verse.id}`);
+    if (!element) return;
+    element.scrollIntoView({ block: "start" });
+    setSelectedAyah(verse.ayah_number);
+    setPendingAnchor(null);
+  }, [pendingAnchor, verses, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // --- per-ayah actions ----------------------------------------------------
 
@@ -275,19 +343,39 @@ export function SurahReader() {
     navigate(`/read/page/${page}`);
   }, [verses, selectedAyah, navigate, updateProfile]);
 
+  /**
+   * Turns the continuous view off and hands back to the ruku reader — the
+   * mushaf toggle's handover, in reverse. The mode is a stored preference, so
+   * leaving here deliberately is also what turns it off; otherwise the ruku
+   * reader would redirect straight back and the toggle could never be undone.
+   */
+  const openRuku = useCallback(
+    (targetRuku: number | null) => {
+      updateProfile.mutate({ ui_prefs: { readerMode: "study" } });
+      navigate(targetRuku ? `/read/${targetRuku}` : "/browse");
+    },
+    [navigate, updateProfile],
+  );
+
   const mobileActions: MenuAction[] = [
     {
-      label: "Quiz this surah's words",
+      label: t("reader.continuousView"),
+      icon: <ScrollText className="size-4" aria-hidden />,
+      active: true,
+      onSelect: () => openRuku(currentRuku),
+    },
+    {
+      label: t("reader.quizSurahWords"),
       icon: <GraduationCap className="size-4" aria-hidden />,
       onSelect: () => navigate(`/quiz?scope=surah&surah=${surahNumber}&start=1`),
     },
     {
-      label: "Mushaf page view",
+      label: t("reader.mushafView"),
       icon: <BookMarked className="size-4" aria-hidden />,
       onSelect: switchToMushaf,
     },
     {
-      label: prefs.tajweed ? "Turn off tajweed colouring" : "Colour by tajweed rule",
+      label: prefs.tajweed ? t("reader.tajweedOff") : t("reader.tajweedOn"),
       icon: <Palette className="size-4" aria-hidden />,
       active: prefs.tajweed,
       onSelect: () => updateProfile.mutate({ ui_prefs: { tajweed: !prefs.tajweed } }),
@@ -295,8 +383,8 @@ export function SurahReader() {
     {
       label:
         expandedVerses.size === verseIds.length && verseIds.length > 0
-          ? "Collapse word breakdowns"
-          : "Expand word breakdowns",
+          ? t("reader.collapseWords")
+          : t("reader.expandWords"),
       icon: <ListTree className="size-4" aria-hidden />,
       onSelect: () =>
         setExpandedVerses((current) =>
@@ -309,8 +397,8 @@ export function SurahReader() {
     return (
       <div className="p-8">
         <ErrorState
-          title="That surah doesn't exist"
-          message={`Surahs run from 1 to ${TOTAL_SURAHS}.`}
+          title={t("surah.missingTitle")}
+          message={t("surah.missingMessage", { total: TOTAL_SURAHS })}
           onRetry={() => navigate("/browse")}
         />
       </div>
@@ -323,13 +411,27 @@ export function SurahReader() {
     <div className="flex h-full flex-col">
       <header className="shrink-0 border-b border-border bg-surface/60 px-3 py-2.5 backdrop-blur md:px-6 md:py-3">
         <div className="flex items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-1 md:gap-3">
+            {/* The way back to the list belongs in the header: reading a surah
+                top to bottom means the bottom of the page is a long way away. */}
+            <Tooltip content={t("reader.backToList")}>
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label={t("reader.backToList")}
+                onClick={() => navigate(`/browse?surah=${surahNumber}`)}
+              >
+                <ArrowLeft className="size-4" aria-hidden />
+              </Button>
+            </Tooltip>
+            <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
+
             <Button
               size="icon"
               variant="ghost"
               disabled={surahNumber <= 1}
               onClick={() => navigate(`/read/surah/${surahNumber - 1}`)}
-              aria-label="Previous surah"
+              aria-label={t("reader.previousSurah")}
             >
               <ChevronLeft className="size-4" aria-hidden />
             </Button>
@@ -340,13 +442,13 @@ export function SurahReader() {
                   {surah?.name_english ?? "…"}
                 </h1>
                 <span className="shrink-0 text-[0.8125rem] text-fg-subtle">
-                  {surahNumber} · {ayahCount} ayahs
+                  {t("surah.header", { number: surahNumber, count: ayahCount })}
                 </span>
               </div>
               <div className="text-[0.6875rem] text-fg-subtle">
-                {memorizedCount}/{ayahCount} ayahs memorized
-                {rukuInView ? ` · ruku ${rukuInView.ruku_in_surah}` : ""}
-                {verses.length < ayahCount ? ` · ${verses.length} loaded` : ""}
+                {t("surah.memorizedOf", { memorized: memorizedCount, total: ayahCount })}
+                {rukuInView ? t("surah.rukuInView", { number: rukuInView.ruku_in_surah }) : ""}
+                {verses.length < ayahCount ? t("surah.loadedCount", { count: verses.length }) : ""}
               </div>
             </div>
 
@@ -355,29 +457,41 @@ export function SurahReader() {
               variant="ghost"
               disabled={surahNumber >= TOTAL_SURAHS}
               onClick={() => navigate(`/read/surah/${surahNumber + 1}`)}
-              aria-label="Next surah"
+              aria-label={t("reader.nextSurah")}
             >
               <ChevronRight className="size-4" aria-hidden />
             </Button>
           </div>
 
           <div className="hidden items-center gap-0.5 md:flex">
-            <Tooltip content="Quiz this surah's memorized words">
+            <Tooltip content={t("reader.continuousViewOn")}>
+              <Button
+                size="icon"
+                variant="outline"
+                aria-label={t("reader.continuousView")}
+                aria-pressed
+                onClick={() => openRuku(currentRuku)}
+              >
+                <ScrollText className="size-4" aria-hidden />
+              </Button>
+            </Tooltip>
+
+            <Tooltip content={t("reader.quizSurahMemorized")}>
               <Button
                 size="icon"
                 variant="ghost"
-                aria-label="Quiz this surah's words"
+                aria-label={t("reader.quizSurahWords")}
                 onClick={() => navigate(`/quiz?scope=surah&surah=${surahNumber}&start=1`)}
               >
                 <GraduationCap className="size-4" aria-hidden />
               </Button>
             </Tooltip>
 
-            <Tooltip content="Read this as a mushaf page — the printed Madani layout">
+            <Tooltip content={t("reader.mushafViewHint")}>
               <Button
                 size="icon"
                 variant="ghost"
-                aria-label="Switch to mushaf reader"
+                aria-label={t("reader.switchToMushaf")}
                 disabled={!verses.length}
                 onClick={switchToMushaf}
               >
@@ -385,11 +499,11 @@ export function SurahReader() {
               </Button>
             </Tooltip>
 
-            <Tooltip content={prefs.tajweed ? "Turn off tajweed colouring" : "Colour by tajweed rule"}>
+            <Tooltip content={prefs.tajweed ? t("reader.tajweedOff") : t("reader.tajweedOn")}>
               <Button
                 size="icon"
                 variant={prefs.tajweed ? "outline" : "ghost"}
-                aria-label="Toggle tajweed colouring"
+                aria-label={t("reader.toggleTajweed")}
                 aria-pressed={prefs.tajweed}
                 onClick={() => updateProfile.mutate({ ui_prefs: { tajweed: !prefs.tajweed } })}
               >
@@ -397,11 +511,11 @@ export function SurahReader() {
               </Button>
             </Tooltip>
 
-            <Tooltip content="Expand every word breakdown">
+            <Tooltip content={t("reader.expandEveryWord")}>
               <Button
                 size="icon"
                 variant="ghost"
-                aria-label="Toggle all word breakdowns"
+                aria-label={t("reader.toggleAllWords")}
                 onClick={() =>
                   setExpandedVerses((current) =>
                     current.size === verseIds.length ? new Set() : new Set(verseIds),
@@ -418,9 +532,7 @@ export function SurahReader() {
 
             <Tooltip
               content={
-                idle
-                  ? "Paused — the timer resumes when you interact again."
-                  : "Time counted toward today's reading."
+                idle ? t("reader.timerPaused") : t("reader.timerRunning")
               }
             >
               <div
@@ -440,11 +552,11 @@ export function SurahReader() {
               </div>
             </Tooltip>
 
-            <Tooltip content="Swap the tafsir panel to the other side">
+            <Tooltip content={t("reader.swapPanel")}>
               <Button
                 size="icon"
                 variant="ghost"
-                aria-label="Swap panel side"
+                aria-label={t("reader.swapPanelLabel")}
                 onClick={() =>
                   updateProfile.mutate({ ui_prefs: { tafsirSide: tafsirFirst ? "right" : "left" } })
                 }
@@ -458,7 +570,7 @@ export function SurahReader() {
             <Button
               size="icon"
               variant="ghost"
-              aria-label="Open tafsir"
+              aria-label={t("reader.openTafsir")}
               onClick={() => {
                 if (selectedAyah === null && verses[0]) setSelectedAyah(verses[0].ayah_number);
                 setTafsirOpen(true);
@@ -467,7 +579,7 @@ export function SurahReader() {
               <BookOpen className="size-4" aria-hidden />
             </Button>
             <MenuButton actions={mobileActions}>
-              <Button size="icon" variant="ghost" aria-label="More reader options">
+              <Button size="icon" variant="ghost" aria-label={t("reader.moreOptions")}>
                 <Rows3 className="size-4" aria-hidden />
               </Button>
             </MenuButton>
@@ -478,13 +590,13 @@ export function SurahReader() {
       {query.isError ? (
         <div className="p-8">
           <ErrorState
-            title="Couldn't load this surah"
-            message="The Quran text lives in your Supabase project. Check your connection and try again."
+            title={t("surah.loadFailed")}
+            message={t("reader.loadFailedMessage")}
             onRetry={() => void query.refetch()}
           />
         </div>
       ) : query.isPending ? (
-        <LoadingBlock label="Loading surah…" />
+        <LoadingBlock label={t("surah.loading")} />
       ) : (
         <SplitPane
           tafsirFirst={tafsirFirst}
@@ -515,7 +627,8 @@ export function SurahReader() {
                           onQuiz={() =>
                             navigate(`/quiz?scope=ruku&ruku=${verse.ruku_number}&start=1`)
                           }
-                          onOpenRuku={() => navigate(`/read/${verse.ruku_number}`)}
+                          onOpenRuku={() => openRuku(verse.ruku_number)}
+                          t={t}
                         />
                       ) : null}
 
@@ -571,11 +684,15 @@ export function SurahReader() {
                       ) : (
                         <Rows3 className="size-4" aria-hidden />
                       )}
-                      {isFetchingNextPage ? "Loading ayahs…" : "Load more ayahs"}
+                      {isFetchingNextPage ? t("surah.loadingAyahs") : t("surah.loadMore")}
                     </Button>
                   ) : (
                     <div className="flex items-center gap-3 text-[0.8125rem] text-fg-subtle">
-                      <span>End of {surah?.name_english ?? "the surah"}.</span>
+                      <span>
+                        {t("surah.endOf", {
+                          surah: surah?.name_english ?? t("surah.endOfFallback"),
+                        })}
+                      </span>
                       {isFetchingNextPage ? <Spinner /> : null}
                     </div>
                   )}
@@ -587,17 +704,17 @@ export function SurahReader() {
                       onClick={() => navigate(`/read/surah/${surahNumber - 1}`)}
                     >
                       <ChevronLeft className="size-4" aria-hidden />
-                      Previous surah
+                      {t("reader.previousSurah")}
                     </Button>
                     <Button asChild variant="ghost">
-                      <Link to={`/browse?surah=${surahNumber}`}>All rukus</Link>
+                      <Link to={`/browse?surah=${surahNumber}`}>{t("common.allRukus")}</Link>
                     </Button>
                     <Button
                       variant="primary"
                       disabled={surahNumber >= TOTAL_SURAHS}
                       onClick={() => navigate(`/read/surah/${surahNumber + 1}`)}
                     >
-                      Next surah
+                      {t("reader.nextSurah")}
                       <ChevronRight className="size-4" aria-hidden />
                     </Button>
                   </div>
@@ -650,6 +767,7 @@ function RukuDivider({
   ayahEnd,
   onQuiz,
   onOpenRuku,
+  t,
 }: {
   rukuNumber: number;
   rukuInSurah: number | null;
@@ -657,17 +775,19 @@ function RukuDivider({
   ayahEnd: number;
   onQuiz: () => void;
   onOpenRuku: () => void;
+  t: TFunction;
 }) {
   return (
     <div className="flex items-center gap-3 pt-3">
       <button
         onClick={onOpenRuku}
+        title={t("surah.studyThisRuku")}
         className={cn(
           "shrink-0 rounded-lg px-2 py-1 text-[0.6875rem] font-medium uppercase tracking-wider",
           "text-fg-subtle transition-colors hover:bg-surface-2 hover:text-fg",
         )}
       >
-        {rukuInSurah !== null ? `Ruku ${rukuInSurah}` : `Ruku ${rukuNumber}`} ·{" "}
+        {t("browse.rukuLabel", { number: rukuInSurah ?? rukuNumber })} ·{" "}
         {ayahRangeLabel(ayahStart, ayahEnd)}
       </button>
       <span className="h-px flex-1 bg-border" aria-hidden />
@@ -679,7 +799,7 @@ function RukuDivider({
         )}
       >
         <GraduationCap className="size-3" aria-hidden />
-        Quiz words
+        {t("surah.quizWords")}
       </button>
     </div>
   );

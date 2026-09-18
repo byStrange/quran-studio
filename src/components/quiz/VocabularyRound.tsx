@@ -17,7 +17,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { GraduationCap, Repeat2, RotateCcw, Settings2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
-import { useContentLanguage } from "@/hooks/useProfile";
+import { useLanguage, useT } from "@/providers/I18nProvider";
 import { verseTranslation } from "@/lib/language";
 import type { WordStatus } from "@/lib/types";
 import { verseKey } from "@/lib/utils";
@@ -42,6 +42,7 @@ interface QuizWord {
   verse_arabic: string;
   translation_en: string;
   translation_ru: string;
+  translation_uz: string;
   pool_size: number;
 }
 
@@ -52,9 +53,10 @@ export function VocabularyRound({
   config: RoundConfig;
   onSetup: () => void;
 }) {
+  const t = useT();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const language = useContentLanguage();
+  const language = useLanguage();
 
   const [index, setIndex] = useState(0);
   const [answer, setAnswer] = useState<SelfAssessResult | null>(null);
@@ -132,11 +134,11 @@ export function VocabularyRound({
       <Card>
         <EmptyState
           icon={<X className="size-5" />}
-          title="Couldn't build the round"
+          title={t("quiz.buildFailed")}
           description={String(round.error)}
           action={
             <Button variant="primary" onClick={onSetup}>
-              Back to setup
+              {t("quiz.backToSetup")}
             </Button>
           }
         />
@@ -144,27 +146,27 @@ export function VocabularyRound({
     );
   }
 
-  if (round.isPending && custom === null) return <LoadingBlock label="Drawing words…" />;
+  if (round.isPending && custom === null) return <LoadingBlock label={t("quiz.drawing")} />;
 
   if (questions.length === 0) {
     return (
       <Card>
         <EmptyState
           icon={<GraduationCap className="size-5" />}
-          title="No words in this scope"
+          title={t("quiz.emptyScope")}
           description={
             config.scope === "surah"
-              ? "This surah has no memorized ayahs yet. Mark some as memorized while reading, then come back."
-              : "Nothing here to quiz yet — read a ruku and mark its ayahs as memorized."
+              ? t("quiz.emptySurahDescription")
+              : t("quiz.emptyDescription")
           }
           action={
             <div className="flex gap-2">
               <Button variant="primary" onClick={onSetup}>
                 <Settings2 className="size-4" aria-hidden />
-                Change scope
+                {t("quiz.changeScope")}
               </Button>
               <Button asChild variant="outline">
-                <Link to="/browse">Go read</Link>
+                <Link to="/browse">{t("quiz.goRead")}</Link>
               </Button>
             </div>
           }
@@ -180,26 +182,30 @@ export function VocabularyRound({
         correct={correctCount}
         answered={answered}
         revised={revisedCount}
-        note="These words are sticking."
+        verdicts={{
+          strong: t("quiz.verdictStrong"),
+          solid: t("quiz.verdictSolid"),
+          weak: t("quiz.verdictWeak"),
+        }}
         actions={
           <>
             {missed.length > 0 ? (
               <Button variant="primary" onClick={() => reset(missed)}>
                 <Repeat2 className="size-4" aria-hidden />
-                Practise {missed.length} missed {missed.length === 1 ? "word" : "words"}
+                {t("quiz.practiseMissed", { count: missed.length })}
               </Button>
             ) : null}
             <Button variant={missed.length > 0 ? "outline" : "primary"} onClick={onSetup}>
               <RotateCcw className="size-4" aria-hidden />
-              New round
+              {t("quiz.newRound")}
             </Button>
             {config.scope === "ruku" && config.ruku !== null ? (
               <Button asChild variant="ghost">
-                <Link to={`/read/${config.ruku}`}>Back to the ruku</Link>
+                <Link to={`/read/${config.ruku}`}>{t("quiz.backToRuku")}</Link>
               </Button>
             ) : (
               <Button asChild variant="ghost">
-                <Link to="/vocabulary">Vocabulary</Link>
+                <Link to="/vocabulary">{t("vocab.title")}</Link>
               </Button>
             )}
           </>
@@ -207,7 +213,7 @@ export function VocabularyRound({
       >
         {missed.length > 0 ? (
           <>
-            <p className="text-[0.8125rem] font-medium text-fg">Words to look at again</p>
+            <p className="text-[0.8125rem] font-medium text-fg">{t("quiz.wordsToRevisit")}</p>
             <ul className="mt-3 divide-y divide-border">
               {missed.map((word) => (
                 <li key={word.word_id} className="flex items-baseline gap-3 py-2">
@@ -230,7 +236,11 @@ export function VocabularyRound({
   }
 
   const translation = verseTranslation(
-    { translation_en: question!.translation_en, translation_ru: question!.translation_ru },
+    {
+      translation_en: question!.translation_en,
+      translation_ru: question!.translation_ru,
+      translation_uz: question!.translation_uz,
+    },
     language,
   );
 
@@ -259,19 +269,21 @@ export function VocabularyRound({
 
           <SelfAssess
             questionKey={question!.word_id}
-            prompt="Do you know what this word means?"
+            prompt={t("quiz.doYouKnow")}
             onAnswer={setAnswer}
             onNext={next}
-            nextLabel={index + 1 >= questions.length ? "Finish" : "Next"}
+            nextLabel={index + 1 >= questions.length ? t("quiz.finish") : t("quiz.next")}
           >
             <div className="rounded-xl border border-border bg-surface-2/50 p-4">
               <p className="text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
-                It means
+                {t("quiz.itMeans")}
               </p>
               <p className="mt-1.5 text-[0.9375rem] font-medium text-fg">{question!.gloss}</p>
 
               <p className="mt-4 text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
-                In context · {verseKey(question!.surah_number, question!.ayah_number)}
+                {t("quiz.inContext", {
+                  reference: verseKey(question!.surah_number, question!.ayah_number),
+                })}
               </p>
               <p className="arabic mt-2 text-fg" dir="rtl">
                 <HighlightedArabic text={question!.verse_arabic} mark={question!.arabic} />

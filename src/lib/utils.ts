@@ -5,14 +5,34 @@ export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
-/** "2h 14m" / "14m" / "45s" — compact, for stat tiles. */
-export function formatDuration(seconds: number): string {
-  if (seconds <= 0) return "0m";
+/** The unit suffixes `formatDuration` joins, in the reader's language. */
+export interface DurationUnits {
+  hour: string;
+  minute: string;
+  second: string;
+}
+
+const EN_DURATION_UNITS: DurationUnits = { hour: "h", minute: "m", second: "s" };
+
+/**
+ * "2h 14m" / "14m" / "45s" — compact, for stat tiles.
+ *
+ * The units are passed in rather than looked up, because this is a pure
+ * function called from render and from scripts alike; components get them from
+ * `useDurationUnits()`. English is the default so a caller outside React — a
+ * seed script, a test — still produces something readable.
+ */
+export function formatDuration(seconds: number, units: DurationUnits = EN_DURATION_UNITS): string {
+  if (seconds <= 0) return `0${units.minute}`;
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-  if (minutes > 0) return `${minutes}m`;
-  return `${seconds}s`;
+  if (hours > 0) {
+    return minutes > 0
+      ? `${hours}${units.hour} ${minutes}${units.minute}`
+      : `${hours}${units.hour}`;
+  }
+  if (minutes > 0) return `${minutes}${units.minute}`;
+  return `${seconds}${units.second}`;
 }
 
 /** "1:15" style clock, for the live session timer. */

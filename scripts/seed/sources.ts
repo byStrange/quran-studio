@@ -11,7 +11,7 @@
  * These are fetched exactly once, here, and written into Supabase. The running
  * app never calls them.
  */
-import { cachedJson, stripHtml } from "./util.ts";
+import { cachedJson, normaliseUzbekApostrophes, stripHtml } from "./util.ts";
 
 const QURAN_API = "https://api.quran.com/api/v4";
 const TAFSIR_CDN = "https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir";
@@ -31,6 +31,23 @@ export const TRANSLATION_ID = 20;
  * a paraphrase — both fight the tafsir panel sitting next to them.
  */
 export const TRANSLATION_ID_RU = 45;
+
+/**
+ * Muhammad Sodiq Muhammad Yusuf's Uzbek translation, resource id 55.
+ *
+ * The Latin edition specifically — the catalogue also carries the same
+ * translator in Cyrillic as id 127, and Alauddin Mansour's as 101. Latin is
+ * what the app's Uzbek interface is written in and what the country writes in
+ * today, so the two have to match; a Cyrillic ayah under a Latin interface is
+ * not a style mismatch but an unreadable one for a good share of readers.
+ *
+ * Shaykh Muhammad Sodiq is the obvious choice on the merits as well: his is
+ * the translation Uzbek readers know, and it renders the meaning plainly with
+ * its commentary kept in footnotes rather than inlined into the ayah — the
+ * same property that earns Saheeh International and Kuliev their places above.
+ * The footnote markers are stripped on import; see `seed/translation-uz.ts`.
+ */
+export const TRANSLATION_ID_UZ = 55;
 
 /**
  * The tafsir editions imported, with display metadata written alongside them.
@@ -106,7 +123,7 @@ interface VersesResponse {
     juz_number: number;
     page_number: number | null;
     text_uthmani: string;
-    // Requested as `translations=20,45`; the array comes back in the order
+    // Requested as `translations=20,45,55`; the array comes back in the order
     // the ids were asked for, but each entry carries its `resource_id` and
     // that is what the reader below matches on.
     translations?: Array<{ resource_id: number; text: string }>;
@@ -146,6 +163,7 @@ export interface Verse {
   arabic_text: string;
   translation_en: string;
   translation_ru: string;
+  translation_uz: string;
 }
 
 export interface Word {
@@ -194,7 +212,7 @@ export async function fetchSurahContent(
     const url =
       `${QURAN_API}/verses/by_chapter/${surahNumber}` +
       `?language=en&words=true&word_fields=text_uthmani,transliteration` +
-      `&translations=${TRANSLATION_ID},${TRANSLATION_ID_RU}` +
+      `&translations=${TRANSLATION_ID},${TRANSLATION_ID_RU},${TRANSLATION_ID_UZ}` +
       `&fields=text_uthmani,ruku_number,juz_number,page_number` +
       `&per_page=50&page=${page}`;
     // The requested translations belong in the cache key. Without them, a
@@ -202,7 +220,7 @@ export async function fetchSurahContent(
     // downloads after Russian was added to the URL, and every verse would
     // import with an empty Russian translation and no error anywhere.
     const data: VersesResponse = await cachedJson<VersesResponse>(
-      `verses-${TRANSLATION_ID}-${TRANSLATION_ID_RU}-${surahNumber}-${page}`,
+      `verses-${TRANSLATION_ID}-${TRANSLATION_ID_RU}-${TRANSLATION_ID_UZ}-${surahNumber}-${page}`,
       url,
     );
 
@@ -220,6 +238,7 @@ export async function fetchSurahContent(
         arabic_text: v.text_uthmani,
         translation_en: translation(TRANSLATION_ID),
         translation_ru: translation(TRANSLATION_ID_RU),
+        translation_uz: normaliseUzbekApostrophes(translation(TRANSLATION_ID_UZ)),
       });
 
       for (const w of v.words ?? []) {

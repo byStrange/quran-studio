@@ -24,7 +24,8 @@ import { useQuery } from "@tanstack/react-query";
 import { BrainCircuit, Library, TrendingUp } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
-import { KIND_LABELS, type KnowledgeQuestionKind } from "@/lib/knowledgeQuiz";
+import { useT } from "@/providers/I18nProvider";
+import { kindLabelKey, type KnowledgeQuestionKind } from "@/lib/knowledgeQuiz";
 import { cn, formatPercent } from "@/lib/utils";
 import { Card, CardBody } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/primitives";
@@ -59,6 +60,7 @@ interface SurahScore {
 const ENOUGH_TO_JUDGE = 5;
 
 export function Scoreboard() {
+  const t = useT();
   const { user } = useAuth();
 
   const scores = useQuery({
@@ -102,63 +104,53 @@ export function Scoreboard() {
       <CardBody className="pt-5 space-y-5">
         <div className="flex items-center gap-2 text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
           <TrendingUp className="size-3.5" aria-hidden />
-          How you're doing
+          {t("quiz.howYoureDoing")}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <ScoreColumn
             icon={<Library className="size-3.5" aria-hidden />}
-            title="Vocabulary"
+            title={t("quiz.scoreVocabulary")}
             recent={{ correct: s.vocab_correct_30d, answered: s.vocab_attempts_30d }}
             allTime={{ correct: s.vocab_correct, answered: s.vocab_attempts }}
-            footnote={`${s.words_learned} learned · ${s.words_learning} still learning`}
+            footnote={t("quiz.wordsFootnote", {
+              learned: s.words_learned,
+              learning: s.words_learning,
+            })}
           />
           <ScoreColumn
             icon={<BrainCircuit className="size-3.5" aria-hidden />}
-            title="Knowledge"
+            title={t("quiz.scoreKnowledge")}
             recent={{ correct: s.knowledge_correct_30d, answered: s.knowledge_answered_30d }}
             allTime={{ correct: s.knowledge_correct, answered: s.knowledge_answered }}
             footnote={
               s.knowledge_sessions > 0
-                ? `${s.knowledge_sessions} ${s.knowledge_sessions === 1 ? "round" : "rounds"} so far`
-                : "No rounds yet"
+                ? t("quiz.roundsSoFar", { count: s.knowledge_sessions })
+                : t("quiz.noRoundsYet")
             }
           />
         </div>
 
         {overclaimed + recovered > 0 ? (
           <p className="text-[0.75rem] leading-relaxed text-fg-subtle">
-            {overclaimed > 0 ? (
-              <>
-                You were sure of{" "}
-                <span className="font-medium text-fg-muted">{overclaimed}</span>{" "}
-                {overclaimed === 1 ? "answer" : "answers"} that turned out to be wrong
-                {recovered > 0 ? ", " : ". "}
-              </>
-            ) : null}
-            {recovered > 0 ? (
-              <>
-                {overclaimed > 0 ? "and gave up on " : "You gave up on "}
-                <span className="font-medium text-fg-muted">{recovered}</span>{" "}
-                {recovered === 1 ? "answer" : "answers"} you actually had.{" "}
-              </>
-            ) : null}
+            {overclaimed > 0 ? `${t("quiz.wereSureWrong", { count: overclaimed })} ` : ""}
+            {recovered > 0 ? `${t("quiz.gaveUpHad", { count: recovered })} ` : ""}
             {overclaimed > recovered * 2
-              ? "Worth slowing down before you claim one."
+              ? t("quiz.calibrationOverclaim")
               : recovered > overclaimed * 2
-                ? "You know more than you're giving yourself credit for."
-                : "Your sense of what you know is about right."}
+                ? t("quiz.calibrationUndersell")
+                : t("quiz.calibrationFine")}
           </p>
         ) : null}
 
         {byKind.length > 0 ? (
           <div>
-            <p className="mb-2 text-[0.75rem] font-medium text-fg">By question type</p>
+            <p className="mb-2 text-[0.75rem] font-medium text-fg">{t("quiz.byQuestionType")}</p>
             <div className="space-y-2">
               {byKind.map((row) => (
                 <ScoreBar
                   key={row.kind}
-                  label={KIND_LABELS[row.kind]}
+                  label={t(kindLabelKey(row.kind))}
                   correct={row.correct}
                   answered={row.answered}
                 />
@@ -169,7 +161,7 @@ export function Scoreboard() {
 
         {weakSurahs.length > 0 ? (
           <div>
-            <p className="mb-2 text-[0.75rem] font-medium text-fg">Weakest surahs</p>
+            <p className="mb-2 text-[0.75rem] font-medium text-fg">{t("quiz.weakestSurahs")}</p>
             <div className="space-y-2">
               {weakSurahs.map((row) => (
                 <ScoreBar
@@ -200,8 +192,9 @@ function ScoreColumn({
   allTime: { correct: number; answered: number };
   footnote: string;
 }) {
+  const t = useT();
   const shown = recent.answered > 0 ? recent : allTime;
-  const label = recent.answered > 0 ? "last 30 days" : "all time";
+  const label = recent.answered > 0 ? t("quiz.lastThirtyDays") : t("quiz.allTimeLabel");
 
   return (
     <div className="rounded-xl border border-border bg-surface-2/40 p-4">
@@ -214,13 +207,17 @@ function ScoreColumn({
           {shown.answered > 0 ? formatPercent((shown.correct / shown.answered) * 100, 0) : "—"}
         </span>
         <span className="text-[0.75rem] text-fg-subtle">
-          {shown.answered > 0 ? `${shown.correct}/${shown.answered} ${label}` : "nothing yet"}
+          {shown.answered > 0
+            ? `${shown.correct}/${shown.answered} ${label}`
+            : t("quiz.nothingYet")}
         </span>
       </div>
       {recent.answered > 0 && allTime.answered > recent.answered ? (
         <p className="mt-1 text-[0.75rem] text-fg-subtle">
-          {formatPercent((allTime.correct / allTime.answered) * 100, 0)} all time ·{" "}
-          {allTime.answered} answered
+          {t("quiz.allTimeLine", {
+            percent: formatPercent((allTime.correct / allTime.answered) * 100, 0),
+            answered: allTime.answered,
+          })}
         </p>
       ) : null}
       <p className="mt-1 text-[0.75rem] text-fg-subtle">{footnote}</p>

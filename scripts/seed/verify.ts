@@ -17,6 +17,17 @@ interface Check {
   run: () => Promise<string | null>; // null = pass, string = failure reason
 }
 
+/**
+ * Things worth saying that are not failures.
+ *
+ * A check either passes or fails, and that is the right shape for data that is
+ * either correct or corrupt. It is the wrong shape for an import that is
+ * optional and simply has not been run — reporting that as a failure would
+ * make `seed:verify` red on a database that is working exactly as intended,
+ * and a suite that is red by default stops being read.
+ */
+const notes: string[] = [];
+
 async function count(table: string, filter?: (q: any) => any): Promise<number> {
   let query = admin.from(table).select("*", { count: "exact", head: true });
   if (filter) query = filter(query);
@@ -82,6 +93,27 @@ const checks: Check[] = [
       const empty = await count("quran_verses", (q) => q.eq("translation_ru", ""));
       const n = missing + empty;
       return n === 0 ? null : `${n} verses have no Russian translation`;
+    },
+  },
+  {
+    name: "every verse has an Uzbek translation",
+    run: async () => {
+      // Unlike the Russian check this reports rather than fails when the
+      // column is empty throughout: a database seeded before `pnpm
+      // seed:translation-uz` has run is a supported state — the reader falls
+      // back to English per verse — whereas a half-imported column is not.
+      const missing = await count("quran_verses", (q) => q.is("translation_uz", null));
+      const empty = await count("quran_verses", (q) => q.eq("translation_uz", ""));
+      const n = missing + empty;
+      if (n === 0) return null;
+      if (n === EXPECTED_VERSES) {
+        notes.push(
+          "Uzbek translation not imported — run `pnpm seed:translation-uz`. " +
+            "Until then Uzbek readers see the English translation, which is a supported state.",
+        );
+        return null;
+      }
+      return `${n} verses have no Uzbek translation`;
     },
   },
   {
@@ -311,6 +343,7 @@ export async function runValidation(): Promise<boolean> {
   }
 
   console.log(`\n${passed}/${checks.length} checks passed`);
+  for (const note of notes) console.log(`  note: ${note}`);
   if (failures.length > 0) {
     console.log(`Failed: ${failures.join(", ")}`);
   }

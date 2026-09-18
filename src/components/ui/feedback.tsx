@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/providers/I18nProvider";
 import { Button } from "./button";
 
 export function Skeleton({ className, style }: { className?: string; style?: CSSProperties }) {
@@ -11,11 +12,12 @@ export function Spinner({ className }: { className?: string }) {
   return <Loader2 className={cn("size-4 animate-spin text-fg-subtle", className)} aria-hidden />;
 }
 
-export function LoadingBlock({ label = "Loading…" }: { label?: string }) {
+export function LoadingBlock({ label }: { label?: string }) {
+  const t = useT();
   return (
     <div className="flex items-center justify-center gap-2.5 py-16 text-sm text-fg-subtle">
       <Spinner />
-      {label}
+      {label ?? t("common.loading")}
     </div>
   );
 }
@@ -53,7 +55,7 @@ export function EmptyState({
  * panel, not the page.
  */
 export function ErrorState({
-  title = "Something went wrong",
+  title,
   message,
   onRetry,
   compact,
@@ -63,6 +65,7 @@ export function ErrorState({
   onRetry?: () => void;
   compact?: boolean;
 }) {
+  const t = useT();
   return (
     <div
       className={cn(
@@ -73,7 +76,7 @@ export function ErrorState({
       <div className="flex items-start gap-2.5">
         <AlertCircle className="mt-0.5 size-4 shrink-0 text-danger" aria-hidden />
         <div>
-          <p className="text-sm font-medium text-fg">{title}</p>
+          <p className="text-sm font-medium text-fg">{title ?? t("common.somethingWrong")}</p>
           {message ? (
             <p className="mt-1 text-[0.8125rem] leading-relaxed text-fg-muted">{message}</p>
           ) : null}
@@ -82,7 +85,7 @@ export function ErrorState({
       {onRetry ? (
         <Button size="sm" variant="outline" onClick={onRetry} className="ml-6.5">
           <RefreshCw className="size-3.5" aria-hidden />
-          Try again
+          {t("common.tryAgain")}
         </Button>
       ) : null}
     </div>

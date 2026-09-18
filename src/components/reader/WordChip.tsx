@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import type { VerseContext, Word, WordStatus } from "@/lib/types";
 import { describeAiError, getWordContext, isTauri } from "@/lib/ai";
 import { useSetWordStatus } from "@/hooks/useProgress";
-import { useContentLanguage } from "@/hooks/useProfile";
+import { useLanguage, useT } from "@/providers/I18nProvider";
 import { wordGloss } from "@/lib/language";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/feedback";
@@ -23,8 +23,9 @@ const STATUS_STYLES: Record<WordStatus | "none", string> = {
  * ruku never triggers hundreds of generations.
  */
 function WordDetail({ word, verse }: { word: Word; verse: VerseContext }) {
+  const t = useT();
   const queryClient = useQueryClient();
-  const language = useContentLanguage();
+  const language = useLanguage();
   const [regenerating, setRegenerating] = useState(false);
 
   // The language is part of the query key as well as the request: switching
@@ -63,11 +64,11 @@ function WordDetail({ word, verse }: { word: Word; verse: VerseContext }) {
       <div className="border-t border-border pt-3">
         <div className="mb-1.5 flex items-center gap-1.5 text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
           <Sparkles className="size-3" aria-hidden />
-          In this ayah
+          {t("word.inThisAyah")}
         </div>
 
         {context.isLoading || regenerating ? (
-          <div className="space-y-1.5" aria-label="Generating explanation">
+          <div className="space-y-1.5" aria-label={t("word.generating")}>
             <Skeleton className="h-3 w-full" />
             <Skeleton className="h-3 w-[92%]" />
             <Skeleton className="h-3 w-[70%]" />
@@ -75,14 +76,12 @@ function WordDetail({ word, verse }: { word: Word; verse: VerseContext }) {
         ) : context.isError ? (
           <div className="space-y-2">
             <p className="text-[0.8125rem] leading-relaxed text-fg-subtle">
-              {isTauri()
-                ? describeAiError(context.error)
-                : "Word explanations need the desktop backend. Run the app with `pnpm app:dev`."}
+              {isTauri() ? describeAiError(context.error, t) : t("word.needsDesktop")}
             </p>
             {isTauri() ? (
               <Button size="sm" variant="outline" onClick={() => void context.refetch()}>
                 <RefreshCw className="size-3.5" aria-hidden />
-                Retry
+                {t("common.retry")}
               </Button>
             ) : null}
           </div>
@@ -96,7 +95,7 @@ function WordDetail({ word, verse }: { word: Word; verse: VerseContext }) {
               className="mt-2 inline-flex items-center gap-1 text-[0.6875rem] text-fg-subtle transition-colors hover:text-fg"
             >
               <RefreshCw className="size-3" aria-hidden />
-              Regenerate
+              {t("common.regenerate")}
             </button>
           </>
         )}
@@ -117,9 +116,10 @@ export function WordChip({
   /** This word is the one currently being recited. */
   reciting?: boolean;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const setStatus = useSetWordStatus();
-  const language = useContentLanguage();
+  const language = useLanguage();
   const current = status ?? "none";
 
   return (
@@ -172,7 +172,7 @@ export function WordChip({
               }
             >
               <Check className="size-3.5" aria-hidden />
-              {current === "learned" ? "Learned" : "Mark learned"}
+              {current === "learned" ? t("word.learned") : t("word.markLearned")}
             </Button>
             {current !== "learning" ? (
               <Button
@@ -180,7 +180,7 @@ export function WordChip({
                 variant="ghost"
                 onClick={() => setStatus.mutate({ wordId: word.id, status: "learning" })}
               >
-                Learning
+                {t("word.learning")}
               </Button>
             ) : null}
           </div>

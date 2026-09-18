@@ -1,11 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
-import {
-  DEFAULT_CONTENT_LANGUAGE,
-  isContentLanguage,
-  type ContentLanguage,
-} from "@/lib/language";
+import { isLanguage, type Language } from "@/lib/i18n";
 import { DEFAULT_UI_PREFS, type Profile, type UiPrefs } from "@/lib/types";
 import { detectTimezone } from "@/lib/utils";
 
@@ -46,15 +42,25 @@ export function useUiPrefs(): UiPrefs {
 }
 
 /**
- * The content language, for the many components that need only that.
+ * The language stored in the profile, or null when there isn't one yet.
+ *
+ * Null rather than the default, because the caller — `I18nProvider` — has a
+ * better answer than English while the profile is loading: whatever the reader
+ * chose last time, mirrored in localStorage. Collapsing "still loading" into
+ * "English" here is exactly what would make the app flash the wrong language
+ * on every reload.
  *
  * Validated rather than cast: `ui_prefs` is free-form JSON, so a row written
  * by a newer build (or edited by hand) can hold a language this build has no
- * column for, and falling back beats rendering blank scripture.
+ * strings for. `contentLanguage` is read as a fallback for profiles written
+ * while the interface and the scripture were two separate settings.
  */
-export function useContentLanguage(): ContentLanguage {
-  const { contentLanguage } = useUiPrefs();
-  return isContentLanguage(contentLanguage) ? contentLanguage : DEFAULT_CONTENT_LANGUAGE;
+export function useProfileLanguage(): Language | null {
+  const { data } = useProfile();
+  if (!data) return null;
+  const prefs = data.ui_prefs as (Partial<UiPrefs> & { contentLanguage?: unknown }) | null;
+  const value = prefs?.language ?? prefs?.contentLanguage;
+  return isLanguage(value) ? value : null;
 }
 
 export function useUpdateProfile() {
@@ -87,6 +93,36 @@ export function useUpdateProfile() {
         .single();
       if (error) throw error;
       return data;
+    },
+    /**
+     * Preferences are applied before the write lands.
+     *
+     * Every one of them is a switch the reader just flipped — tajweed, the
+     * panel side, which reader a ruku opens in — and a round trip before the
+     * UI reflects it reads as the toggle not working. The reader mode makes it
+     * load-bearing rather than cosmetic: the ruku reader redirects on it, so a
+     * stale value would bounce someone straight back out of the reader they
+     * just switched to.
+     */
+    onMutate: async (patch) => {
+      if (!patch.ui_prefs) return;
+      const key = ["profile", user?.id];
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<Profile>(key);
+      if (previous) {
+        queryClient.setQueryData<Profile>(key, {
+          ...previous,
+          ui_prefs: {
+            ...DEFAULT_UI_PREFS,
+            ...((previous.ui_prefs as Partial<UiPrefs> | null) ?? {}),
+            ...patch.ui_prefs,
+          },
+        });
+      }
+      return { previous };
+    },
+    onError: (_error, _patch, context) => {
+      if (context?.previous) queryClient.setQueryData(["profile", user?.id], context.previous);
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["profile", user?.id], data);

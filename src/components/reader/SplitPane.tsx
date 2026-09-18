@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { Dialog } from "radix-ui";
 import { X } from "lucide-react";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
+import { useT } from "@/providers/I18nProvider";
 
 const SPLIT_STORAGE_KEY = "qs.readerSplit";
 
@@ -30,6 +31,7 @@ export function SplitPane({
   tafsirOpen: boolean;
   onTafsirOpenChange: (open: boolean) => void;
 }) {
+  const t = useT();
   const isDesktop = useIsDesktop();
   const containerRef = useRef<HTMLDivElement>(null);
   const [tafsirWidth, setTafsirWidth] = useState<number>(() => {
@@ -75,7 +77,7 @@ export function SplitPane({
               // The panel carries its own heading; this only names the dialog.
               aria-describedby={undefined}
             >
-              <Dialog.Title className="sr-only">Tafsir</Dialog.Title>
+              <Dialog.Title className="sr-only">{t("tafsir.title")}</Dialog.Title>
 
               <div className="min-h-0 flex-1 pt-[env(safe-area-inset-top)]">{tafsir}</div>
 
@@ -84,7 +86,7 @@ export function SplitPane({
                   the edition picker. */}
               <Dialog.Close
                 className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 grid size-12 place-items-center rounded-full border border-border bg-surface-2 text-fg shadow-lg active:bg-surface"
-                aria-label="Close tafsir"
+                aria-label={t("reader.closeTafsir")}
               >
                 <X className="size-5" aria-hidden />
               </Dialog.Close>

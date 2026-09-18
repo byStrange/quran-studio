@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/providers/I18nProvider";
 import { Button } from "@/components/ui/button";
 
 export interface SelfAssessResult {
@@ -36,6 +37,7 @@ interface SelfAssessProps {
   questionKey: string | number;
   /** The question put to the reader before anything is revealed. */
   prompt: string;
+  /** Both default to the vocabulary round's wording, which is the shorter one. */
   knowLabel?: string;
   dontKnowLabel?: string;
   /** Rendered once the reader has claimed, whichever way they claimed. */
@@ -52,13 +54,14 @@ interface SelfAssessProps {
 export function SelfAssess({
   questionKey,
   prompt,
-  knowLabel = "I know it",
-  dontKnowLabel = "I don't know",
+  knowLabel,
+  dontKnowLabel,
   children,
   onAnswer,
   onNext,
   nextLabel,
 }: SelfAssessProps) {
+  const t = useT();
   const [claimed, setClaimed] = useState<boolean | null>(null);
   const [correct, setCorrect] = useState<boolean | null>(null);
 
@@ -120,7 +123,7 @@ export function SelfAssess({
             )}
           >
             <Check className="size-4" aria-hidden />
-            {knowLabel}
+            {knowLabel ?? t("quiz.iKnowIt")}
           </button>
           <button
             onClick={() => claim(false)}
@@ -131,10 +134,10 @@ export function SelfAssess({
             )}
           >
             <X className="size-4" aria-hidden />
-            {dontKnowLabel}
+            {dontKnowLabel ?? t("quiz.iDontKnow")}
           </button>
         </div>
-        <p className="mt-3 text-center text-[0.6875rem] text-fg-subtle">Press Y or N</p>
+        <p className="mt-3 text-center text-[0.6875rem] text-fg-subtle">{t("quiz.keyHint")}</p>
       </>
     );
   }
@@ -147,24 +150,22 @@ export function SelfAssess({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[0.8125rem] font-medium text-fg">
-              {claimed ? "Were you right?" : "Did you have it after all?"}
+              {claimed ? t("quiz.wereYouRight") : t("quiz.didYouHaveIt")}
             </p>
             <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
-              {claimed
-                ? "You said you knew it. Now that you can see the answer — did you?"
-                : "You passed on it. If what you had in mind was right, say so."}
+              {claimed ? t("quiz.wereYouRightHint") : t("quiz.didYouHaveItHint")}
             </p>
           </div>
           <div
             role="group"
-            aria-label="Were you right?"
+            aria-label={t("quiz.wereYouRight")}
             className="flex shrink-0 gap-1 rounded-lg border border-border bg-surface p-1"
           >
             <ConfirmButton selected={correct === true} tone="yes" onClick={() => confirm(true)}>
-              Yes
+              {t("quiz.yes")}
             </ConfirmButton>
             <ConfirmButton selected={correct === false} tone="no" onClick={() => confirm(false)}>
-              No
+              {t("quiz.no")}
             </ConfirmButton>
           </div>
         </div>
@@ -172,9 +173,7 @@ export function SelfAssess({
 
       <div className="mt-4 flex items-center justify-between gap-3">
         <span className="text-[0.75rem] text-fg-subtle">
-          {correct
-            ? "Counted as known."
-            : "Counted as missed — it comes back around sooner."}
+          {correct ? t("quiz.countedKnown") : t("quiz.countedMissed")}
         </span>
         <Button variant="primary" onClick={onNext}>
           {nextLabel}

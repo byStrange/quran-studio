@@ -167,6 +167,20 @@ export function stripHtml(input: string): string {
     .trim();
 }
 
+/**
+ * Normalises the apostrophe in Uzbek o'/g'.
+ *
+ * The upstream Uzbek translation spells them with a backtick (`og\`dirmagin`),
+ * a transliteration-era convention rather than Uzbek orthography, and the
+ * app's own Uzbek strings use a plain `'`. Every character this maps to `'`
+ * denotes the same letter, so it is a spelling fix rather than an edit to the
+ * translation — and doing it at import time is what keeps two spellings of the
+ * same word off one screen.
+ */
+export function normaliseUzbekApostrophes(text: string): string {
+  return text.replace(/[`\u02BB\u2018\u2019]/g, "'");
+}
+
 export function log(step: string, message: string): void {
   const time = new Date().toISOString().slice(11, 19);
   console.log(`[${time}] ${step.padEnd(10)} ${message}`);

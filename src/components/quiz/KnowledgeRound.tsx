@@ -25,7 +25,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RotateCcw, Settings2, Sparkles, WandSparkles, X } from "lucide-react";
 import { describeAiError } from "@/lib/ai";
 import { useAuth } from "@/providers/AuthProvider";
-import { useContentLanguage } from "@/hooks/useProfile";
+import { useLanguage, useT } from "@/providers/I18nProvider";
 import { verseTranslation } from "@/lib/language";
 import {
   drawVerses,
@@ -33,7 +33,7 @@ import {
   generateQuestions,
   recordAnswer,
   startSession,
-  KIND_LABELS,
+  kindLabelKey,
   type KnowledgeQuestion,
 } from "@/lib/knowledgeQuiz";
 import { verseKey } from "@/lib/utils";
@@ -55,9 +55,10 @@ export function KnowledgeRound({
   config: RoundConfig;
   onSetup: () => void;
 }) {
+  const t = useT();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const language = useContentLanguage();
+  const language = useLanguage();
 
   const [index, setIndex] = useState(0);
   const [answer, setAnswer] = useState<SelfAssessResult | null>(null);
@@ -150,10 +151,9 @@ export function KnowledgeRound({
         <CardBody className="py-14">
           <div className="flex flex-col items-center gap-3 text-center">
             <Spinner className="size-6" />
-            <p className="text-sm font-medium text-fg">Writing your questions…</p>
+            <p className="text-sm font-medium text-fg">{t("quiz.writingQuestions")}</p>
             <p className="max-w-sm text-[0.8125rem] text-fg-subtle">
-              {config.limit} ayahs from this scope are going to the model, one question each.
-              This takes a few seconds.
+              {t("quiz.writingQuestionsHint", { count: config.limit })}
             </p>
           </div>
         </CardBody>
@@ -166,19 +166,19 @@ export function KnowledgeRound({
       <Card>
         <EmptyState
           icon={<X className="size-5" />}
-          title="Couldn't write the questions"
-          description={describeAiError(round.error)}
+          title={t("quiz.generateFailed")}
+          description={describeAiError(round.error, t)}
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <Button variant="primary" onClick={() => round.refetch()}>
                 <RotateCcw className="size-4" aria-hidden />
-                Try again
+                {t("quiz.tryAgain")}
               </Button>
               <Button variant="outline" onClick={onSetup}>
-                Back to setup
+                {t("quiz.backToSetup")}
               </Button>
               <Button asChild variant="ghost">
-                <Link to="/settings">AI settings</Link>
+                <Link to="/settings">{t("quiz.aiSettings")}</Link>
               </Button>
             </div>
           }
@@ -192,22 +192,22 @@ export function KnowledgeRound({
       <Card>
         <EmptyState
           icon={<WandSparkles className="size-5" />}
-          title="Nothing to ask about yet"
+          title={t("quiz.nothingToAsk")}
           description={
             config.scope === "surah"
-              ? "This surah has no memorized ayahs yet. Mark some as memorized while reading, then come back."
+              ? t("quiz.emptySurahDescription")
               : config.scope === "ruku"
-                ? "That ruku has no ayahs with a translation to build questions from."
-                : "Nothing memorized yet — mark ayahs as memorized while reading, then come back."
+                ? t("quiz.nothingToAskRuku")
+                : t("quiz.nothingToAskGlobal")
           }
           action={
             <div className="flex gap-2">
               <Button variant="primary" onClick={onSetup}>
                 <Settings2 className="size-4" aria-hidden />
-                Change scope
+                {t("quiz.changeScope")}
               </Button>
               <Button asChild variant="outline">
-                <Link to="/browse">Go read</Link>
+                <Link to="/browse">{t("quiz.goRead")}</Link>
               </Button>
             </div>
           }
@@ -222,16 +222,20 @@ export function KnowledgeRound({
         correct={correctCount}
         answered={questions.length}
         revised={revisedCount}
-        note="You can be asked about this passage."
+        verdicts={{
+          strong: t("quiz.knowledgeVerdictStrong"),
+          solid: t("quiz.knowledgeVerdictSolid"),
+          weak: t("quiz.knowledgeVerdictWeak"),
+        }}
         actions={
           <>
             <Button variant="primary" onClick={onSetup}>
               <RotateCcw className="size-4" aria-hidden />
-              New round
+              {t("quiz.newRound")}
             </Button>
             {config.scope === "ruku" && config.ruku !== null ? (
               <Button asChild variant="ghost">
-                <Link to={`/read/${config.ruku}`}>Back to the ruku</Link>
+                <Link to={`/read/${config.ruku}`}>{t("quiz.backToRuku")}</Link>
               </Button>
             ) : null}
           </>
@@ -239,7 +243,7 @@ export function KnowledgeRound({
       >
         {missed.length > 0 ? (
           <>
-            <p className="text-[0.8125rem] font-medium text-fg">Ayahs to go back to</p>
+            <p className="text-[0.8125rem] font-medium text-fg">{t("quiz.ayahsToRevisit")}</p>
             <ul className="mt-3 divide-y divide-border">
               {missed.map((item) => (
                 <li key={`${item.verse_id}-${item.question}`} className="py-2.5">
@@ -278,7 +282,7 @@ export function KnowledgeRound({
         <CardBody className="pt-7">
           <div className="flex items-center justify-center gap-1.5 text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
             <Sparkles className="size-3" aria-hidden />
-            {KIND_LABELS[question!.kind]}
+            {t(kindLabelKey(question!.kind))}
           </div>
           <p className="mx-auto mt-3 max-w-xl text-center text-[1.0625rem] leading-relaxed text-fg">
             {question!.question}
@@ -286,16 +290,16 @@ export function KnowledgeRound({
 
           <SelfAssess
             questionKey={`${question!.verse_id}-${index}`}
-            prompt="Do you know the answer?"
-            knowLabel="I know the answer"
-            dontKnowLabel="I don't know"
+            prompt={t("quiz.knowledgePrompt")}
+            knowLabel={t("quiz.iKnowAnswer")}
+            dontKnowLabel={t("quiz.iDontKnow")}
             onAnswer={setAnswer}
             onNext={next}
-            nextLabel={index + 1 >= questions.length ? "Finish" : "Next"}
+            nextLabel={index + 1 >= questions.length ? t("quiz.finish") : t("quiz.next")}
           >
             <div className="rounded-xl border border-border bg-surface-2/50 p-4">
               <p className="text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
-                The answer
+                {t("quiz.theAnswer")}
               </p>
               <p className="mt-1.5 text-[0.9375rem] leading-relaxed font-medium text-fg">
                 {question!.answer}

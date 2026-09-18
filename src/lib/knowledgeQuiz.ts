@@ -15,9 +15,11 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import { AiUnavailableError, isTauri } from "./ai";
-import { verseTranslation, type ContentLanguage } from "./language";
+import { verseTranslation } from "./language";
+import type { Language } from "./i18n";
 import { supabase } from "./supabase";
 import type { Database } from "./database.types";
+import type { TranslationKey } from "@/locales/en";
 import type { QuizScope } from "./types";
 
 export type KnowledgeQuestionKind = Database["public"]["Enums"]["knowledge_question_kind"];
@@ -25,14 +27,25 @@ export type KnowledgeQuestionKind = Database["public"]["Enums"]["knowledge_quest
 const NOT_IN_TAURI =
   "Generated quizzes run in the desktop backend. Launch the app with `pnpm app:dev` instead of the browser preview.";
 
-/** What each kind asks for, for the label on a question card. */
-export const KIND_LABELS: Record<KnowledgeQuestionKind, string> = {
-  locate: "Which ayah",
-  wording: "Which word",
-  meaning: "What it says",
-  continuation: "What follows",
-  detail: "Detail",
+/**
+ * What each kind asks for, for the label on a question card.
+ *
+ * The keys rather than the words, because the label is shown to the reader and
+ * the reader has a language. The map is exhaustive over the enum, so adding a
+ * kind to the database is a type error here until it has been named in every
+ * locale — which is the point at which a missing translation is cheap to fix.
+ */
+const KIND_LABEL_KEYS: Record<KnowledgeQuestionKind, TranslationKey> = {
+  locate: "quiz.kindLocate",
+  wording: "quiz.kindWording",
+  meaning: "quiz.kindMeaning",
+  continuation: "quiz.kindContinuation",
+  detail: "quiz.kindDetail",
 };
+
+export function kindLabelKey(kind: KnowledgeQuestionKind): TranslationKey {
+  return KIND_LABEL_KEYS[kind];
+}
 
 /** One ayah as `quiz_verse_pool` returned it. */
 export interface QuizVerse {
@@ -44,6 +57,7 @@ export interface QuizVerse {
   arabic_text: string;
   translation_en: string;
   translation_ru: string;
+  translation_uz: string;
   pool_size: number;
 }
 
@@ -70,7 +84,7 @@ export interface KnowledgeRound {
 export interface VersePoolRequest {
   scope: QuizScope;
   limit: number;
-  language: ContentLanguage;
+  language: Language;
   surah: number | null;
   ruku: number | null;
 }
@@ -97,7 +111,7 @@ export async function drawVerses(request: VersePoolRequest): Promise<QuizVerse[]
  */
 export async function generateQuestions(
   verses: QuizVerse[],
-  language: ContentLanguage,
+  language: Language,
 ): Promise<KnowledgeRound> {
   if (!isTauri()) throw new AiUnavailableError(NOT_IN_TAURI);
 
@@ -132,7 +146,7 @@ export async function generateQuestions(
 export interface SessionRequest {
   scope: QuizScope;
   questionCount: number;
-  language: ContentLanguage;
+  language: Language;
   surah: number | null;
   ruku: number | null;
   model: string | null;

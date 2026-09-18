@@ -3,57 +3,82 @@ import { ExternalLink } from "lucide-react";
 import { Page } from "@/components/layout/AppShell";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { isTauri } from "@/lib/ai";
+import { useT, type TFunction } from "@/providers/I18nProvider";
+import type { TranslationKey } from "@/locales/en";
 
 interface Source {
-  name: string;
+  /** Untranslated where the name is a proper noun that is not translated. */
+  name: string | TranslationKey;
   url: string;
-  used: string;
-  license: string;
+  used: TranslationKey;
+  license: TranslationKey;
 }
 
+/**
+ * The attribution list.
+ *
+ * The names stay as keys rather than literals only where a name genuinely
+ * changes across languages — "Quran.com API" does not, "Tafsir Ibn Kathir
+ * (abridged, English)" does, because the parenthetical is a description.
+ */
 const SOURCES: Source[] = [
   {
     name: "Quran.com API (v4)",
     url: "https://api-docs.quran.foundation",
-    used: "Uthmani Arabic text, ruku and juz boundaries, and the word-by-word breakdown with transliteration and English glosses.",
-    license:
-      "Provided by Quran.com / Quran Foundation for non-commercial use. Data imported once and served locally.",
+    used: "about.quranApi.used",
+    license: "about.quranApi.license",
   },
   {
-    name: "Saheeh International translation",
+    name: "about.saheeh.name",
     url: "https://quran.com",
-    used: "The English translation shown beneath every ayah.",
-    license: "© Saheeh International. Reproduced for personal study.",
+    used: "about.saheeh.used",
+    license: "about.saheeh.license",
   },
   {
-    name: "Tafsir Ibn Kathir (abridged, English)",
-    url: "https://github.com/spa5k/tafsir_api",
-    used: "The English option in the reader's tafsir panel, mapped to ayah ranges.",
-    license:
-      "Public-domain classical text; JSON mirror published by the tafsir_api project under MIT.",
+    name: "about.kuliev.name",
+    url: "https://quran.com",
+    used: "about.kuliev.used",
+    license: "about.kuliev.license",
   },
   {
-    name: "Al-Mukhtasar fi Tafsir al-Qur'an al-Karim (Uzbek)",
+    name: "about.sodiq.name",
+    url: "https://quran.com",
+    used: "about.sodiq.used",
+    license: "about.sodiq.license",
+  },
+  {
+    name: "about.ibnKathir.name",
     url: "https://github.com/spa5k/tafsir_api",
-    used: "The Uzbek option in the reader's tafsir panel, one entry per ayah.",
-    license:
-      "© Tafsir Center for Quranic Studies; official Uzbek edition, mirrored by the tafsir_api project.",
+    used: "about.ibnKathir.used",
+    license: "about.ibnKathir.license",
+  },
+  {
+    name: "about.mukhtasar.name",
+    url: "https://github.com/spa5k/tafsir_api",
+    used: "about.mukhtasar.used",
+    license: "about.mukhtasar.license",
   },
   {
     name: "Ollama Cloud",
     url: "https://ollama.com",
-    used: "Generates the per-word contextual explanations and ruku summaries, which are then cached and shared.",
-    license: "Used under your own Ollama Cloud account and its terms.",
+    used: "about.ollama.used",
+    license: "about.ollama.license",
   },
   {
     name: "Amiri Quran & Inter",
     url: "https://fonts.google.com/specimen/Amiri+Quran",
-    used: "The Quranic Arabic typeface and the interface typeface.",
-    license: "SIL Open Font License 1.1. Bundled with the app.",
+    used: "about.fonts.used",
+    license: "about.fonts.license",
   },
 ];
 
+/** A source name is either a proper noun or a key; keys carry a dot. */
+function sourceName(source: Source, t: TFunction): string {
+  return source.name.includes(".") ? t(source.name as TranslationKey) : source.name;
+}
+
 function SourceLink({ source }: { source: Source }) {
+  const t = useT();
   return (
     <div className="py-4 first:pt-0 last:pb-0">
       <button
@@ -63,71 +88,50 @@ function SourceLink({ source }: { source: Source }) {
         }}
         className="group inline-flex items-center gap-1.5 text-sm font-medium text-fg transition-colors hover:text-accent"
       >
-        {source.name}
+        {sourceName(source, t)}
         <ExternalLink
           className="size-3 text-fg-subtle transition-colors group-hover:text-accent"
           aria-hidden
         />
       </button>
-      <p className="mt-1.5 text-[0.8125rem] leading-relaxed text-fg-muted">{source.used}</p>
-      <p className="mt-1 text-[0.75rem] leading-relaxed text-fg-subtle">{source.license}</p>
+      <p className="mt-1.5 text-[0.8125rem] leading-relaxed text-fg-muted">{t(source.used)}</p>
+      <p className="mt-1 text-[0.75rem] leading-relaxed text-fg-subtle">{t(source.license)}</p>
     </div>
   );
 }
 
 export function About() {
+  const t = useT();
+
   return (
-    <Page
-      title="About & sources"
-      description="Where the text in this app comes from, and who to credit for it."
-    >
+    <Page title={t("about.title")} description={t("about.description")}>
       <div className="space-y-4">
         <Card>
-          <CardHeader
-            title="How this app works"
-            description="Quran Studio organises the Quran into its 558 rukus and treats each one as a lesson."
-          />
+          <CardHeader title={t("about.howTitle")} description={t("about.howDescription")} />
           <CardBody>
-            <p className="prose-reading text-[0.875rem]">
-              All Quran text, translation, word-by-word data, and tafsir are imported once into
-              your own Supabase project and read from there. The app never calls a third-party
-              Quran API while you use it, so it stays fast and works from a single database you
-              control. AI explanations are generated on demand, then cached so each one is
-              produced only once and reused afterwards.
-            </p>
+            <p className="prose-reading text-[0.875rem]">{t("about.howBody")}</p>
           </CardBody>
         </Card>
 
         <Card>
           <CardHeader
-            title="Sources & attribution"
-            description="Please respect each source's own terms if you redistribute this app."
+            title={t("about.sourcesTitle")}
+            description={t("about.sourcesDescription")}
           />
           <CardBody>
             <div className="divide-y divide-border">
               {SOURCES.map((source) => (
-                <SourceLink key={source.name} source={source} />
+                <SourceLink key={`${source.name}${source.used}`} source={source} />
               ))}
             </div>
           </CardBody>
         </Card>
 
         <Card>
-          <CardHeader title="A note on the tafsir" />
+          <CardHeader title={t("about.tafsirNoteTitle")} />
           <CardBody>
-            <p className="prose-reading text-[0.875rem]">
-              Two editions are available, switched from the panel itself: Ibn Kathir in English
-              and Al-Mukhtasar in Uzbek. Both are human translations — nothing in the tafsir
-              panel is machine-translated. Ibn Kathir frequently comments on several ayahs
-              together; where that happens the panel shows the full entry and labels the verse
-              range it covers, rather than repeating the same commentary for each ayah.
-              Al-Mukhtasar comments ayah by ayah and is considerably more concise.
-            </p>
-            <p className="prose-reading mt-3 text-[0.875rem]">
-              AI-generated notes elsewhere in the app are a study aid, not a source of religious
-              rulings — check anything important against the tafsir itself and a qualified
-              teacher.
-            </p>
+            <p className="prose-reading text-[0.875rem]">{t("about.tafsirNoteBody")}</p>
+            <p className="prose-reading mt-3 text-[0.875rem]">{t("about.aiNoteBody")}</p>
           </CardBody>
         </Card>
       </div>
