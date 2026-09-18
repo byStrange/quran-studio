@@ -14,9 +14,12 @@ import { Card, CardBody, CardHeader, StatTile } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ProgressBar, Tooltip } from "@/components/ui/primitives";
 import { Skeleton } from "@/components/ui/feedback";
-import { cn, formatDuration, formatPercent, todayInTimezone } from "@/lib/utils";
+import { cn, formatDuration, formatPercent, todayInTimezone, type DurationUnits } from "@/lib/utils";
+import { useDurationUnits, useT, type TFunction } from "@/providers/I18nProvider";
 
 export function Dashboard() {
+  const t = useT();
+  const units = useDurationUnits();
   const { data: profile } = useProfile();
   const { isLoading: streakLoading } = useStreak();
   const { streak, graceDaysLeft } = useStreakStatus();
@@ -36,12 +39,12 @@ export function Dashboard() {
 
   return (
     <Page
-      title="Dashboard"
-      description="Your reading time, streak, and memorization progress."
+      title={t("dashboard.title")}
+      description={t("dashboard.description")}
       wide
       action={
         <Button asChild variant="primary">
-          <Link to="/browse">Continue reading</Link>
+          <Link to="/browse">{t("dashboard.continueReading")}</Link>
         </Button>
       }
     >
@@ -55,34 +58,36 @@ export function Dashboard() {
         <>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <StatTile
-              label="Current streak"
+              label={t("dashboard.currentStreak")}
               value={`${streak?.current_streak ?? 0}`}
               hint={
                 graceDaysLeft !== null
                   ? graceDaysLeft === 1
-                    ? "Paused · last day to restore"
-                    : `Paused · ${graceDaysLeft} days to restore`
-                  : `Longest: ${streak?.longest_streak ?? 0} days`
+                    ? t("dashboard.lastDayToRestore")
+                    : t("dashboard.daysToRestore", { count: graceDaysLeft })
+                  : t("dashboard.longest", { count: streak?.longest_streak ?? 0 })
               }
               icon={<Flame className="size-4" />}
               accent={(streak?.current_streak ?? 0) > 0}
             />
             <StatTile
-              label="Today"
-              value={formatDuration(reading?.today_seconds ?? 0)}
-              hint={`${formatDuration(reading?.week_seconds ?? 0)} this week`}
+              label={t("dashboard.today")}
+              value={formatDuration(reading?.today_seconds ?? 0, units)}
+              hint={t("dashboard.thisWeek", {
+                duration: formatDuration(reading?.week_seconds ?? 0, units),
+              })}
               icon={<Clock className="size-4" />}
             />
             <StatTile
-              label="Memorized"
+              label={t("dashboard.memorized")}
               value={`${memorization?.verses_memorized ?? 0}`}
-              hint={`${formatPercent(percentMemorized, 2)} of the Quran`}
+              hint={t("dashboard.ofTheQuran", { percent: formatPercent(percentMemorized, 2) })}
               icon={<BookMarked className="size-4" />}
             />
             <StatTile
-              label="Words learned"
+              label={t("dashboard.wordsLearned")}
               value={`${memorization?.words_learned ?? 0}`}
-              hint={`${memorization?.words_learning ?? 0} in progress`}
+              hint={t("dashboard.inProgress", { count: memorization?.words_learning ?? 0 })}
               icon={<Library className="size-4" />}
             />
           </div>
@@ -94,17 +99,23 @@ export function Dashboard() {
                   <Flame className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
                   <div>
                     <p className="text-sm font-medium text-fg">
-                      Your {streak?.current_streak ?? 0}-day streak is paused
+                      {t("dashboard.streakPausedTitle", { count: streak?.current_streak ?? 0 })}
                     </p>
+                    {/* The deadline is emboldened inside the sentence, so the
+                        sentence is split on its placeholder rather than
+                        assembled from two half-sentences — the surrounding
+                        grammar differs per language and only the full string
+                        carries it. */}
                     <p className="mt-1 text-[0.8125rem] leading-relaxed text-fg-muted">
-                      You missed a day, but the streak isn't gone. Read for a full hour in a
-                      single day{" "}
-                      <strong className="font-medium text-fg">
-                        {graceDaysLeft === 1
-                          ? "before today is over"
-                          : `within the next ${graceDaysLeft} days`}
-                      </strong>{" "}
-                      and it picks up right where it left off.
+                      <Emphasised
+                        template={t("dashboard.streakPausedBody")}
+                        placeholder="{deadline}"
+                        value={
+                          graceDaysLeft === 1
+                            ? t("dashboard.deadlineToday")
+                            : t("dashboard.deadlineDays", { count: graceDaysLeft ?? 0 })
+                        }
+                      />
                     </p>
                   </div>
                 </div>
@@ -115,39 +126,40 @@ export function Dashboard() {
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader
-                title="Reading activity"
-                description="The last 12 weeks. Darker means more time that day."
+                title={t("dashboard.activityTitle")}
+                description={t("dashboard.activityDescription")}
               />
               <CardBody>
-                <ActivityGrid history={history ?? []} today={today} />
+                <ActivityGrid history={history ?? []} today={today} t={t} units={units} />
               </CardBody>
             </Card>
 
             <Card>
-              <CardHeader title="Progress" />
+              <CardHeader title={t("dashboard.progressTitle")} />
               <CardBody className="space-y-5">
                 <ProgressRow
-                  label="Quran memorized"
+                  label={t("dashboard.quranMemorized")}
                   value={percentMemorized}
-                  detail={`${memorization?.verses_memorized ?? 0} of ${
-                    memorization?.total_verses ?? 6236
-                  } ayahs`}
+                  detail={t("dashboard.ayahsOf", {
+                    memorized: memorization?.verses_memorized ?? 0,
+                    total: memorization?.total_verses ?? 6236,
+                  })}
                 />
                 <ProgressRow
-                  label="Surahs completed"
+                  label={t("dashboard.surahsCompleted")}
                   value={((memorization?.surahs_completed ?? 0) / 114) * 100}
-                  detail={`${memorization?.surahs_completed ?? 0} of 114 surahs`}
+                  detail={t("dashboard.surahsOf", { completed: memorization?.surahs_completed ?? 0 })}
                   tone="gold"
                 />
                 <div className="border-t border-border pt-4">
                   <div className="flex items-center justify-between text-[0.8125rem]">
-                    <span className="text-fg-subtle">Total time read</span>
+                    <span className="text-fg-subtle">{t("dashboard.totalTimeRead")}</span>
                     <span className="font-medium tabular-nums text-fg">
-                      {formatDuration(reading?.total_seconds ?? 0)}
+                      {formatDuration(reading?.total_seconds ?? 0, units)}
                     </span>
                   </div>
                   <div className="mt-2 flex items-center justify-between text-[0.8125rem]">
-                    <span className="text-fg-subtle">Days with reading</span>
+                    <span className="text-fg-subtle">{t("dashboard.daysWithReading")}</span>
                     <span className="font-medium tabular-nums text-fg">
                       {reading?.days_read ?? 0}
                     </span>
@@ -191,9 +203,13 @@ function ProgressRow({
 function ActivityGrid({
   history,
   today,
+  t,
+  units,
 }: {
   history: Array<{ day: string; seconds_read: number }>;
   today: string;
+  t: TFunction;
+  units: DurationUnits;
 }) {
   const byDay = useMemo(
     () => new Map(history.map((row) => [row.day, row.seconds_read])),
@@ -235,12 +251,14 @@ function ActivityGrid({
           <Tooltip
             key={date}
             content={
-              seconds > 0 ? `${formatDuration(seconds)} on ${date}` : `No reading on ${date}`
+              seconds > 0
+                ? t("dashboard.readOn", { duration: formatDuration(seconds, units), date })
+                : t("dashboard.noReadingOn", { date })
             }
           >
             <div
               className={cn("size-3 rounded-[3px]", LEVELS[level(seconds)])}
-              aria-label={`${date}: ${formatDuration(seconds)}`}
+              aria-label={`${date}: ${formatDuration(seconds, units)}`}
             />
           </Tooltip>
         ))}
@@ -248,13 +266,42 @@ function ActivityGrid({
 
       <div className="mt-4 flex items-center gap-2 text-[0.6875rem] text-fg-subtle">
         <TrendingUp className="size-3" aria-hidden />
-        Less
+        {t("dashboard.less")}
         {LEVELS.map((cls, i) => (
           <span key={i} className={cn("size-3 rounded-[3px]", cls)} />
         ))}
-        More
-        <span className="ml-auto">1h+ days restore a paused streak</span>
+        {t("dashboard.more")}
+        <span className="ml-auto">{t("dashboard.restoreHint")}</span>
       </div>
     </div>
+  );
+}
+
+/**
+ * A sentence with one emphasised span inside it.
+ *
+ * The alternative — three JSX fragments with the bold bit in the middle — puts
+ * the sentence's word order in the component rather than in the dictionary,
+ * and word order is the first thing a translation changes. So the string stays
+ * whole, carries a placeholder, and is split on it here.
+ */
+function Emphasised({
+  template,
+  placeholder,
+  value,
+}: {
+  template: string;
+  placeholder: string;
+  value: string;
+}) {
+  // `t` leaves a placeholder it was given no parameter for untouched, which is
+  // what makes splitting on it here work.
+  const [before, after = ""] = template.split(placeholder);
+  return (
+    <>
+      {before}
+      <strong className="font-medium text-fg">{value}</strong>
+      {after}
+    </>
   );
 }

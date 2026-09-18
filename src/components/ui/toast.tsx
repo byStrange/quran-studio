@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Check, Info, X, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/providers/I18nProvider";
 
 type ToastKind = "success" | "error" | "info";
 
@@ -29,6 +30,7 @@ const ICONS: Record<ToastKind, ReactNode> = {
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const t = useT();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(1);
 
@@ -55,21 +57,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         role="status"
         aria-live="polite"
       >
-        {toasts.map((t) => (
+        {toasts.map((item) => (
           <div
-            key={t.id}
+            key={item.id}
             className={cn(
               "pointer-events-auto flex items-start gap-2.5 rounded-xl border px-3.5 py-3",
               "bg-surface border-border shadow-lg shadow-black/10",
               "animate-rise",
             )}
           >
-            <span className="mt-0.5 shrink-0">{ICONS[t.kind]}</span>
-            <p className="flex-1 text-[0.8125rem] leading-snug text-fg">{t.message}</p>
+            <span className="mt-0.5 shrink-0">{ICONS[item.kind]}</span>
+            <p className="flex-1 text-[0.8125rem] leading-snug text-fg">{item.message}</p>
             <button
-              onClick={() => dismiss(t.id)}
+              onClick={() => dismiss(item.id)}
               className="shrink-0 rounded p-0.5 text-fg-subtle transition-colors hover:text-fg"
-              aria-label="Dismiss"
+              aria-label={t("common.dismiss")}
             >
               <X className="size-3.5" aria-hidden />
             </button>

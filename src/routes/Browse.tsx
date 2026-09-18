@@ -16,8 +16,10 @@ import { Input } from "@/components/ui/field";
 import { EmptyState, LoadingBlock } from "@/components/ui/feedback";
 import { Tooltip } from "@/components/ui/primitives";
 import { ayahRangeLabel, cn } from "@/lib/utils";
+import { useT, type TFunction } from "@/providers/I18nProvider";
 
 export function Browse() {
+  const t = useT();
   const navigate = useNavigate();
   const { data: surahs, isLoading: surahsLoading } = useSurahs();
   const { data: rukus, isLoading: rukusLoading } = useRukus();
@@ -73,14 +75,14 @@ export function Browse() {
 
   if (surahsLoading || rukusLoading) {
     return (
-      <Page title="Read" description="Browse by surah, then pick a ruku to study.">
+      <Page title={t("browse.title")} description={t("browse.description")}>
         <LoadingBlock />
       </Page>
     );
   }
 
   return (
-    <Page title="Read" description="Browse by surah, then pick a ruku to study." wide>
+    <Page title={t("browse.title")} description={t("browse.description")} wide>
       <div className="relative mb-6 max-w-sm">
         <Search
           className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-subtle"
@@ -89,16 +91,16 @@ export function Browse() {
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search surahs…"
+          placeholder={t("browse.searchPlaceholder")}
           className="pl-9"
-          aria-label="Search surahs"
+          aria-label={t("browse.searchLabel")}
         />
       </div>
 
       {filtered.length === 0 ? (
         <EmptyState
-          title="No surahs match that search"
-          description="Try a different name or surah number."
+          title={t("browse.noMatchTitle")}
+          description={t("browse.noMatchDescription")}
         />
       ) : (
         <div className="space-y-1.5">
@@ -142,15 +144,20 @@ export function Browse() {
                         </span>
                       </div>
                       <div className="mt-0.5 text-[0.75rem] text-fg-subtle">
-                        {surah.ayah_count} ayahs · {surahRukus.length}{" "}
-                        {surahRukus.length === 1 ? "ruku" : "rukus"} ·{" "}
-                        <span className="capitalize">{surah.revelation_type}</span>
+                        {t("common.ayahCount", { count: surah.ayah_count })} ·{" "}
+                        {t("common.rukuCount", { count: surahRukus.length })} ·{" "}
+                        {surah.revelation_type === "meccan"
+                          ? t("browse.revelationMeccan")
+                          : t("browse.revelationMedinan")}
                         {rukusDone > 0 ? (
                           <span className="text-accent">
                             {" · "}
                             {surahDone
-                              ? "memorized"
-                              : `${rukusDone}/${surahRukus.length} rukus memorized`}
+                              ? t("browse.surahMemorized")
+                              : t("browse.rukusMemorized", {
+                                  done: rukusDone,
+                                  total: surahRukus.length,
+                                })}
                           </span>
                         ) : null}
                       </div>
@@ -159,11 +166,11 @@ export function Browse() {
                     <span className="arabic-sm shrink-0 text-fg-muted">{surah.name_arabic}</span>
                   </button>
 
-                  <Tooltip content="Read the whole surah, top to bottom">
+                  <Tooltip content={t("browse.readWholeSurah")}>
                     <Button
                       size="icon"
                       variant="ghost"
-                      aria-label={`Read all of ${surah.name_english}`}
+                      aria-label={t("browse.readAllOf", { surah: surah.name_english })}
                       onClick={() => navigate(`/read/surah/${surah.number}`)}
                     >
                       <ScrollText className="size-4" aria-hidden />
@@ -172,7 +179,7 @@ export function Browse() {
 
                   <button
                     onClick={() => setOpenSurah(expanded ? null : surah.number)}
-                    aria-label={expanded ? "Hide rukus" : "Show rukus"}
+                    aria-label={expanded ? t("browse.hideRukus") : t("browse.showRukus")}
                     className="grid size-8 shrink-0 place-items-center rounded-lg text-fg-subtle transition-colors hover:bg-surface-2"
                   >
                     <ChevronRight
@@ -186,14 +193,14 @@ export function Browse() {
                   <div className="border-t border-border bg-surface-2/40 p-3">
                     <div className="mb-2.5 flex items-center justify-between gap-3 px-0.5">
                       <span className="text-[0.75rem] text-fg-subtle">
-                        {surahRukus.length} {surahRukus.length === 1 ? "ruku" : "rukus"}
+                        {t("common.rukuCount", { count: surahRukus.length })}
                       </span>
                       <button
                         onClick={() => navigate(`/quiz?scope=surah&surah=${surah.number}&start=1`)}
                         className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[0.75rem] font-medium text-fg-muted transition-colors hover:bg-surface hover:text-fg"
                       >
                         <GraduationCap className="size-3.5" aria-hidden />
-                        Quiz this surah's words
+                        {t("browse.quizThisSurah")}
                       </button>
                     </div>
 
@@ -201,8 +208,9 @@ export function Browse() {
                       {surahRukus.map((ruku) => (
                         <RukuTile
                           key={ruku.ruku_number}
-                          label={`Ruku ${ruku.ruku_in_surah}`}
+                          label={t("browse.rukuLabel", { number: ruku.ruku_in_surah })}
                           ayahs={ayahRangeLabel(ruku.ayah_start, ruku.ayah_end)}
+                          t={t}
                           progress={progress?.get(ruku.ruku_number)}
                           words={wordStats?.get(ruku.ruku_number)}
                           onOpen={() => navigate(`/read/${ruku.ruku_number}`)}
@@ -244,9 +252,11 @@ function RukuTile({
   words,
   onOpen,
   onQuiz,
+  t,
 }: {
   label: string;
   ayahs: string;
+  t: TFunction;
   progress: RukuProgress | undefined;
   words: RukuWordStats | undefined;
   onOpen: () => void;
@@ -297,7 +307,9 @@ function RukuTile({
             complete ? "text-accent-soft-fg/80" : "text-fg-subtle",
           )}
         >
-          {started ? `${memorized}/${total} memorized` : `Ayahs ${ayahs}`}
+          {started
+            ? t("browse.memorizedOf", { memorized, total })
+            : t("browse.ayahsRange", { range: ayahs })}
         </div>
       </button>
 
@@ -306,15 +318,15 @@ function RukuTile({
           {toLearn === null
             ? "—"
             : toLearn === 0
-              ? `${words!.word_count} words · all learned`
-              : `${words!.word_count} words · ${toLearn} to learn`}
+              ? t("browse.allWordsLearned", { count: words!.word_count })
+              : t("browse.wordsToLearn", { count: words!.word_count, remaining: toLearn })}
         </span>
         <button
           onClick={onQuiz}
           className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[0.6875rem] font-medium text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg"
         >
           <GraduationCap className="size-3" aria-hidden />
-          Quiz
+          {t("browse.quiz")}
         </button>
       </div>
 
@@ -338,9 +350,14 @@ function RukuTile({
       content={
         complete
           ? tafsirComplete && wordsComplete
-            ? "Memorized, tafsir read, and all words learned."
-            : `Memorized. Tafsir read on ${tafsirRead}/${total}. Words learned on ${wordsLearned}/${total}.`
-          : `${memorized}/${total} ayahs memorized. Tafsir read on ${tafsirRead}. Words learned on ${wordsLearned}.`
+            ? t("browse.tileComplete")
+            : t("browse.tileMemorized", { tafsir: tafsirRead, words: wordsLearned, total })
+          : t("browse.tilePartial", {
+              memorized,
+              total,
+              tafsir: tafsirRead,
+              words: wordsLearned,
+            })
       }
     >
       {tile}

@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { BookOpen, GraduationCap } from "lucide-react";
 import { useTafsirEditions, useTafsirForAyah } from "@/hooks/useQuranData";
-import { useContentLanguage, useUiPrefs, useUpdateProfile } from "@/hooks/useProfile";
+import { useUiPrefs, useUpdateProfile } from "@/hooks/useProfile";
+import { useLanguage, useT } from "@/providers/I18nProvider";
 import { editionMatchesLanguage } from "@/lib/language";
 import { ayahRangeLabel, cn, toParagraphs } from "@/lib/utils";
 import { DEFAULT_TAFSIR_EDITION } from "@/lib/types";
@@ -24,8 +25,9 @@ export function TafsirPanel({
   /** Marks or unmarks every ayah the displayed entry covers. */
   onToggleRead: (ayahStart: number, ayahEnd: number, read: boolean) => void;
 }) {
+  const t = useT();
   const prefs = useUiPrefs();
-  const language = useContentLanguage();
+  const language = useLanguage();
   const updateProfile = useUpdateProfile();
   const { data: editions } = useTafsirEditions();
 
@@ -77,7 +79,7 @@ export function TafsirPanel({
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
             <BookOpen className="size-3.5" aria-hidden />
-            Tafsir
+            {t("tafsir.title")}
           </div>
           {editions && editions.length > 1 ? (
             <SelectField
@@ -98,7 +100,7 @@ export function TafsirPanel({
             {surahName} {ayahRangeLabel(data.ayah_start, data.ayah_end)}
             {data.ayah_start !== data.ayah_end ? (
               <span className="ml-2 text-[0.8125rem] font-normal text-fg-subtle">
-                covers {data.ayah_end - data.ayah_start + 1} ayahs
+                {t("tafsir.covers", { count: data.ayah_end - data.ayah_start + 1 })}
               </span>
             ) : null}
           </div>
@@ -113,8 +115,8 @@ export function TafsirPanel({
         {ayahNumber === null ? (
           <EmptyState
             icon={<BookOpen className="size-5" />}
-            title="Select an ayah"
-            description="Choose any ayah to read the commentary on it here."
+            title={t("tafsir.selectAyah")}
+            description={t("tafsir.selectAyahDescription")}
           />
         ) : isLoading ? (
           <div className="space-y-2.5">
@@ -124,16 +126,16 @@ export function TafsirPanel({
           </div>
         ) : isError ? (
           <ErrorState
-            title="Couldn't load the tafsir"
-            message="Check your connection and try again."
+            title={t("tafsir.loadFailed")}
+            message={t("tafsir.loadFailedMessage")}
             onRetry={() => void refetch()}
           />
         ) : !data ? (
           <EmptyState
-            title="No commentary for this ayah"
-            description={`${
-              active?.name ?? "This tafsir"
-            } doesn't include a separate entry here. Try a nearby ayah.`}
+            title={t("tafsir.noEntry")}
+            description={t("tafsir.noEntryDescription", {
+              edition: active?.name ?? t("tafsir.thisTafsir"),
+            })}
           />
         ) : (
           // `lang` is set from the edition so the browser picks the right font
@@ -160,11 +162,11 @@ export function TafsirPanel({
                 onClick={() => onToggleRead(data.ayah_start, data.ayah_end, !allRead)}
               >
                 <GraduationCap className="size-3.5" aria-hidden />
-                {allRead ? "Tafsir read" : "Mark tafsir as read"}
+                {allRead ? t("verse.tafsirRead") : t("verse.markTafsirRead")}
               </Button>
               {data.ayah_start !== data.ayah_end ? (
                 <span className="text-[0.75rem] text-fg-subtle">
-                  Covers all {data.ayah_end - data.ayah_start + 1} ayahs
+                  {t("tafsir.coversAll", { count: data.ayah_end - data.ayah_start + 1 })}
                 </span>
               ) : null}
             </div>

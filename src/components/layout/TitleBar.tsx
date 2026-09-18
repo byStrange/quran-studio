@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { BookOpen, Copy, Minus, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { appWindow, HAS_WINDOW_CHROME, IS_MOBILE_PLATFORM } from "@/lib/window";
+import { useT } from "@/providers/I18nProvider";
 
 /** Mirrors the OS maximise state so the restore icon stays truthful. */
 function useMaximized(): boolean {
@@ -74,23 +75,24 @@ function ControlButton({
 }
 
 function WindowControls({ maximized }: { maximized: boolean }) {
+  const t = useT();
   const minimize = useCallback(() => void appWindow()?.minimize(), []);
   const toggle = useCallback(() => void appWindow()?.toggleMaximize(), []);
   const close = useCallback(() => void appWindow()?.close(), []);
 
   return (
     <div className="pointer-events-auto flex items-center gap-0.5">
-      <ControlButton label="Minimise" onClick={minimize}>
+      <ControlButton label={t("window.minimise")} onClick={minimize}>
         <Minus className="size-3.5" aria-hidden />
       </ControlButton>
-      <ControlButton label={maximized ? "Restore" : "Maximise"} onClick={toggle}>
+      <ControlButton label={maximized ? t("window.restore") : t("window.maximise")} onClick={toggle}>
         {maximized ? (
           <Copy className="size-3" aria-hidden />
         ) : (
           <Square className="size-3" aria-hidden />
         )}
       </ControlButton>
-      <ControlButton label="Close" onClick={close} danger>
+      <ControlButton label={t("window.closeWindow")} onClick={close} danger>
         <X className="size-3.5" aria-hidden />
       </ControlButton>
     </div>
@@ -132,6 +134,7 @@ function ResizeHandles() {
 }
 
 function TitleBar({ maximized }: { maximized: boolean }) {
+  const t = useT();
   return (
     // Hidden below `md`, where the viewport is a phone rather than a window
     // and AppShell supplies its own compact header instead.
@@ -145,9 +148,9 @@ function TitleBar({ maximized }: { maximized: boolean }) {
         <div className="grid size-[1.125rem] place-items-center rounded-[0.3rem] bg-accent text-accent-fg">
           <BookOpen className="size-3" aria-hidden />
         </div>
-        <span className="text-[0.8125rem] font-medium tracking-tight text-fg">Quran Studio</span>
+        <span className="text-[0.8125rem] font-medium tracking-tight text-fg">{t("app.name")}</span>
         <span className="h-3 w-px bg-border" aria-hidden />
-        <span className="text-[0.75rem] text-fg-subtle">Ruku by ruku</span>
+        <span className="text-[0.75rem] text-fg-subtle">{t("app.tagline")}</span>
 
         <div className="flex-1" />
 

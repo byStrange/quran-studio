@@ -1,0 +1,653 @@
+/**
+ * English — the source of truth for the key set.
+ *
+ * Every other locale is typed against this object, so adding a string here
+ * and nowhere else is a compile error rather than a blank label. Keys are
+ * namespaced by where they are read, and the value is either a string or a
+ * set of plural forms; a `{name}` placeholder is filled from `t()`'s params.
+ *
+ * Strings stay whole sentences wherever they are one. Assembling a sentence
+ * from fragments is what makes a translation impossible to write well — the
+ * fragments carry no grammar, and Russian needs the case and Uzbek needs the
+ * suffix.
+ */
+export const en = {
+  // --- shared ------------------------------------------------------------
+  "common.loading": "Loading…",
+  "common.close": "Close",
+  "common.dismiss": "Dismiss",
+  "common.select": "Select…",
+  "common.tryAgain": "Try again",
+  "common.retry": "Retry",
+  "common.regenerate": "Regenerate",
+  "common.somethingWrong": "Something went wrong",
+  "common.saved": "Saved",
+  "common.save": "Save",
+  "common.notNow": "Not now",
+  "common.allRukus": "All rukus",
+  "common.checking": "Checking…",
+  "common.ayahCount": { one: "{count} ayah", other: "{count} ayahs" },
+  "common.wordCount": { one: "{count} word", other: "{count} words" },
+  "common.rukuCount": { one: "{count} ruku", other: "{count} rukus" },
+  "common.surahCount": { one: "{count} surah", other: "{count} surahs" },
+  "common.dayCount": { one: "{count} day", other: "{count} days" },
+
+  /** Compact duration units, as `formatDuration` joins them: "2h 14m". */
+  "unit.hour": "h",
+  "unit.minute": "m",
+  "unit.second": "s",
+
+  // --- app chrome --------------------------------------------------------
+  "app.name": "Quran Studio",
+  "app.tagline": "Ruku by ruku",
+  "app.openNavigation": "Open navigation",
+
+  "nav.dashboard": "Dashboard",
+  "nav.read": "Read",
+  "nav.vocabulary": "Vocabulary",
+  "nav.quiz": "Quiz",
+  "nav.memorization": "Memorization",
+  "nav.settings": "Settings",
+  "nav.about": "About",
+
+  "window.minimise": "Minimise",
+  "window.maximise": "Maximise",
+  "window.restore": "Restore",
+  "window.closeWindow": "Close",
+
+  // --- streak badge ------------------------------------------------------
+  "streak.paused": "Your streak is paused. Read for a full hour in one day to restore it.",
+  "streak.keepGoing": {
+    one: "{count} day streak — keep it going.",
+    other: "{count} day streak — keep it going.",
+  },
+  "streak.start": "Read today to start a streak.",
+  "streak.inGrace": "in grace",
+  "streak.unitDay": { one: "day", other: "days" },
+
+  // --- sign in -----------------------------------------------------------
+  "auth.tagline": "Memorize the Quran, one ruku at a time.",
+  "auth.signIn": "Sign in",
+  "auth.createAccount": "Create account",
+  "auth.email": "Email",
+  "auth.password": "Password",
+  "auth.passwordHint": "At least 6 characters.",
+  "auth.confirmNotice": "Check your inbox to confirm your address, then sign in.",
+  "auth.failed": "Something went wrong.",
+
+  // --- dashboard ---------------------------------------------------------
+  "dashboard.title": "Dashboard",
+  "dashboard.description": "Your reading time, streak, and memorization progress.",
+  "dashboard.continueReading": "Continue reading",
+  "dashboard.currentStreak": "Current streak",
+  "dashboard.lastDayToRestore": "Paused · last day to restore",
+  "dashboard.daysToRestore": "Paused · {count} days to restore",
+  "dashboard.longest": "Longest: {count} days",
+  "dashboard.today": "Today",
+  "dashboard.thisWeek": "{duration} this week",
+  "dashboard.memorized": "Memorized",
+  "dashboard.ofTheQuran": "{percent} of the Quran",
+  "dashboard.wordsLearned": "Words learned",
+  "dashboard.inProgress": "{count} in progress",
+  "dashboard.streakPausedTitle": "Your {count}-day streak is paused",
+  "dashboard.streakPausedBody":
+    "You missed a day, but the streak isn't gone. Read for a full hour in a single day {deadline} and it picks up right where it left off.",
+  "dashboard.deadlineToday": "before today is over",
+  "dashboard.deadlineDays": "within the next {count} days",
+  "dashboard.activityTitle": "Reading activity",
+  "dashboard.activityDescription": "The last 12 weeks. Darker means more time that day.",
+  "dashboard.progressTitle": "Progress",
+  "dashboard.quranMemorized": "Quran memorized",
+  "dashboard.ayahsOf": "{memorized} of {total} ayahs",
+  "dashboard.surahsCompleted": "Surahs completed",
+  "dashboard.surahsOf": "{completed} of 114 surahs",
+  "dashboard.totalTimeRead": "Total time read",
+  "dashboard.daysWithReading": "Days with reading",
+  "dashboard.readOn": "{duration} on {date}",
+  "dashboard.noReadingOn": "No reading on {date}",
+  "dashboard.less": "Less",
+  "dashboard.more": "More",
+  "dashboard.restoreHint": "1h+ days restore a paused streak",
+
+  // --- browse ------------------------------------------------------------
+  "browse.title": "Read",
+  "browse.description": "Browse by surah, then pick a ruku to study.",
+  "browse.searchPlaceholder": "Search surahs…",
+  "browse.searchLabel": "Search surahs",
+  "browse.noMatchTitle": "No surahs match that search",
+  "browse.noMatchDescription": "Try a different name or surah number.",
+  "browse.readWholeSurah": "Read the whole surah, top to bottom",
+  "browse.readAllOf": "Read all of {surah}",
+  "browse.hideRukus": "Hide rukus",
+  "browse.showRukus": "Show rukus",
+  "browse.surahMemorized": "memorized",
+  "browse.rukusMemorized": "{done}/{total} rukus memorized",
+  "browse.quizThisSurah": "Quiz this surah's words",
+  "browse.quiz": "Quiz",
+  "browse.rukuLabel": "Ruku {number}",
+  "browse.ayahsRange": "Ayahs {range}",
+  "browse.memorizedOf": "{memorized}/{total} memorized",
+  "browse.allWordsLearned": "{count} words · all learned",
+  "browse.wordsToLearn": "{count} words · {remaining} to learn",
+  "browse.tileComplete": "Memorized, tafsir read, and all words learned.",
+  "browse.tileMemorized":
+    "Memorized. Tafsir read on {tafsir}/{total}. Words learned on {words}/{total}.",
+  "browse.tilePartial":
+    "{memorized}/{total} ayahs memorized. Tafsir read on {tafsir}. Words learned on {words}.",
+  "browse.revelationMeccan": "Meccan",
+  "browse.revelationMedinan": "Medinan",
+
+  // --- reader (shared across the three readers) --------------------------
+  "reader.backToList": "Back to the surah list",
+  "reader.previousRuku": "Previous ruku",
+  "reader.nextRuku": "Next ruku",
+  "reader.previousSurah": "Previous surah",
+  "reader.nextSurah": "Next surah",
+  "reader.previousPage": "Previous page",
+  "reader.nextPage": "Next page",
+  "reader.rukuOf": "Ruku {number} of {total}",
+  "reader.rukuInSurah": " · ruku {number} in this surah",
+  "reader.openTafsir": "Open tafsir",
+  "reader.closeTafsir": "Close tafsir",
+  "reader.moreOptions": "More reader options",
+  "reader.quizRukuWords": "Quiz this ruku's words",
+  "reader.quizSurahWords": "Quiz this surah's words",
+  "reader.quizSurahMemorized": "Quiz this surah's memorized words",
+  "reader.continuousView": "Continuous surah view",
+  "reader.continuousViewHint": "Continuous surah view — the whole surah in one scroll",
+  "reader.continuousViewOn": "Continuous surah view is on — switch back to one ruku at a time",
+  "reader.mushafView": "Mushaf page view",
+  "reader.mushafViewHint": "Read this as a mushaf page — the printed Madani layout",
+  "reader.switchToMushaf": "Switch to mushaf reader",
+  "reader.switchToStudy": "Switch to study reader",
+  "reader.switchToStudyHint": "Switch to the study reader — translation and word by word",
+  "reader.focusMode": "Focus mode",
+  "reader.focusModeHint": "Focus mode — one ayah, fullscreen (F)",
+  "reader.enterFocus": "Enter focus mode",
+  "reader.tajweedOff": "Turn off tajweed colouring",
+  "reader.tajweedOn": "Colour by tajweed rule",
+  "reader.tajweedOnLong": "Colour the text by tajweed rule",
+  "reader.toggleTajweed": "Toggle tajweed colouring",
+  "reader.collapseWords": "Collapse word breakdowns",
+  "reader.expandWords": "Expand word breakdowns",
+  "reader.expandEveryWord": "Expand every word breakdown",
+  "reader.toggleAllWords": "Toggle all word breakdowns",
+  "reader.swapPanel": "Swap the tafsir panel to the other side",
+  "reader.swapPanelLabel": "Swap panel side",
+  "reader.timerPaused": "Paused — the timer resumes when you interact again.",
+  "reader.timerRunning": "Time counted toward today's reading.",
+  "reader.rukuMemorized": "Ruku memorized",
+  "reader.rukuMemorizedTooltip":
+    "Every ayah in this ruku is memorized, tafsir read, and words learned.",
+  "reader.rukuMemorizedPartial":
+    "Memorized. Tafsir {tafsir}/{total}. Words {words}/{total}.",
+  "reader.rukuMarkerCounts": " · tafsir {tafsir} · words {words}",
+  "reader.markOneByOne": "Mark ayahs as memorized one by one as you learn them",
+  "reader.memorizedCount": "{memorized}/{total} memorized",
+  "reader.rukuMissingTitle": "That ruku doesn't exist",
+  "reader.rukuMissingMessage": "Rukus run from 1 to {total}.",
+  "reader.rukuLoadFailed": "Couldn't load this ruku",
+  "reader.loadFailedMessage":
+    "The Quran text lives in your Supabase project. Check your connection and try again.",
+  "reader.loadingRuku": "Loading ruku…",
+
+  // --- continuous surah reader -------------------------------------------
+  "surah.missingTitle": "That surah doesn't exist",
+  "surah.missingMessage": "Surahs run from 1 to {total}.",
+  "surah.loadFailed": "Couldn't load this surah",
+  "surah.loading": "Loading surah…",
+  "surah.header": "{number} · {count} ayahs",
+  "surah.memorizedOf": "{memorized}/{total} ayahs memorized",
+  "surah.rukuInView": " · ruku {number}",
+  "surah.loadedCount": " · {count} loaded",
+  "surah.loadingAyahs": "Loading ayahs…",
+  "surah.loadMore": "Load more ayahs",
+  "surah.endOf": "End of {surah}.",
+  "surah.endOfFallback": "the surah",
+  "surah.studyThisRuku": "Study this ruku on its own",
+  "surah.quizWords": "Quiz words",
+
+  // --- mushaf reader -----------------------------------------------------
+  "mushaf.missingTitle": "That page doesn't exist",
+  "mushaf.missingMessage": "The mushaf runs from page 1 to {total}.",
+  "mushaf.loadFailed": "Couldn't load this page",
+  "mushaf.fontsMissing": "The mushaf page fonts are missing. Run `pnpm fonts:qcf` to vendor them.",
+  "mushaf.layoutMessage":
+    "The mushaf layout lives in your Supabase project. Check your connection and try again.",
+  "mushaf.loading": "Loading page…",
+  "mushaf.juz": "Juz {number}",
+  "mushaf.pageOf": "Page {number} of {total}",
+  "mushaf.rukuSuffix": " · ruku {number}",
+
+  // --- verse card --------------------------------------------------------
+  "verse.memorized": "Memorized",
+  "verse.markMemorized": "Mark as memorized",
+  "verse.markMemorizedLabel": "Mark {reference} as memorized",
+  "verse.tafsirRead": "Tafsir read",
+  "verse.markTafsirRead": "Mark tafsir as read",
+  "verse.markTafsirLabel": "Mark the tafsir on {reference} as read",
+  "verse.wordsLearned": "Words learned",
+  "verse.markWordsLearned": "Mark words as learned",
+  "verse.markWordsLabel": "Mark words on {reference} as learned",
+  "verse.playFromHere": "Play the recitation from this ayah",
+  "verse.play": "Play",
+  "verse.showWordByWord": "Show word by word",
+  "verse.hideWordByWord": "Hide word by word",
+  "verse.tafsir": "Tafsir",
+  "verse.focus": "Focus",
+  "verse.focusHint": "Read this ayah on its own, fullscreen",
+
+  // --- word chip ---------------------------------------------------------
+  "word.inThisAyah": "In this ayah",
+  "word.generating": "Generating explanation",
+  "word.needsDesktop":
+    "Word explanations need the desktop backend. Run the app with `pnpm app:dev`.",
+  "word.learned": "Learned",
+  "word.markLearned": "Mark learned",
+  "word.learning": "Learning",
+
+  // --- ruku summary ------------------------------------------------------
+  "summary.title": "What to take from this ruku",
+  "summary.regenerateTitle": "Regenerate this summary",
+  "summary.generatedBy": "Generated by {model}",
+  "summary.none": "No summary yet for this ruku. Generate one and it will be saved for future readings.",
+  "summary.needsDesktop":
+    "Summaries are generated by the desktop backend. Run the app with `pnpm app:dev` to enable them.",
+  "summary.generate": "Generate summary",
+  "summary.quizHint": "Words you don't know open the ayah they came from.",
+
+  // --- tafsir panel ------------------------------------------------------
+  "tafsir.title": "Tafsir",
+  "tafsir.covers": "covers {count} ayahs",
+  "tafsir.selectAyah": "Select an ayah",
+  "tafsir.selectAyahDescription": "Choose any ayah to read the commentary on it here.",
+  "tafsir.loadFailed": "Couldn't load the tafsir",
+  "tafsir.loadFailedMessage": "Check your connection and try again.",
+  "tafsir.noEntry": "No commentary for this ayah",
+  "tafsir.noEntryDescription": "{edition} doesn't include a separate entry here. Try a nearby ayah.",
+  "tafsir.thisTafsir": "This tafsir",
+  "tafsir.coversAll": "Covers all {count} ayahs",
+
+  // --- tafsir nudge ------------------------------------------------------
+  "nudge.title": "A tafsir you haven't read",
+  "nudge.description": "You've memorized {reference}. Here's what the commentary says about it.",
+  "nudge.openInReader": "Open in reader",
+  "nudge.markAsRead": "Mark as read",
+
+  // --- tajweed legend ----------------------------------------------------
+  "tajweed.legend": "Tajweed colours",
+  "tajweed.group.madd": "Prolongation",
+  "tajweed.group.nun": "Nūn sākinah & tanwīn",
+  "tajweed.group.meem": "Mīm sākinah",
+  "tajweed.group.other": "Other",
+  "tajweed.madda_normal.label": "Madd ṭabīʿī",
+  "tajweed.madda_normal.hint": "Natural prolongation — hold for 2 counts.",
+  "tajweed.madda_permissible.label": "Madd munfaṣil",
+  "tajweed.madda_permissible.hint": "Permissible prolongation — 2, 4 or 5 counts.",
+  "tajweed.madda_obligatory.label": "Madd muttaṣil",
+  "tajweed.madda_obligatory.hint": "Obligatory prolongation — 4 or 5 counts.",
+  "tajweed.madda_necessary.label": "Madd lāzim",
+  "tajweed.madda_necessary.hint": "Necessary prolongation — hold for 6 counts.",
+  "tajweed.ikhafa.label": "Ikhfāʾ",
+  "tajweed.ikhafa.hint": "Nūn sākinah or tanwīn hidden, with nasalisation.",
+  "tajweed.idgham_ghunnah.label": "Idghām with ghunnah",
+  "tajweed.idgham_ghunnah.hint": "Merged into the next letter, nasalised.",
+  "tajweed.idgham_wo_ghunnah.label": "Idghām without ghunnah",
+  "tajweed.idgham_wo_ghunnah.hint": "Merged into the next letter, no nasalisation.",
+  "tajweed.iqlab.label": "Iqlāb",
+  "tajweed.iqlab.hint": "Nūn or tanwīn becomes a mīm sound before bāʾ.",
+  "tajweed.ikhafa_shafawi.label": "Ikhfāʾ shafawī",
+  "tajweed.ikhafa_shafawi.hint": "Mīm sākinah hidden before bāʾ.",
+  "tajweed.idgham_shafawi.label": "Idghām shafawī",
+  "tajweed.idgham_shafawi.hint": "Mīm sākinah merged into a following mīm.",
+  "tajweed.ghunnah.label": "Ghunnah",
+  "tajweed.ghunnah.hint": "Nasalisation held for 2 counts.",
+  "tajweed.qalaqah.label": "Qalqalah",
+  "tajweed.qalaqah.hint": "Echoing bounce on a letter carrying sukūn.",
+  "tajweed.idgham_mutajanisayn.label": "Idghām mutajānisayn",
+  "tajweed.idgham_mutajanisayn.hint": "Merged between letters sharing a point of articulation.",
+  "tajweed.idgham_mutaqaribayn.label": "Idghām mutaqāribayn",
+  "tajweed.idgham_mutaqaribayn.hint": "Merged between letters with close points of articulation.",
+  "tajweed.ham_wasl.label": "Hamzat al-waṣl",
+  "tajweed.ham_wasl.hint": "Connecting hamza — silent when joined to the word before.",
+  "tajweed.laam_shamsiyah.label": "Lām shamsiyyah",
+  "tajweed.laam_shamsiyah.hint": "Silent lām; the letter after it doubles.",
+  "tajweed.slnt.label": "Silent",
+  "tajweed.slnt.hint": "Written but not pronounced.",
+
+  // --- focus mode --------------------------------------------------------
+  "focus.label": "Focus reader",
+  "focus.exit": "Exit",
+  "focus.exitLabel": "Exit focus mode",
+  "focus.ayah": "Ayah {number}",
+  "focus.position": "{index} of {total}",
+  "focus.reciting": "Reciting",
+  "focus.previousAyah": "Previous ayah",
+  "focus.nextAyah": "Next ayah",
+  "focus.rukuHint": "Ruku {number}",
+  "focus.pause": "Pause",
+  "focus.play": "Play",
+  "focus.pauseLabel": "Pause recitation",
+  "focus.playLabel": "Play this ayah",
+  "focus.unmarkMemorized": "Unmark as memorized",
+  "focus.markMemorizedShort": "Mark memorized",
+  "focus.unmarkTafsir": "Unmark tafsir as read",
+  "focus.markTafsirShort": "Mark tafsir",
+  "focus.unmarkWords": "Unmark words as learned",
+  "focus.markWordsShort": "Mark words",
+  "focus.words": "Words",
+  "focus.translation": "Translation",
+  "focus.tajweed": "Tajweed",
+  "focus.smallerText": "Smaller text",
+  "focus.largerText": "Larger text",
+  "focus.readingOptions": "Reading options",
+  "focus.textSize": "Text size",
+  "focus.wordByWord": "Word by word",
+  "focus.showTranslation": "Show translation",
+  "focus.showWordByWord": "Show word by word",
+  "focus.tajweedColours": "Tajweed colours",
+  "focus.thisSession": "This session",
+  "focus.hintAyah": "ayah",
+  "focus.hintPlay": "play",
+  "focus.hintMemorized": "memorized",
+  "focus.hintTafsir": "tafsir read",
+  "focus.hintWords": "words",
+  "focus.hintTranslation": "translation",
+  "focus.hintTajweed": "tajweed",
+  "focus.hintTextSize": "text size",
+
+  // --- audio bar ---------------------------------------------------------
+  "audio.noneImported": "No recitations imported yet — run pnpm seed:audio.",
+  "audio.noneForPassage": "No recitation available for this passage.",
+  "audio.previousAyah": "Previous ayah",
+  "audio.nextAyah": "Next ayah",
+  "audio.play": "Play recitation",
+  "audio.pause": "Pause recitation",
+  "audio.options": "Recitation options",
+  "audio.seek": "Seek within this passage",
+  "audio.reciter": "Reciter",
+  "audio.speedHint": "Playback speed — slower is easier to follow while memorizing",
+  "audio.speedLabel": "Playback speed {rate} times",
+  "audio.speed": "Speed {rate}×",
+  "audio.repeatOff": "Repeat off",
+  "audio.repeatRange": "Repeating this ruku",
+  "audio.repeatAyah": "Repeating this ayah",
+  "audio.repeatUnmemorized": "Repeating unmemorized ayahs",
+  "audio.repeatClickToChange": "{mode} — click to change",
+  "audio.repeatNothingLeft":
+    "Unmemorized repeat — every ayah is memorized, so this repeats the passage",
+  "audio.repeatingCount": {
+    one: "Repeating {count} unmemorized ayah — click to change",
+    other: "Repeating {count} unmemorized ayahs — click to change",
+  },
+  "audio.downloading": "Downloading — {percent}%",
+  "audio.downloadingMenu": "Downloading… {percent}%",
+  "audio.cancelDownload": "Cancel download",
+  "audio.savedOffline": "Saved for offline — {size}. Click to remove.",
+  "audio.removeDownload": "Remove downloaded recitation",
+  "audio.removeDownloadMenu": "Remove download ({size})",
+  "audio.downloadHint": "Download this surah for offline listening",
+  "audio.downloadHintSized": "Download this surah for offline listening — {size}",
+  "audio.downloadNeedsDesktop": "Downloads need the desktop app",
+  "audio.download": "Download this surah",
+  "audio.downloadMenu": "Download surah",
+  "audio.downloadMenuSized": "Download surah ({size})",
+
+  // --- listen & follow ---------------------------------------------------
+  "listen.listening": "Listening…",
+  "listen.following": "Following",
+  "listen.researching": "Re-searching…",
+  "listen.downloadTitle": "Download speech model?",
+  "listen.downloadBody":
+    "A one-time ~75 MB download is needed for offline voice recognition. Tap the mic again to start.",
+  "listen.download": "Download",
+  "listen.unsupported":
+    "Listen & Follow (Offline Speech Recognition) is currently supported on Desktop platforms.",
+  "listen.stop": "Stop listening",
+  "listen.downloadingModel": "Downloading speech model…",
+  "listen.start": "Listen & follow my recitation",
+  "listen.stopPlaybackFirst": "Stop playback first to use Listen & Follow",
+
+  // --- quiz --------------------------------------------------------------
+  "quiz.title": "Quiz",
+  "quiz.description": "Say whether you know each word. The ones you don't open the ayah they came from.",
+  "quiz.scopeQuestion": "What should the round cover?",
+  "quiz.scopeRuku": "This ruku",
+  "quiz.scopeRukuDescription": "Every word in one ruku — the round to run after memorizing it.",
+  "quiz.scopeSurah": "This surah",
+  "quiz.scopeSurahDescription": "Words from the ayahs you've memorized in one surah.",
+  "quiz.scopeGlobal": "Everything memorized",
+  "quiz.scopeGlobalDescription": "Words from every ayah you've memorized, across the whole Quran.",
+  "quiz.whichSurah": "Which surah?",
+  "quiz.surah": "Surah",
+  "quiz.ruku": "Ruku",
+  "quiz.chooseSurah": "Choose a surah…",
+  "quiz.chooseSurahFirst": "Choose a surah first",
+  "quiz.chooseRuku": "Choose a ruku…",
+  "quiz.rukuOption": "Ruku {number} · ayahs {range}",
+  "quiz.surahOption": "{number}. {name}",
+  "quiz.wordsThisSession": "Words this session",
+  "quiz.counting": "Counting the words in this scope…",
+  "quiz.noneInSurah": "You haven't memorized any ayahs in this surah yet.",
+  "quiz.noneInRuku": "That ruku has no words to quiz.",
+  "quiz.noneMemorized": "Nothing memorized yet — mark ayahs as memorized while reading.",
+  "quiz.poolSize": {
+    one: "{count} word in this scope",
+    other: "{count} words in this scope",
+  },
+  "quiz.perSession": " · {limit} per session",
+  "quiz.pickRuku": "Pick a ruku to start.",
+  "quiz.pickSurah": "Pick a surah to start.",
+  "quiz.start": "Start round",
+  "quiz.buildFailed": "Couldn't build the round",
+  "quiz.backToSetup": "Back to setup",
+  "quiz.drawing": "Drawing words…",
+  "quiz.emptyScope": "No words in this scope",
+  "quiz.emptySurahDescription":
+    "This surah has no memorized ayahs yet. Mark some as memorized while reading, then come back.",
+  "quiz.emptyDescription": "Nothing here to quiz yet — read a ruku and mark its ayahs as memorized.",
+  "quiz.changeScope": "Change scope",
+  "quiz.goRead": "Go read",
+  "quiz.allMemorized": "All memorized ayahs",
+  "quiz.roundComplete": "Round complete",
+  "quiz.verdictStrong": "Strong round. These words are sticking.",
+  "quiz.verdictSolid": "Solid progress — the misses will come back around sooner.",
+  "quiz.verdictWeak": "Worth another pass. Missed words are prioritised next time.",
+  "quiz.wordsToRevisit": "Words to look at again",
+  "quiz.practiseMissed": {
+    one: "Practise {count} missed word",
+    other: "Practise {count} missed words",
+  },
+  "quiz.newRound": "New round",
+  "quiz.backToRuku": "Back to the ruku",
+  "quiz.setup": "Setup",
+  "quiz.doYouKnow": "Do you know what this word means?",
+  "quiz.iKnowIt": "I know it",
+  "quiz.iDontKnow": "I don't know",
+  "quiz.keyHint": "Press Y or N",
+  "quiz.itMeans": "It means",
+  "quiz.inContext": "In context · {reference}",
+  "quiz.markedLearning": "Marked as learning — it comes back around sooner.",
+  "quiz.markedLearned": "Marked as learned",
+  "quiz.finish": "Finish",
+  "quiz.next": "Next",
+  "quiz.progress": "{index} / {total}",
+
+  // --- vocabulary --------------------------------------------------------
+  "vocab.title": "Vocabulary",
+  "vocab.description": "Every word you've marked while reading, and how well you know it.",
+  "vocab.startQuiz": "Start quiz",
+  "vocab.encountered": "Encountered",
+  "vocab.encounteredHint": "Words in rukus you've read",
+  "vocab.learned": "Learned",
+  "vocab.learning": "Learning",
+  "vocab.learningHint": "Still in progress",
+  "vocab.rukusRead": "Rukus read",
+  "vocab.rukusReadHint": "Lessons visited",
+  "vocab.allWords": "All words",
+  "vocab.allSurahs": "All surahs",
+  "vocab.emptyTitle": "No words yet",
+  "vocab.emptyDescription":
+    "Open a ruku, expand the word-by-word view, and mark words as learning or learned. They'll collect here.",
+  "vocab.browseRukus": "Browse rukus",
+  "vocab.correctOf": "{correct}/{total} correct",
+  "vocab.notQuizzed": "Not quizzed",
+
+  // --- memorization ------------------------------------------------------
+  "memorization.title": "Memorization",
+  "memorization.description": "Ayahs you've marked as memorized, surah by surah.",
+  "memorization.ayahsMemorized": "Ayahs memorized",
+  "memorization.ofTotal": "of {total}",
+  "memorization.ofTheQuran": "Of the Quran",
+  "memorization.overallProgress": "Overall progress",
+  "memorization.surahsCompleted": "Surahs completed",
+  "memorization.everyAyahMarked": "Every ayah marked",
+  "memorization.surahsStarted": "Surahs started",
+  "memorization.atLeastOne": "At least one ayah",
+  "memorization.bySurah": "By surah",
+  "memorization.filterAll": "All",
+  "memorization.filterStarted": "In progress",
+  "memorization.filterCompleted": "Completed",
+  "memorization.empty": "Nothing here yet. Mark ayahs as memorized while reading.",
+
+  // --- settings ----------------------------------------------------------
+  "settings.title": "Settings",
+  "settings.description": "Language, appearance, reading layout, account, and AI.",
+  "settings.appearance": "Appearance",
+  "settings.appearanceDescription": "Theme applies immediately.",
+  "settings.themeLight": "Light",
+  "settings.themeDark": "Dark",
+  "settings.themeSystem": "System",
+
+  "settings.language": "Language",
+  "settings.languageDescription": "One choice, applied everywhere.",
+  "settings.languageRow": "App language",
+  "settings.languageRowDescription":
+    "Sets the interface, the verse translation, the word-by-word glosses, the tafsir edition, and the language the AI writes its explanations in. Currently reading {translator}.",
+  "settings.russianGlossNote":
+    "About 1.5% of words have no Russian gloss in the upstream corpus and show the English one instead.",
+  "settings.uzbekDataNote":
+    "The interface, the AI explanations and the Al-Mukhtasar tafsir are in Uzbek. The verse translation and the word-by-word glosses have no Uzbek corpus imported yet and show the English ones.",
+
+  "settings.reader": "Reader",
+  "settings.readerDescription": "How the lesson view is laid out.",
+  "settings.defaultLayout": "Default layout",
+  "settings.defaultLayoutDescription":
+    "Study shows one ruku with translation and word-by-word. Surah runs the whole surah in one scroll. Mushaf reproduces the printed Madani page, for revising from the layout you memorised. Each is also a toggle in the reader's header.",
+  "settings.modeStudy": "Study",
+  "settings.modeSurah": "Surah",
+  "settings.modeMushaf": "Mushaf",
+  "settings.tafsirSide": "Tafsir panel side",
+  "settings.tafsirSideDescription": "Which side of the reader the commentary sits on.",
+  "settings.left": "Left",
+  "settings.right": "Right",
+  "settings.tajweed": "Tajweed colouring",
+  "settings.tajweedDescription":
+    "Colour the Arabic by recitation rule, with a legend in the reader. Colour only — the text itself is unchanged.",
+  "settings.expandWords": "Expand word-by-word by default",
+  "settings.expandWordsDescription": "Show every word breakdown as soon as a ruku opens.",
+
+  "settings.recitation": "Recitation",
+  "settings.recitationDescription": "Which reciter plays, and how closely the reader follows along.",
+  "settings.reciter": "Reciter",
+  "settings.reciterDescription":
+    "Each recitation is one continuous file per surah, so phrasing across ayah boundaries is the reciter's own.",
+  "settings.noReciters": "No recitations imported yet — run `pnpm seed:audio`.",
+  "settings.followRecitation": "Follow the recitation",
+  "settings.followRecitationDescription":
+    "Scroll to the ayah being recited as it plays. Turn off to read one place while listening to another.",
+  "settings.highlightWords": "Highlight words",
+  "settings.highlightWordsDescription":
+    "Light up each word in the word-by-word row as it is recited.",
+  "settings.downloadedCount": {
+    one: "{count} surah is saved for offline listening. Remove one from the player bar in the reader.",
+    other: "{count} surahs are saved for offline listening. Remove one from the player bar in the reader.",
+  },
+  "settings.nothingDownloaded":
+    "Nothing saved for offline yet — use the download button in the reader's player bar.",
+
+  "settings.timezone": "Timezone",
+  "settings.timezoneDescription": "Sets the day boundary used for reading streaks.",
+  "settings.machineReports": "This machine reports {timezone}.",
+  "settings.useIt": "Use it",
+
+  "settings.ollama": "Ollama Cloud",
+  "settings.ollamaDescription":
+    "Powers word explanations and ruku summaries. The key stays in the desktop backend and never reaches the interface.",
+  "settings.connected": "Connected · {model}",
+  "settings.notConfigured": "Not configured",
+  "settings.apiKeyPlaceholder": "Paste your Ollama Cloud API key",
+  "settings.keyNeedsDesktop":
+    "Run the desktop app (`pnpm app:dev`) to configure the key, or set `OLLAMA_API_KEY` in your `.env`.",
+  "settings.connectedToast": "Connected to Ollama Cloud using {model}.",
+  "settings.keySaved": "Key saved.",
+
+  "settings.account": "Account",
+  "settings.accountDescription": "All your progress is scoped to this account.",
+  "settings.signOut": "Sign out",
+
+  // --- about -------------------------------------------------------------
+  "about.title": "About & sources",
+  "about.description": "Where the text in this app comes from, and who to credit for it.",
+  "about.howTitle": "How this app works",
+  "about.howDescription":
+    "Quran Studio organises the Quran into its 558 rukus and treats each one as a lesson.",
+  "about.howBody":
+    "All Quran text, translation, word-by-word data, and tafsir are imported once into your own Supabase project and read from there. The app never calls a third-party Quran API while you use it, so it stays fast and works from a single database you control. AI explanations are generated on demand, then cached so each one is produced only once and reused afterwards.",
+  "about.sourcesTitle": "Sources & attribution",
+  "about.sourcesDescription": "Please respect each source's own terms if you redistribute this app.",
+  "about.tafsirNoteTitle": "A note on the tafsir",
+  "about.tafsirNoteBody":
+    "Four editions are available, switched from the panel itself: Ibn Kathir in English, Al-Mukhtasar in Uzbek, and Ibn Kathir and as-Saadi in Russian. All are human translations — nothing in the tafsir panel is machine-translated. Ibn Kathir frequently comments on several ayahs together; where that happens the panel shows the full entry and labels the verse range it covers, rather than repeating the same commentary for each ayah. Al-Mukhtasar comments ayah by ayah and is considerably more concise.",
+  "about.aiNoteBody":
+    "AI-generated notes elsewhere in the app are a study aid, not a source of religious rulings — check anything important against the tafsir itself and a qualified teacher.",
+
+  "about.quranApi.used":
+    "Uthmani Arabic text, ruku and juz boundaries, and the word-by-word breakdown with transliteration and English glosses.",
+  "about.quranApi.license":
+    "Provided by Quran.com / Quran Foundation for non-commercial use. Data imported once and served locally.",
+  "about.saheeh.name": "Saheeh International translation",
+  "about.saheeh.used": "The English translation shown beneath every ayah.",
+  "about.saheeh.license": "© Saheeh International. Reproduced for personal study.",
+  "about.kuliev.name": "Elmir Kuliev's Russian translation",
+  "about.kuliev.used": "The Russian translation shown beneath every ayah.",
+  "about.kuliev.license": "© Elmir Kuliev. Reproduced for personal study.",
+  "about.sodiq.name": "Muhammad Sodiq Muhammad Yusuf's Uzbek translation",
+  "about.sodiq.used": "The Uzbek translation shown beneath every ayah.",
+  "about.sodiq.license": "© Shaykh Muhammad Sodiq Muhammad Yusuf. Reproduced for personal study.",
+  "about.ibnKathir.name": "Tafsir Ibn Kathir (abridged, English)",
+  "about.ibnKathir.used": "The English option in the reader's tafsir panel, mapped to ayah ranges.",
+  "about.ibnKathir.license":
+    "Public-domain classical text; JSON mirror published by the tafsir_api project under MIT.",
+  "about.mukhtasar.name": "Al-Mukhtasar fi Tafsir al-Qur'an al-Karim (Uzbek)",
+  "about.mukhtasar.used": "The Uzbek option in the reader's tafsir panel, one entry per ayah.",
+  "about.mukhtasar.license":
+    "© Tafsir Center for Quranic Studies; official Uzbek edition, mirrored by the tafsir_api project.",
+  "about.ollama.used":
+    "Generates the per-word contextual explanations and ruku summaries, which are then cached and shared.",
+  "about.ollama.license": "Used under your own Ollama Cloud account and its terms.",
+  "about.fonts.used": "The Quranic Arabic typeface and the interface typeface.",
+  "about.fonts.license": "SIL Open Font License 1.1. Bundled with the app.",
+
+  // --- AI errors ---------------------------------------------------------
+  "ai.notInTauri":
+    "AI generation runs in the desktop backend. Launch the app with `pnpm app:dev` instead of the browser preview.",
+  "ai.failed": "AI generation failed. Please try again.",
+};
+
+/** Every key the app can ask for. */
+export type TranslationKey = keyof typeof en;
+
+/**
+ * What a locale must provide.
+ *
+ * A key English states as a plain string must stay a plain string; one it
+ * states with plural forms must stay plural forms. Mapping over `typeof en`
+ * rather than declaring `Record<TranslationKey, Entry>` is what enforces that
+ * — otherwise a Russian plural could quietly collapse to one form.
+ */
+export type Dictionary = {
+  [K in TranslationKey]: (typeof en)[K] extends string
+    ? string
+    : { one?: string; few?: string; many?: string; other: string };
+};

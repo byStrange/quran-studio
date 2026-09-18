@@ -10,11 +10,13 @@
 import { useState } from "react";
 import { ChevronDown, Palette } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { TAJWEED_GROUPS, TAJWEED_INFO, rulesByGroup } from "@/lib/tajweed";
+import { TAJWEED_GROUPS, rulesByGroup } from "@/lib/tajweed";
+import { useT } from "@/providers/I18nProvider";
 
 const OPEN_KEY = "qs.tajweedLegend";
 
 export function TajweedLegend() {
+  const t = useT();
   const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) === "on");
 
   const toggle = () => {
@@ -36,7 +38,7 @@ export function TajweedLegend() {
         )}
       >
         <Palette className="size-3.5 shrink-0 text-fg-subtle" aria-hidden />
-        Tajweed colours
+        {t("tajweed.legend")}
         <span className="flex-1" />
         <ChevronDown
           className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-180")}
@@ -47,12 +49,12 @@ export function TajweedLegend() {
       {open ? (
         <div className="grid gap-x-8 gap-y-5 border-t border-border px-5 py-4 sm:grid-cols-2">
           {TAJWEED_GROUPS.map((group) => (
-            <section key={group.id}>
+            <section key={group}>
               <h3 className="mb-2 text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
-                {group.title}
+                {t(`tajweed.group.${group}`)}
               </h3>
               <ul className="space-y-1.5">
-                {rulesByGroup(group.id).map((rule) => (
+                {rulesByGroup(group).map((rule) => (
                   <li key={rule} className="flex items-baseline gap-2.5">
                     <span
                       data-tajweed={rule}
@@ -60,9 +62,11 @@ export function TajweedLegend() {
                       aria-hidden
                     />
                     <span className="min-w-0">
-                      <span className="text-[0.8125rem] text-fg">{TAJWEED_INFO[rule].label}</span>
+                      <span className="text-[0.8125rem] text-fg">
+                        {t(`tajweed.${rule}.label`)}
+                      </span>
                       <span className="ml-1.5 text-[0.75rem] text-fg-subtle">
-                        {TAJWEED_INFO[rule].hint}
+                        {t(`tajweed.${rule}.hint`)}
                       </span>
                     </span>
                   </li>

@@ -48,7 +48,7 @@ import { useIsDesktop } from "@/hooks/useMediaQuery";
 import { WordChip } from "./WordChip";
 import { TajweedText } from "./TajweedText";
 import { verseTranslation } from "@/lib/language";
-import { useContentLanguage } from "@/hooks/useProfile";
+import { useLanguage, useT } from "@/providers/I18nProvider";
 
 /** Tuned pairs rather than one scale factor — translation shouldn't grow as
     fast as the Arabic, or it starts competing with it. */
@@ -143,11 +143,13 @@ function NavButton({
   onClick,
   disabled,
   hint,
+  labels,
 }: {
   side: "prev" | "next";
   onClick: () => void;
   disabled: boolean;
   hint?: string;
+  labels: { previous: string; next: string };
 }) {
   const Icon = side === "prev" ? ChevronLeft : ChevronRight;
   return (
@@ -155,7 +157,7 @@ function NavButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      aria-label={side === "prev" ? "Previous ayah" : "Next ayah"}
+      aria-label={side === "prev" ? labels.previous : labels.next}
       className={cn(
         "group absolute inset-y-0 z-10 flex w-24 flex-col items-center justify-center gap-1.5",
         "text-fg-subtle transition-colors hover:text-fg disabled:pointer-events-none disabled:opacity-25",
@@ -177,10 +179,14 @@ function SizeStepper({
   index,
   onResize,
   large,
+  smallerLabel,
+  largerLabel,
 }: {
   index: number;
   onResize: (delta: number) => void;
   large?: boolean;
+  smallerLabel: string;
+  largerLabel: string;
 }) {
   const button = large ? "size-10" : "size-7";
   const icon = large ? "size-4" : "size-3.5";
@@ -190,7 +196,7 @@ function SizeStepper({
         type="button"
         onClick={() => onResize(-1)}
         disabled={index === 0}
-        aria-label="Smaller text"
+        aria-label={smallerLabel}
         className={cn(
           button,
           "grid place-items-center rounded-md text-fg-muted transition-colors",
@@ -204,7 +210,7 @@ function SizeStepper({
         type="button"
         onClick={() => onResize(1)}
         disabled={index === TEXT_SIZES.length - 1}
-        aria-label="Larger text"
+        aria-label={largerLabel}
         className={cn(
           button,
           "grid place-items-center rounded-md text-fg-muted transition-colors",
@@ -328,9 +334,10 @@ export function FocusMode({
   tajweed: boolean;
   onToggleTajweed: () => void;
 }) {
+  const t = useT();
   const chromeHidden = useIdleChrome();
   const isDesktop = useIsDesktop();
-  const language = useContentLanguage();
+  const language = useLanguage();
   /** Phone only: everything that isn't play / mark / turn lives behind this. */
   const [optionsOpen, setOptionsOpen] = useState(false);
 
@@ -509,6 +516,7 @@ export function FocusMode({
     verse,
   ]);
 
+  const navLabels = { previous: t("focus.previousAyah"), next: t("focus.nextAyah") };
   const isMemorized = verse ? memorized.has(verse.id) : false;
   const isTafsirRead = verse ? tafsirRead.has(verse.id) : false;
   const isWordsLearned = verse ? wordsLearned.has(verse.id) : false;
@@ -522,7 +530,7 @@ export function FocusMode({
       )}
       role="dialog"
       aria-modal="true"
-      aria-label="Focus reader"
+      aria-label={t("focus.label")}
     >
       {/* Position within the ruku, as a hairline that never needs the eye. */}
       <div className="absolute inset-x-0 top-0 z-20 h-[2px] bg-border/70">
@@ -542,11 +550,13 @@ export function FocusMode({
         <div className="min-w-0">
           <div className="truncate text-sm font-medium text-fg">{surahName}</div>
           <div className="text-[0.75rem] text-fg-subtle">
-            Ruku {rukuNumber}
+            {t("focus.rukuHint", { number: rukuNumber })}
             {/* The second half is context, not navigation — the phone keeps
                 the line to one short label. */}
             {rukuInSurah ? (
-              <span className="hidden md:inline">{` · ruku ${rukuInSurah} in this surah`}</span>
+              <span className="hidden md:inline">
+                {t("reader.rukuInSurah", { number: rukuInSurah })}
+              </span>
             ) : null}
           </div>
         </div>
@@ -561,7 +571,7 @@ export function FocusMode({
         <button
           type="button"
           onClick={onExit}
-          aria-label="Exit focus mode"
+          aria-label={t("focus.exitLabel")}
           className={cn(
             "inline-flex items-center gap-2 rounded-lg text-fg-muted transition-colors",
             "size-11 justify-center active:bg-surface-2",
@@ -570,7 +580,7 @@ export function FocusMode({
           )}
         >
           <X className="size-5 md:size-4" aria-hidden />
-          <span className="hidden md:inline">Exit</span>
+          <span className="hidden md:inline">{t("focus.exit")}</span>
           {/* A key hint is noise on a device with no keyboard. */}
           <kbd className="hidden rounded border border-border bg-surface-2 px-1.5 py-0.5 font-sans text-[0.6875rem] md:inline">
             Esc
@@ -587,13 +597,23 @@ export function FocusMode({
               side="prev"
               onClick={goPrev}
               disabled={atFirst && !onPrevRuku}
-              hint={!chromeHidden && atFirst && onPrevRuku ? `Ruku ${rukuNumber - 1}` : undefined}
+              hint={
+                !chromeHidden && atFirst && onPrevRuku
+                  ? t("focus.rukuHint", { number: rukuNumber - 1 })
+                  : undefined
+              }
+              labels={navLabels}
             />
             <NavButton
               side="next"
               onClick={goNext}
               disabled={atLast && !onNextRuku}
-              hint={!chromeHidden && atLast && onNextRuku ? `Ruku ${rukuNumber + 1}` : undefined}
+              hint={
+                !chromeHidden && atLast && onNextRuku
+                  ? t("focus.rukuHint", { number: rukuNumber + 1 })
+                  : undefined
+              }
+              labels={navLabels}
             />
           </>
         ) : null}
@@ -615,21 +635,21 @@ export function FocusMode({
                 className="mx-auto flex w-full max-w-5xl flex-col items-center text-center animate-fade-in"
               >
                 <div className="mb-7 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[0.6875rem] font-medium uppercase tracking-[0.18em] text-fg-subtle md:mb-9">
-                  <span>Ayah {verse.ayah_number}</span>
+                  <span>{t("focus.ayah", { number: verse.ayah_number })}</span>
                   <span className="h-3 w-px bg-border" aria-hidden />
                   <span className="tabular-nums">
-                    {index + 1} of {verses.length}
+                    {t("focus.position", { index: index + 1, total: verses.length })}
                   </span>
                   {isMemorized && isDesktop ? (
                     <>
                       <span className="h-3 w-px bg-border" aria-hidden />
-                      <span className="text-accent">Memorized</span>
+                      <span className="text-accent">{t("verse.memorized")}</span>
                     </>
                   ) : null}
                   {isTafsirRead && isDesktop ? (
                     <>
                       <span className="h-3 w-px bg-border" aria-hidden />
-                      <span className="text-gold">Tafsir read</span>
+                      <span className="text-gold">{t("verse.tafsirRead")}</span>
                     </>
                   ) : null}
                   {reciting ? (
@@ -637,7 +657,7 @@ export function FocusMode({
                       <span className="h-3 w-px bg-border" aria-hidden />
                       <span className="flex items-center gap-1 text-accent">
                         <Volume2 className="size-3" aria-hidden />
-                        Reciting
+                        {t("focus.reciting")}
                       </span>
                     </>
                   ) : null}
@@ -704,73 +724,78 @@ export function FocusMode({
               <ControlButton
                 onClick={togglePlayback}
                 active={reciting && player.playing}
-                label={reciting && player.playing ? "Pause recitation" : "Play this ayah"}
+                label={reciting && player.playing ? t("focus.pauseLabel") : t("focus.playLabel")}
               >
                 {reciting && player.playing ? (
                   <Pause className="size-4" aria-hidden />
                 ) : (
                   <Play className="size-4" aria-hidden />
                 )}
-                {reciting && player.playing ? "Pause" : "Play"}
+                {reciting && player.playing ? t("focus.pause") : t("focus.play")}
               </ControlButton>
             ) : null}
 
             <ControlButton
               onClick={() => verse && onToggleMemorized(verse)}
               active={isMemorized}
-              label={isMemorized ? "Unmark as memorized" : "Mark as memorized"}
+              label={isMemorized ? t("focus.unmarkMemorized") : t("verse.markMemorized")}
             >
               <Check className="size-4" aria-hidden />
-              {isMemorized ? "Memorized" : "Mark memorized"}
+              {isMemorized ? t("verse.memorized") : t("focus.markMemorizedShort")}
             </ControlButton>
 
             <ControlButton
               onClick={() => verse && onToggleTafsirRead(verse)}
               active={isTafsirRead}
-              label={isTafsirRead ? "Unmark tafsir as read" : "Mark tafsir as read"}
+              label={isTafsirRead ? t("focus.unmarkTafsir") : t("verse.markTafsirRead")}
             >
               <GraduationCap className="size-4" aria-hidden />
-              {isTafsirRead ? "Tafsir read" : "Mark tafsir"}
+              {isTafsirRead ? t("verse.tafsirRead") : t("focus.markTafsirShort")}
             </ControlButton>
 
             <ControlButton
               onClick={() => verse && onToggleWordsLearned(verse)}
               active={isWordsLearned}
-              label={isWordsLearned ? "Unmark words as learned" : "Mark words as learned"}
+              label={isWordsLearned ? t("focus.unmarkWords") : t("verse.markWordsLearned")}
             >
               <WholeWord className="size-4" aria-hidden />
-              {isWordsLearned ? "Words learned" : "Mark words"}
+              {isWordsLearned ? t("verse.wordsLearned") : t("focus.markWordsShort")}
             </ControlButton>
 
             <ControlButton onClick={() => setShowWords((current) => !current)} active={showWords}>
               <ScanText className="size-4" aria-hidden />
-              Words
+              {t("focus.words")}
             </ControlButton>
 
             <ControlButton onClick={toggleTranslation} active={showTranslation}>
               <Languages className="size-4" aria-hidden />
-              Translation
+              {t("focus.translation")}
             </ControlButton>
 
             <ControlButton onClick={onToggleTajweed} active={tajweed}>
               <Palette className="size-4" aria-hidden />
-              Tajweed
+              {t("focus.tajweed")}
             </ControlButton>
 
             <div className="ml-1">
-              <SizeStepper index={sizeIndex} onResize={resize} />
+              <SizeStepper
+                index={sizeIndex}
+                onResize={resize}
+                smallerLabel={t("focus.smallerText")}
+                largerLabel={t("focus.largerText")}
+              />
             </div>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[0.75rem] text-fg-subtle">
-            <Hint keys={["←", "→"]} label="ayah" />
-            {player.available ? <Hint keys={["P"]} label="play" /> : null}
-            <Hint keys={["M"]} label="memorized" />
-            <Hint keys={["R"]} label="tafsir read" />
-            <Hint keys={["W"]} label="words" />
-            <Hint keys={["T"]} label="translation" />
-            <Hint keys={["C"]} label="tajweed" />
-            <Hint keys={["+", "−"]} label="text size" />
+            <Hint keys={["←", "→"]} label={t("focus.hintAyah")} />
+            {player.available ? <Hint keys={["P"]} label={t("focus.hintPlay")} /> : null}
+            <Hint keys={["M"]} label={t("focus.hintMemorized")} />
+            <Hint keys={["R"]} label={t("focus.hintTafsir")} />
+            <Hint keys={["W"]} label={t("focus.hintWords")} />
+            <Hint keys={["T"]} label={t("focus.hintTranslation")} />
+            <Hint keys={["C"]} label={t("focus.hintTajweed")} />
+            <Hint keys={["+", "−"]} label={t("focus.hintTextSize")} />
           </div>
         </footer>
       ) : (
@@ -787,8 +812,10 @@ export function FocusMode({
             <BarButton
               onClick={goPrev}
               disabled={atFirst && !onPrevRuku}
-              label="Previous ayah"
-              caption={atFirst && onPrevRuku ? `Ruku ${rukuNumber - 1}` : undefined}
+              label={t("focus.previousAyah")}
+              caption={
+                atFirst && onPrevRuku ? t("focus.rukuHint", { number: rukuNumber - 1 }) : undefined
+              }
             >
               <ChevronLeft className="size-6" aria-hidden />
             </BarButton>
@@ -798,7 +825,7 @@ export function FocusMode({
                 <BarButton
                   onClick={togglePlayback}
                   active={reciting && player.playing}
-                  label={reciting && player.playing ? "Pause recitation" : "Play this ayah"}
+                  label={reciting && player.playing ? t("focus.pauseLabel") : t("focus.playLabel")}
                 >
                   {reciting && player.playing ? (
                     <Pause className="size-5" aria-hidden />
@@ -811,7 +838,7 @@ export function FocusMode({
               <BarButton
                 onClick={() => verse && onToggleMemorized(verse)}
                 active={isMemorized}
-                label={isMemorized ? "Unmark as memorized" : "Mark as memorized"}
+                label={isMemorized ? t("focus.unmarkMemorized") : t("verse.markMemorized")}
               >
                 <Check className="size-5" aria-hidden />
               </BarButton>
@@ -819,7 +846,7 @@ export function FocusMode({
               <BarButton
                 onClick={() => setOptionsOpen(true)}
                 active={optionsOpen}
-                label="Reading options"
+                label={t("focus.readingOptions")}
               >
                 <SlidersHorizontal className="size-5" aria-hidden />
               </BarButton>
@@ -828,8 +855,10 @@ export function FocusMode({
             <BarButton
               onClick={goNext}
               disabled={atLast && !onNextRuku}
-              label="Next ayah"
-              caption={atLast && onNextRuku ? `Ruku ${rukuNumber + 1}` : undefined}
+              label={t("focus.nextAyah")}
+              caption={
+                atLast && onNextRuku ? t("focus.rukuHint", { number: rukuNumber + 1 }) : undefined
+              }
             >
               <ChevronRight className="size-6" aria-hidden />
             </BarButton>
@@ -849,51 +878,61 @@ export function FocusMode({
             )}
           >
             <div className="mx-auto mb-1 h-1 w-9 rounded-full bg-border-strong" aria-hidden />
-            <Dialog.Title className="sr-only">Reading options</Dialog.Title>
+            <Dialog.Title className="sr-only">{t("focus.readingOptions")}</Dialog.Title>
 
             <div className="divide-y divide-border">
-              <SheetRow icon={Type} label="Text size">
-                <SizeStepper index={sizeIndex} onResize={resize} large />
+              <SheetRow icon={Type} label={t("focus.textSize")}>
+                <SizeStepper
+                  index={sizeIndex}
+                  onResize={resize}
+                  large
+                  smallerLabel={t("focus.smallerText")}
+                  largerLabel={t("focus.largerText")}
+                />
               </SheetRow>
 
-              <SheetRow icon={Languages} label="Translation">
+              <SheetRow icon={Languages} label={t("focus.translation")}>
                 <Toggle
                   checked={showTranslation}
                   onCheckedChange={toggleTranslation}
-                  label="Show translation"
+                  label={t("focus.showTranslation")}
                 />
               </SheetRow>
 
-              <SheetRow icon={ScanText} label="Word by word">
+              <SheetRow icon={ScanText} label={t("focus.wordByWord")}>
                 <Toggle
                   checked={showWords}
                   onCheckedChange={() => setShowWords((current) => !current)}
-                  label="Show word by word"
+                  label={t("focus.showWordByWord")}
                 />
               </SheetRow>
 
-              <SheetRow icon={Palette} label="Tajweed colours">
-                <Toggle checked={tajweed} onCheckedChange={onToggleTajweed} label="Tajweed colours" />
+              <SheetRow icon={Palette} label={t("focus.tajweedColours")}>
+                <Toggle
+                  checked={tajweed}
+                  onCheckedChange={onToggleTajweed}
+                  label={t("focus.tajweedColours")}
+                />
               </SheetRow>
 
-              <SheetRow icon={GraduationCap} label="Tafsir read">
+              <SheetRow icon={GraduationCap} label={t("verse.tafsirRead")}>
                 <Toggle
                   checked={isTafsirRead}
                   onCheckedChange={() => verse && onToggleTafsirRead(verse)}
-                  label="Mark tafsir as read"
+                  label={t("verse.markTafsirRead")}
                 />
               </SheetRow>
 
-              <SheetRow icon={WholeWord} label="Words learned">
+              <SheetRow icon={WholeWord} label={t("verse.wordsLearned")}>
                 <Toggle
                   checked={isWordsLearned}
                   onCheckedChange={() => verse && onToggleWordsLearned(verse)}
-                  label="Mark words as learned"
+                  label={t("verse.markWordsLearned")}
                 />
               </SheetRow>
 
               {/* The header drops the clock on a phone; this is where it went. */}
-              <SheetRow icon={Clock} label="This session">
+              <SheetRow icon={Clock} label={t("focus.thisSession")}>
                 <span className="text-[0.9375rem] tabular-nums text-fg-muted">
                   {formatClock(sessionSeconds)}
                 </span>

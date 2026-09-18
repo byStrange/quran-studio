@@ -1,7 +1,7 @@
 import { BookOpen, Check, ChevronDown, Expand, GraduationCap, Play, Volume2, WholeWord } from "lucide-react";
 import { cn, verseKey } from "@/lib/utils";
 import { verseTranslation } from "@/lib/language";
-import { useContentLanguage } from "@/hooks/useProfile";
+import { useLanguage, useT } from "@/providers/I18nProvider";
 import type { VerseWithWords, WordStatus } from "@/lib/types";
 import { WordChip } from "./WordChip";
 import { TajweedText } from "./TajweedText";
@@ -55,7 +55,9 @@ export function VerseCard({
   onPlayFromHere: () => void;
   canPlay: boolean;
 }) {
-  const language = useContentLanguage();
+  const t = useT();
+  const language = useLanguage();
+  const reference = verseKey(verse.surah_number, verse.ayah_number);
 
   return (
     <article
@@ -84,11 +86,11 @@ export function VerseCard({
             {reciting ? <Volume2 className="size-3.5" aria-hidden /> : verse.ayah_number}
           </span>
 
-          <Tooltip content={memorized ? "Memorized" : "Mark as memorized"}>
+          <Tooltip content={memorized ? t("verse.memorized") : t("verse.markMemorized")}>
             <button
               onClick={onToggleMemorized}
               aria-pressed={memorized}
-              aria-label={`Mark ${verseKey(verse.surah_number, verse.ayah_number)} as memorized`}
+              aria-label={t("verse.markMemorizedLabel", { reference })}
               className={cn(
                 "grid size-7 place-items-center rounded-lg border transition-colors",
                 memorized
@@ -103,14 +105,11 @@ export function VerseCard({
           {/* The second marker sits directly under the first because the two
               are read together — "known by heart" and "understood" are the
               pair that tells you what is left to do on this ayah. */}
-          <Tooltip content={tafsirRead ? "Tafsir read" : "Mark tafsir as read"}>
+          <Tooltip content={tafsirRead ? t("verse.tafsirRead") : t("verse.markTafsirRead")}>
             <button
               onClick={onToggleTafsirRead}
               aria-pressed={tafsirRead}
-              aria-label={`Mark the tafsir on ${verseKey(
-                verse.surah_number,
-                verse.ayah_number,
-              )} as read`}
+              aria-label={t("verse.markTafsirLabel", { reference })}
               className={cn(
                 "grid size-7 place-items-center rounded-lg border transition-colors",
                 tafsirRead
@@ -122,14 +121,11 @@ export function VerseCard({
             </button>
           </Tooltip>
 
-          <Tooltip content={wordsLearned ? "Words learned" : "Mark words as learned"}>
+          <Tooltip content={wordsLearned ? t("verse.wordsLearned") : t("verse.markWordsLearned")}>
             <button
               onClick={onToggleWordsLearned}
               aria-pressed={wordsLearned}
-              aria-label={`Mark words on ${verseKey(
-                verse.surah_number,
-                verse.ayah_number,
-              )} as learned`}
+              aria-label={t("verse.markWordsLabel", { reference })}
               className={cn(
                 "grid size-7 place-items-center rounded-lg border transition-colors",
                 wordsLearned
@@ -153,7 +149,7 @@ export function VerseCard({
 
           <div className="mt-4 flex flex-wrap items-center gap-1">
             {canPlay ? (
-              <Tooltip content="Play the recitation from this ayah">
+              <Tooltip content={t("verse.playFromHere")}>
                 <button
                   onClick={onPlayFromHere}
                   className={cn(
@@ -165,7 +161,7 @@ export function VerseCard({
                   )}
                 >
                   <Play className="size-3.5" aria-hidden />
-                  Play
+                  {t("verse.play")}
                 </button>
               </Tooltip>
             ) : null}
@@ -181,7 +177,7 @@ export function VerseCard({
                 className={cn("size-3.5 transition-transform", wordsExpanded && "rotate-180")}
                 aria-hidden
               />
-              {wordsExpanded ? "Hide" : "Show"} word by word
+              {wordsExpanded ? t("verse.hideWordByWord") : t("verse.showWordByWord")}
               <span className="text-fg-subtle">({verse.words.length})</span>
             </button>
 
@@ -195,11 +191,11 @@ export function VerseCard({
               )}
             >
               <BookOpen className="size-3.5" aria-hidden />
-              Tafsir
+              {t("verse.tafsir")}
             </button>
 
             {onOpenFocus ? (
-            <Tooltip content="Read this ayah on its own, fullscreen">
+            <Tooltip content={t("verse.focusHint")}>
               <button
                 onClick={onOpenFocus}
                 className={cn(
@@ -208,7 +204,7 @@ export function VerseCard({
                 )}
               >
                 <Expand className="size-3.5" aria-hidden />
-                Focus
+                {t("verse.focus")}
               </button>
             </Tooltip>
             ) : null}

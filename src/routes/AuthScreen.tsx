@@ -4,10 +4,12 @@ import { useAuth } from "@/providers/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
+import { useT } from "@/providers/I18nProvider";
 
 type Mode = "signin" | "signup";
 
 export function AuthScreen() {
+  const t = useT();
   const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
@@ -27,12 +29,12 @@ export function AuthScreen() {
       } else {
         const { needsConfirmation } = await signUp(email, password);
         if (needsConfirmation) {
-          setNotice("Check your inbox to confirm your address, then sign in.");
+          setNotice(t("auth.confirmNotice"));
           setMode("signin");
         }
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Something went wrong.");
+      setError(caught instanceof Error ? caught.message : t("auth.failed"));
     } finally {
       setBusy(false);
     }
@@ -45,10 +47,8 @@ export function AuthScreen() {
           <div className="mb-4 grid size-12 place-items-center rounded-2xl bg-accent text-accent-fg">
             <BookOpen className="size-5" aria-hidden />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight text-fg">Quran Studio</h1>
-          <p className="mt-1.5 text-sm text-fg-muted">
-            Memorize the Quran, one ruku at a time.
-          </p>
+          <h1 className="text-xl font-semibold tracking-tight text-fg">{t("app.name")}</h1>
+          <p className="mt-1.5 text-sm text-fg-muted">{t("auth.tagline")}</p>
         </div>
 
         <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl bg-surface-2 p-1">
@@ -68,13 +68,13 @@ export function AuthScreen() {
                   : "text-fg-subtle hover:text-fg",
               )}
             >
-              {value === "signin" ? "Sign in" : "Create account"}
+              {value === "signin" ? t("auth.signIn") : t("auth.createAccount")}
             </button>
           ))}
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">
-          <Field label="Email">
+          <Field label={t("auth.email")}>
             {(props) => (
               <Input
                 {...props}
@@ -89,8 +89,8 @@ export function AuthScreen() {
           </Field>
 
           <Field
-            label="Password"
-            hint={mode === "signup" ? "At least 6 characters." : undefined}
+            label={t("auth.password")}
+            hint={mode === "signup" ? t("auth.passwordHint") : undefined}
           >
             {(props) => (
               <Input
@@ -118,7 +118,7 @@ export function AuthScreen() {
           ) : null}
 
           <Button type="submit" variant="primary" size="lg" loading={busy} className="w-full">
-            {mode === "signin" ? "Sign in" : "Create account"}
+            {mode === "signin" ? t("auth.signIn") : t("auth.createAccount")}
           </Button>
         </form>
       </div>

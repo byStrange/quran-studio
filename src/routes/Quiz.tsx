@@ -14,11 +14,12 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
-import { useContentLanguage } from "@/hooks/useProfile";
 import { useRukus, useSurahs } from "@/hooks/useQuranData";
+import { useLanguage, useT } from "@/providers/I18nProvider";
 import { verseTranslation } from "@/lib/language";
 import type { QuizScope, WordStatus } from "@/lib/types";
 import { cn, verseKey } from "@/lib/utils";
+import type { TranslationKey } from "@/locales/en";
 import { Page } from "@/components/layout/AppShell";
 import { Card, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ interface QuizWord {
   verse_arabic: string;
   translation_en: string;
   translation_ru: string;
+  translation_uz: string;
   pool_size: number;
 }
 
@@ -47,26 +49,26 @@ const LIMITS = [10, 20, 30] as const;
 
 const SCOPES: Array<{
   value: QuizScope;
-  title: string;
-  description: string;
+  title: TranslationKey;
+  description: TranslationKey;
   icon: typeof Layers;
 }> = [
   {
     value: "ruku",
-    title: "This ruku",
-    description: "Every word in one ruku — the round to run after memorizing it.",
+    title: "quiz.scopeRuku",
+    description: "quiz.scopeRukuDescription",
     icon: Layers,
   },
   {
     value: "surah",
-    title: "This surah",
-    description: "Words from the ayahs you've memorized in one surah.",
+    title: "quiz.scopeSurah",
+    description: "quiz.scopeSurahDescription",
     icon: BookMarked,
   },
   {
     value: "global",
-    title: "Everything memorized",
-    description: "Words from every ayah you've memorized, across the whole Quran.",
+    title: "quiz.scopeGlobal",
+    description: "quiz.scopeGlobalDescription",
     icon: Globe2,
   },
 ];
@@ -89,9 +91,10 @@ type Phase = "config" | "running" | "done";
  * first.
  */
 export function Quiz() {
+  const t = useT();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const language = useContentLanguage();
+  const language = useLanguage();
   const { data: surahs } = useSurahs();
   const { data: rukus } = useRukus();
   const [params] = useSearchParams();
@@ -273,10 +276,10 @@ export function Quiz() {
   // round that was opened from a ruku links back there when it is over.
   const scopeLabel =
     scope === "ruku"
-      ? `Ruku ${rukuNumber ?? ""}`.trim()
+      ? t("browse.rukuLabel", { number: rukuNumber ?? "" }).trim()
       : scope === "surah"
-        ? (surahs?.find((s) => s.number === surahNumber)?.name_english ?? "Surah")
-        : "All memorized ayahs";
+        ? (surahs?.find((s) => s.number === surahNumber)?.name_english ?? t("quiz.surah"))
+        : t("quiz.allMemorized");
 
   const restart = () => {
     setCustom(null);
@@ -305,26 +308,31 @@ export function Quiz() {
 
   if (phase === "config") {
     const surahOptions = [
-      { value: "", label: "Choose a surah…" },
-      ...(surahs ?? []).map((s) => ({ value: String(s.number), label: `${s.number}. ${s.name_english}` })),
+      { value: "", label: t("quiz.chooseSurah") },
+      ...(surahs ?? []).map((s) => ({
+        value: String(s.number),
+        label: t("quiz.surahOption", { number: s.number, name: s.name_english }),
+      })),
     ];
     const rukuOptions = [
-      { value: "", label: surahNumber === null ? "Choose a surah first" : "Choose a ruku…" },
+      { value: "", label: surahNumber === null ? t("quiz.chooseSurahFirst") : t("quiz.chooseRuku") },
       ...surahRukus.map((r) => ({
         value: String(r.ruku_number),
-        label: `Ruku ${r.ruku_in_surah} · ayahs ${r.ayah_start}–${r.ayah_end}`,
+        label: t("quiz.rukuOption", {
+          number: r.ruku_in_surah,
+          range: `${r.ayah_start}–${r.ayah_end}`,
+        }),
       })),
     ];
 
     return (
-      <Page
-        title="Quiz"
-        description="Say whether you know each word. The ones you don't open the ayah they came from."
-      >
+      <Page title={t("quiz.title")} description={t("quiz.description")}>
         <Card>
           <CardBody className="pt-6 space-y-6">
             <div>
-              <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">What should the round cover?</p>
+              <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">
+                {t("quiz.scopeQuestion")}
+              </p>
               <div className="grid gap-2 sm:grid-cols-3">
                 {SCOPES.map((option) => {
                   const Icon = option.icon;
@@ -348,10 +356,10 @@ export function Quiz() {
                         )}
                       >
                         <Icon className="size-4 shrink-0" aria-hidden />
-                        {option.title}
+                        {t(option.title)}
                       </span>
                       <span className="mt-1.5 block text-[0.75rem] leading-relaxed text-fg-subtle">
-                        {option.description}
+                        {t(option.description)}
                       </span>
                     </button>
                   );
@@ -361,7 +369,7 @@ export function Quiz() {
 
             {scope === "surah" ? (
               <div>
-                <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">Which surah?</p>
+                <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">{t("quiz.whichSurah")}</p>
                 <SelectField
                   value={surahNumber === null ? "" : String(surahNumber)}
                   onValueChange={(value) => {
@@ -369,7 +377,7 @@ export function Quiz() {
                     setRukuNumber(null);
                   }}
                   options={surahOptions}
-                  placeholder="Choose a surah…"
+                  placeholder={t("quiz.chooseSurah")}
                 />
               </div>
             ) : null}
@@ -377,7 +385,7 @@ export function Quiz() {
             {scope === "ruku" ? (
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">Surah</p>
+                  <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">{t("quiz.surah")}</p>
                   <SelectField
                     value={surahNumber === null ? "" : String(surahNumber)}
                     onValueChange={(value) => {
@@ -385,23 +393,25 @@ export function Quiz() {
                       setRukuNumber(null);
                     }}
                     options={surahOptions}
-                    placeholder="Choose a surah…"
+                    placeholder={t("quiz.chooseSurah")}
                   />
                 </div>
                 <div>
-                  <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">Ruku</p>
+                  <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">{t("quiz.ruku")}</p>
                   <SelectField
                     value={rukuNumber === null ? "" : String(rukuNumber)}
                     onValueChange={(value) => setRukuNumber(value === "" ? null : Number(value))}
                     options={rukuOptions}
-                    placeholder="Choose a ruku…"
+                    placeholder={t("quiz.chooseRuku")}
                   />
                 </div>
               </div>
             ) : null}
 
             <div>
-              <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">Words this session</p>
+              <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">
+                {t("quiz.wordsThisSession")}
+              </p>
               <div className="flex gap-2">
                 {LIMITS.map((value) => (
                   <button
@@ -422,20 +432,19 @@ export function Quiz() {
               {ready ? (
                 <p className="mt-2 text-[0.75rem] text-fg-subtle">
                   {poolSize.isLoading
-                    ? "Counting the words in this scope…"
+                    ? t("quiz.counting")
                     : poolSize.data === 0
                       ? scope === "surah"
-                        ? "You haven't memorized any ayahs in this surah yet."
+                        ? t("quiz.noneInSurah")
                         : scope === "ruku"
-                          ? "That ruku has no words to quiz."
-                          : "Nothing memorized yet — mark ayahs as memorized while reading."
-                      : `${poolSize.data} ${poolSize.data === 1 ? "word" : "words"} in this scope${
-                          (poolSize.data ?? 0) > limit ? ` · ${limit} per session` : ""
-                        }`}
+                          ? t("quiz.noneInRuku")
+                          : t("quiz.noneMemorized")
+                      : t("quiz.poolSize", { count: poolSize.data ?? 0 }) +
+                        ((poolSize.data ?? 0) > limit ? t("quiz.perSession", { limit }) : "")}
                 </p>
               ) : (
                 <p className="mt-2 text-[0.75rem] text-fg-subtle">
-                  Pick {scope === "ruku" ? "a ruku" : "a surah"} to start.
+                  {scope === "ruku" ? t("quiz.pickRuku") : t("quiz.pickSurah")}
                 </p>
               )}
             </div>
@@ -446,7 +455,7 @@ export function Quiz() {
               disabled={!ready || poolSize.data === 0}
               onClick={() => begin()}
             >
-              Start round
+              {t("quiz.start")}
             </Button>
           </CardBody>
         </Card>
@@ -458,15 +467,15 @@ export function Quiz() {
 
   if (round.isError) {
     return (
-      <Page title="Quiz">
+      <Page title={t("quiz.title")}>
         <Card>
           <EmptyState
             icon={<X className="size-5" />}
-            title="Couldn't build the round"
+            title={t("quiz.buildFailed")}
             description={String(round.error)}
             action={
               <Button variant="primary" onClick={restart}>
-                Back to setup
+                {t("quiz.backToSetup")}
               </Button>
             }
           />
@@ -477,32 +486,30 @@ export function Quiz() {
 
   if (round.isPending && custom === null) {
     return (
-      <Page title="Quiz">
-        <LoadingBlock label="Drawing words…" />
+      <Page title={t("quiz.title")}>
+        <LoadingBlock label={t("quiz.drawing")} />
       </Page>
     );
   }
 
   if (questions.length === 0) {
     return (
-      <Page title="Quiz">
+      <Page title={t("quiz.title")}>
         <Card>
           <EmptyState
             icon={<GraduationCap className="size-5" />}
-            title="No words in this scope"
+            title={t("quiz.emptyScope")}
             description={
-              scope === "surah"
-                ? "This surah has no memorized ayahs yet. Mark some as memorized while reading, then come back."
-                : "Nothing here to quiz yet — read a ruku and mark its ayahs as memorized."
+              scope === "surah" ? t("quiz.emptySurahDescription") : t("quiz.emptyDescription")
             }
             action={
               <div className="flex gap-2">
                 <Button variant="primary" onClick={restart}>
                   <Settings2 className="size-4" aria-hidden />
-                  Change scope
+                  {t("quiz.changeScope")}
                 </Button>
                 <Button asChild variant="outline">
-                  <Link to="/browse">Go read</Link>
+                  <Link to="/browse">{t("quiz.goRead")}</Link>
                 </Button>
               </div>
             }
@@ -517,7 +524,7 @@ export function Quiz() {
     const accuracy = answered > 0 ? (knownCount / answered) * 100 : 0;
 
     return (
-      <Page title="Round complete">
+      <Page title={t("quiz.roundComplete")}>
         <Card>
           <CardBody className="pt-6">
             <div className="text-center">
@@ -527,18 +534,16 @@ export function Quiz() {
               </div>
               <p className="mt-2 text-sm text-fg-muted">
                 {accuracy >= 80
-                  ? "Strong round. These words are sticking."
+                  ? t("quiz.verdictStrong")
                   : accuracy >= 50
-                    ? "Solid progress — the misses will come back around sooner."
-                    : "Worth another pass. Missed words are prioritised next time."}
+                    ? t("quiz.verdictSolid")
+                    : t("quiz.verdictWeak")}
               </p>
             </div>
 
             {missed.length > 0 ? (
               <div className="mt-6 border-t border-border pt-5">
-                <p className="text-[0.8125rem] font-medium text-fg">
-                  Words to look at again
-                </p>
+                <p className="text-[0.8125rem] font-medium text-fg">{t("quiz.wordsToRevisit")}</p>
                 <ul className="mt-3 divide-y divide-border">
                   {missed.map((word) => (
                     <li key={word.word_id} className="flex items-baseline gap-3 py-2">
@@ -561,20 +566,20 @@ export function Quiz() {
               {missed.length > 0 ? (
                 <Button variant="primary" onClick={practiseMissed}>
                   <Repeat2 className="size-4" aria-hidden />
-                  Practise {missed.length} missed {missed.length === 1 ? "word" : "words"}
+                  {t("quiz.practiseMissed", { count: missed.length })}
                 </Button>
               ) : null}
               <Button variant={missed.length > 0 ? "outline" : "primary"} onClick={restart}>
                 <RotateCcw className="size-4" aria-hidden />
-                New round
+                {t("quiz.newRound")}
               </Button>
               {scope === "ruku" && rukuNumber !== null ? (
                 <Button asChild variant="ghost">
-                  <Link to={`/read/${rukuNumber}`}>Back to the ruku</Link>
+                  <Link to={`/read/${rukuNumber}`}>{t("quiz.backToRuku")}</Link>
                 </Button>
               ) : (
                 <Button asChild variant="ghost">
-                  <Link to="/vocabulary">Vocabulary</Link>
+                  <Link to="/vocabulary">{t("vocab.title")}</Link>
                 </Button>
               )}
             </div>
@@ -588,22 +593,26 @@ export function Quiz() {
 
   const revealed = verdict === "unknown";
   const translation = verseTranslation(
-    { translation_en: question!.translation_en, translation_ru: question!.translation_ru },
+    {
+      translation_en: question!.translation_en,
+      translation_ru: question!.translation_ru,
+      translation_uz: question!.translation_uz,
+    },
     language,
   );
 
   return (
-    <Page title="Quiz" description={scopeLabel}>
+    <Page title={t("quiz.title")} description={scopeLabel}>
       <div className="mb-5 flex items-center justify-between gap-4">
         <div className="flex flex-1 items-center gap-4">
           <ProgressBar value={((index + (verdict ? 1 : 0)) / questions.length) * 100} />
           <span className="shrink-0 text-[0.8125rem] tabular-nums text-fg-subtle">
-            {index + 1} / {questions.length}
+            {t("quiz.progress", { index: index + 1, total: questions.length })}
           </span>
         </div>
         <Button variant="ghost" size="sm" onClick={restart}>
           <Settings2 className="size-4 mr-1.5" />
-          Setup
+          {t("quiz.setup")}
         </Button>
       </div>
 
@@ -624,7 +633,7 @@ export function Quiz() {
           {verdict === null ? (
             <>
               <p className="mt-7 text-center text-[0.8125rem] text-fg-subtle">
-                Do you know what this word means?
+                {t("quiz.doYouKnow")}
               </p>
               <div className="mx-auto mt-3 grid max-w-md gap-2 sm:grid-cols-2">
                 <button
@@ -636,7 +645,7 @@ export function Quiz() {
                   )}
                 >
                   <Check className="size-4" aria-hidden />
-                  I know it
+                  {t("quiz.iKnowIt")}
                 </button>
                 <button
                   onClick={() => answer(false)}
@@ -647,23 +656,25 @@ export function Quiz() {
                   )}
                 >
                   <X className="size-4" aria-hidden />
-                  I don't know
+                  {t("quiz.iDontKnow")}
                 </button>
               </div>
               <p className="mt-3 text-center text-[0.6875rem] text-fg-subtle">
-                Press Y or N
+                {t("quiz.keyHint")}
               </p>
             </>
           ) : revealed ? (
             <div className="mt-7 animate-fade-in">
               <div className="rounded-xl border border-border bg-surface-2/50 p-4">
                 <p className="text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
-                  It means
+                  {t("quiz.itMeans")}
                 </p>
                 <p className="mt-1.5 text-[0.9375rem] font-medium text-fg">{question!.gloss}</p>
 
                 <p className="mt-4 text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
-                  In context · {verseKey(question!.surah_number, question!.ayah_number)}
+                  {t("quiz.inContext", {
+                    reference: verseKey(question!.surah_number, question!.ayah_number),
+                  })}
                 </p>
                 <p className="arabic mt-2 text-fg" dir="rtl">
                   <HighlightedVerse text={question!.verse_arabic} word={question!.arabic} />
@@ -673,17 +684,17 @@ export function Quiz() {
 
               <div className="mt-5 flex items-center justify-between gap-3">
                 <span className="text-[0.75rem] text-fg-subtle">
-                  Marked as learning — it comes back around sooner.
+                  {t("quiz.markedLearning")}
                 </span>
                 <Button variant="primary" onClick={next}>
-                  {index + 1 >= questions.length ? "Finish" : "Next"}
+                  {index + 1 >= questions.length ? t("quiz.finish") : t("quiz.next")}
                 </Button>
               </div>
             </div>
           ) : (
             <div className="mt-7 flex items-center justify-center gap-2.5 text-sm text-accent-soft-fg animate-fade-in">
               <Check className="size-4" aria-hidden />
-              Marked as learned
+              {t("quiz.markedLearned")}
             </div>
           )}
         </CardBody>

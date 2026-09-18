@@ -12,6 +12,7 @@ import {
   Settings as SettingsIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT, type TFunction } from "@/providers/I18nProvider";
 import { useStreakStatus } from "@/hooks/useProgress";
 import { TafsirNudge } from "./TafsirNudge";
 import { Tooltip } from "@/components/ui/primitives";
@@ -22,17 +23,19 @@ interface NavItem {
   icon: ReactNode;
 }
 
-const PRIMARY_NAV: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: <LayoutDashboard className="size-4" /> },
-  { to: "/browse", label: "Read", icon: <BookOpen className="size-4" /> },
-  { to: "/vocabulary", label: "Vocabulary", icon: <Library className="size-4" /> },
-  { to: "/quiz", label: "Quiz", icon: <GraduationCap className="size-4" /> },
-  { to: "/memorization", label: "Memorization", icon: <BookMarked className="size-4" /> },
+// Built per render rather than at module scope: the label is a translation,
+// and a module constant would freeze whichever language happened to load first.
+const primaryNav = (t: TFunction): NavItem[] => [
+  { to: "/", label: t("nav.dashboard"), icon: <LayoutDashboard className="size-4" /> },
+  { to: "/browse", label: t("nav.read"), icon: <BookOpen className="size-4" /> },
+  { to: "/vocabulary", label: t("nav.vocabulary"), icon: <Library className="size-4" /> },
+  { to: "/quiz", label: t("nav.quiz"), icon: <GraduationCap className="size-4" /> },
+  { to: "/memorization", label: t("nav.memorization"), icon: <BookMarked className="size-4" /> },
 ];
 
-const SECONDARY_NAV: NavItem[] = [
-  { to: "/settings", label: "Settings", icon: <SettingsIcon className="size-4" /> },
-  { to: "/about", label: "About", icon: <Info className="size-4" /> },
+const secondaryNav = (t: TFunction): NavItem[] => [
+  { to: "/settings", label: t("nav.settings"), icon: <SettingsIcon className="size-4" /> },
+  { to: "/about", label: t("nav.about"), icon: <Info className="size-4" /> },
 ];
 
 function NavRow({ item }: { item: NavItem }) {
@@ -74,6 +77,7 @@ function NavRow({ item }: { item: NavItem }) {
 }
 
 function StreakBadge() {
+  const t = useT();
   const { streak, inGrace } = useStreakStatus();
   const current = streak?.current_streak ?? 0;
 
@@ -81,10 +85,10 @@ function StreakBadge() {
     <Tooltip
       content={
         inGrace
-          ? "Your streak is paused. Read for a full hour in one day to restore it."
+          ? t("streak.paused")
           : current > 0
-            ? `${current} day streak — keep it going.`
-            : "Read today to start a streak."
+            ? t("streak.keepGoing", { count: current })
+            : t("streak.start")
       }
     >
       <div
@@ -106,7 +110,7 @@ function StreakBadge() {
         />
         <span className="text-sm font-semibold tabular-nums text-fg">{current}</span>
         <span className="text-[0.8125rem] text-fg-subtle">
-          {inGrace ? "in grace" : current === 1 ? "day" : "days"}
+          {inGrace ? t("streak.inGrace") : t("streak.unitDay", { count: current })}
         </span>
       </div>
     </Tooltip>
@@ -114,6 +118,7 @@ function StreakBadge() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const t = useT();
   const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
 
@@ -151,17 +156,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="grid size-[1.125rem] place-items-center rounded-[0.3rem] bg-accent text-accent-fg">
             <BookOpen className="size-3" aria-hidden />
           </div>
-          <span className="text-[0.8125rem] font-medium tracking-tight text-fg">Quran Studio</span>
+          <span className="text-[0.8125rem] font-medium tracking-tight text-fg">
+            {t("app.name")}
+          </span>
         </div>
 
         <nav className="flex-1 space-y-0.5 px-3 pt-0 md:pt-4">
-          {PRIMARY_NAV.map((item) => (
+          {primaryNav(t).map((item) => (
             <NavRow key={item.to} item={item} />
           ))}
         </nav>
 
         <div className="space-y-0.5 border-t border-border px-3 py-3">
-          {SECONDARY_NAV.map((item) => (
+          {secondaryNav(t).map((item) => (
             <NavRow key={item.to} item={item} />
           ))}
         </div>
@@ -176,14 +183,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button
             type="button"
             onClick={() => setNavOpen(true)}
-            aria-label="Open navigation"
+            aria-label={t("app.openNavigation")}
             aria-expanded={navOpen}
             // 44px: the smallest reliable touch target.
             className="grid size-11 place-items-center rounded-lg text-fg-muted active:bg-surface-2"
           >
             <Menu className="size-5" aria-hidden />
           </button>
-          <span className="text-[0.8125rem] font-medium tracking-tight text-fg">Quran Studio</span>
+          <span className="text-[0.8125rem] font-medium tracking-tight text-fg">
+            {t("app.name")}
+          </span>
         </header>
 
         <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>

@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSurahs } from "@/hooks/useQuranData";
 import { useSetWordStatus } from "@/hooks/useProgress";
-import { useContentLanguage } from "@/hooks/useProfile";
+import { useLanguage, useT } from "@/providers/I18nProvider";
 import { wordGloss } from "@/lib/language";
 import { Page } from "@/components/layout/AppShell";
 import { Card, CardBody, StatTile } from "@/components/ui/card";
@@ -30,15 +30,10 @@ interface VocabRow {
   };
 }
 
-const STATUS_FILTERS = [
-  { value: "all", label: "All words" },
-  { value: "learning", label: "Learning" },
-  { value: "learned", label: "Learned" },
-] as const;
-
 export function Vocabulary() {
+  const t = useT();
   const { user } = useAuth();
-  const language = useContentLanguage();
+  const language = useLanguage();
   const { data: surahs } = useSurahs();
   const setStatus = useSetWordStatus();
 
@@ -85,43 +80,66 @@ export function Vocabulary() {
     },
   });
 
+  const statusFilters = [
+    { value: "all", label: t("vocab.allWords") },
+    { value: "learning", label: t("vocab.learning") },
+    { value: "learned", label: t("vocab.learned") },
+  ];
+
   const surahOptions = useMemo(
     () => [
-      { value: "all", label: "All surahs" },
+      { value: "all", label: t("vocab.allSurahs") },
       ...(surahs ?? []).map((s) => ({
         value: String(s.number),
         label: `${s.number}. ${s.name_english}`,
       })),
     ],
-    [surahs],
+    [surahs, t],
   );
 
   return (
     <Page
-      title="Vocabulary"
-      description="Every word you've marked while reading, and how well you know it."
+      title={t("vocab.title")}
+      description={t("vocab.description")}
       wide
       action={
         <Button asChild variant="primary">
           <Link to="/quiz">
             <GraduationCap className="size-4" aria-hidden />
-            Start quiz
+            {t("vocab.startQuiz")}
           </Link>
         </Button>
       }
     >
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatTile label="Encountered" value={overview.data?.encountered ?? 0} hint="Words in rukus you've read" />
-        <StatTile label="Learned" value={overview.data?.learned ?? 0} accent icon={<Library className="size-4" />} />
-        <StatTile label="Learning" value={overview.data?.learning ?? 0} hint="Still in progress" />
-        <StatTile label="Rukus read" value={overview.data?.rukus_read ?? 0} hint="Lessons visited" />
+        <StatTile
+          label={t("vocab.encountered")}
+          value={overview.data?.encountered ?? 0}
+          hint={t("vocab.encounteredHint")}
+        />
+        <StatTile
+          label={t("vocab.learned")}
+          value={overview.data?.learned ?? 0}
+          accent
+          icon={<Library className="size-4" />}
+        />
+        <StatTile
+          label={t("vocab.learning")}
+          value={overview.data?.learning ?? 0}
+          hint={t("vocab.learningHint")}
+        />
+        <StatTile
+          label={t("vocab.rukusRead")}
+          value={overview.data?.rukus_read ?? 0}
+          hint={t("vocab.rukusReadHint")}
+        />
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
         <SelectField
           value={statusFilter}
           onValueChange={setStatusFilter}
-          options={STATUS_FILTERS}
+          options={statusFilters}
           className="w-full sm:w-44"
         />
         <SelectField
@@ -138,11 +156,11 @@ export function Vocabulary() {
         ) : (words.data ?? []).length === 0 ? (
           <EmptyState
             icon={<Library className="size-5" />}
-            title="No words yet"
-            description="Open a ruku, expand the word-by-word view, and mark words as learning or learned. They'll collect here."
+            title={t("vocab.emptyTitle")}
+            description={t("vocab.emptyDescription")}
             action={
               <Button asChild variant="primary">
-                <Link to="/browse">Browse rukus</Link>
+                <Link to="/browse">{t("vocab.browseRukus")}</Link>
               </Button>
             }
           />
@@ -176,11 +194,14 @@ export function Vocabulary() {
 
                   {row.review_count > 0 ? (
                     <div className="hidden w-24 shrink-0 text-[0.75rem] tabular-nums text-fg-subtle sm:block">
-                      {row.correct_count}/{row.review_count} correct
+                      {t("vocab.correctOf", {
+                        correct: row.correct_count,
+                        total: row.review_count,
+                      })}
                     </div>
                   ) : (
                     <div className="hidden w-24 shrink-0 text-[0.75rem] text-fg-subtle sm:block">
-                      Not quizzed
+                      {t("vocab.notQuizzed")}
                     </div>
                   )}
 
@@ -198,7 +219,7 @@ export function Vocabulary() {
                         : "border-gold/40 bg-gold-soft/60 text-fg-muted hover:border-gold",
                     )}
                   >
-                    {row.status === "learned" ? "Learned" : "Learning"}
+                    {row.status === "learned" ? t("vocab.learned") : t("vocab.learning")}
                   </button>
                 </div>
               ))}

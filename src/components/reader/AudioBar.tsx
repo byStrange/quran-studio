@@ -17,6 +17,7 @@ import type { Reciter, RepeatMode } from "@/lib/types";
 import type { RecitationPlayer } from "@/hooks/useRecitationPlayer";
 import type { SurahDownload } from "@/hooks/useAudioDownloads";
 import { cn, formatClock } from "@/lib/utils";
+import { useT, type TFunction } from "@/providers/I18nProvider";
 import { Button } from "@/components/ui/button";
 import { MenuButton, SelectField, Tooltip, type MenuAction } from "@/components/ui/primitives";
 
@@ -30,11 +31,14 @@ const NEXT_REPEAT: Record<RepeatMode, RepeatMode> = {
   unmemorized: "off",
 };
 
-const REPEAT_LABEL: Record<RepeatMode, string> = {
-  off: "Repeat off",
-  range: "Repeating this ruku",
-  ayah: "Repeating this ayah",
-  unmemorized: "Repeating unmemorized ayahs",
+const REPEAT_KEY: Record<
+  RepeatMode,
+  "audio.repeatOff" | "audio.repeatRange" | "audio.repeatAyah" | "audio.repeatUnmemorized"
+> = {
+  off: "audio.repeatOff",
+  range: "audio.repeatRange",
+  ayah: "audio.repeatAyah",
+  unmemorized: "audio.repeatUnmemorized",
 };
 
 export function AudioBar({
@@ -64,6 +68,7 @@ export function AudioBar({
   /** Below md, where the bar keeps only the controls that earn their width. */
   compact?: boolean;
 }) {
+  const t = useT();
   const reciterOptions = useMemo(
     () =>
       (reciters ?? []).map((reciter) => ({
@@ -85,12 +90,10 @@ export function AudioBar({
    */
   const repeatLabel =
     repeatMode === "unmemorized" && unmemorizedCount === 0
-      ? "Unmemorized repeat — every ayah is memorized, so this repeats the passage"
+      ? t("audio.repeatNothingLeft")
       : repeatMode === "unmemorized"
-        ? `Repeating ${unmemorizedCount} unmemorized ${
-            unmemorizedCount === 1 ? "ayah" : "ayahs"
-          } — click to change`
-        : `${REPEAT_LABEL[repeatMode]} — click to change`;
+        ? t("audio.repeatingCount", { count: unmemorizedCount })
+        : t("audio.repeatClickToChange", { mode: t(REPEAT_KEY[repeatMode]) });
 
   const overflow: MenuAction[] = [
     {
@@ -100,12 +103,12 @@ export function AudioBar({
       onSelect: () => onRepeatModeChange(NEXT_REPEAT[repeatMode]),
     },
     {
-      label: `Speed ${rate}×`,
+      label: t("audio.speed", { rate }),
       icon: <Gauge className="size-4" aria-hidden />,
       active: rate !== 1,
       onSelect: () => onRateChange(nextRate(rate)),
     },
-    ...(download ? [downloadAction(download)] : []),
+    ...(download ? [downloadAction(download, t)] : []),
   ];
 
   if (!player.available) {
@@ -113,8 +116,8 @@ export function AudioBar({
       <div className="flex shrink-0 items-center gap-2 border-t border-border bg-surface/80 px-3 py-2 text-[0.8125rem] text-fg-subtle backdrop-blur md:px-6">
         <AudioLines className="size-4 shrink-0" aria-hidden />
         {reciters && reciters.length === 0
-          ? "No recitations imported yet — run pnpm seed:audio."
-          : "No recitation available for this passage."}
+          ? t("audio.noneImported")
+          : t("audio.noneForPassage")}
       </div>
     );
   }
@@ -128,8 +131,13 @@ export function AudioBar({
       ) : null}
 
       <div className="flex items-center gap-2 px-3 py-2 md:gap-3 md:px-6 md:py-2.5">
-        <Tooltip content="Previous ayah">
-          <Button size="icon" variant="ghost" onClick={player.previous} aria-label="Previous ayah">
+        <Tooltip content={t("audio.previousAyah")}>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={player.previous}
+            aria-label={t("audio.previousAyah")}
+          >
             <SkipBack className="size-4" aria-hidden />
           </Button>
         </Tooltip>
@@ -138,7 +146,7 @@ export function AudioBar({
           size="icon"
           variant="primary"
           onClick={player.toggle}
-          aria-label={player.playing ? "Pause recitation" : "Play recitation"}
+          aria-label={player.playing ? t("audio.pause") : t("audio.play")}
         >
           {player.loading ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -149,8 +157,13 @@ export function AudioBar({
           )}
         </Button>
 
-        <Tooltip content="Next ayah">
-          <Button size="icon" variant="ghost" onClick={player.next} aria-label="Next ayah">
+        <Tooltip content={t("audio.nextAyah")}>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={player.next}
+            aria-label={t("audio.nextAyah")}
+          >
             <SkipForward className="size-4" aria-hidden />
           </Button>
         </Tooltip>
@@ -167,7 +180,7 @@ export function AudioBar({
 
         {compact ? (
           <MenuButton actions={overflow}>
-            <Button size="icon" variant="ghost" aria-label="Recitation options">
+            <Button size="icon" variant="ghost" aria-label={t("audio.options")}>
               <AudioLines className="size-4" aria-hidden />
             </Button>
           </MenuButton>
@@ -184,25 +197,25 @@ export function AudioBar({
               </Button>
             </Tooltip>
 
-            <Tooltip content="Playback speed — slower is easier to follow while memorizing">
+            <Tooltip content={t("audio.speedHint")}>
               <Button
                 size="sm"
                 variant={rate === 1 ? "ghost" : "outline"}
                 className="tabular-nums"
-                aria-label={`Playback speed ${rate} times`}
+                aria-label={t("audio.speedLabel", { rate })}
                 onClick={() => onRateChange(nextRate(rate))}
               >
                 {rate}×
               </Button>
             </Tooltip>
 
-            {download ? <DownloadButton download={download} /> : null}
+            {download ? <DownloadButton download={download} t={t} /> : null}
 
             <SelectField
               value={reciterId !== null ? String(reciterId) : ""}
               onValueChange={(value) => onReciterChange(Number(value))}
               options={reciterOptions}
-              placeholder="Reciter"
+              placeholder={t("audio.reciter")}
               className="h-8 w-auto max-w-[15rem] shrink-0 px-2.5 text-[0.8125rem]"
             />
           </>
@@ -215,7 +228,7 @@ export function AudioBar({
             value={reciterId !== null ? String(reciterId) : ""}
             onValueChange={(value) => onReciterChange(Number(value))}
             options={reciterOptions}
-            placeholder="Reciter"
+            placeholder={t("audio.reciter")}
             className="h-8 w-full px-2.5 text-[0.8125rem]"
           />
         </div>
@@ -225,9 +238,10 @@ export function AudioBar({
 }
 
 function Scrubber({ player }: { player: RecitationPlayer }) {
+  const t = useT();
   return (
     <label className="min-w-0 flex-1">
-      <span className="sr-only">Seek within this passage</span>
+      <span className="sr-only">{t("audio.seek")}</span>
       <input
         type="range"
         min={0}
@@ -251,15 +265,15 @@ function Scrubber({ player }: { player: RecitationPlayer }) {
   );
 }
 
-function DownloadButton({ download }: { download: SurahDownload }) {
+function DownloadButton({ download, t }: { download: SurahDownload; t: TFunction }) {
   if (download.state === "downloading") {
     return (
-      <Tooltip content={`Downloading — ${Math.round(download.progress * 100)}%`}>
+      <Tooltip content={t("audio.downloading", { percent: Math.round(download.progress * 100) })}>
         <Button
           size="icon"
           variant="outline"
           onClick={download.cancel}
-          aria-label="Cancel download"
+          aria-label={t("audio.cancelDownload")}
         >
           <Loader2 className="size-4 animate-spin" aria-hidden />
         </Button>
@@ -269,12 +283,12 @@ function DownloadButton({ download }: { download: SurahDownload }) {
 
   if (download.state === "downloaded") {
     return (
-      <Tooltip content={`Saved for offline — ${download.sizeLabel}. Click to remove.`}>
+      <Tooltip content={t("audio.savedOffline", { size: download.sizeLabel })}>
         <Button
           size="icon"
           variant="outline"
           onClick={download.remove}
-          aria-label="Remove downloaded recitation"
+          aria-label={t("audio.removeDownload")}
         >
           <Trash2 className="size-4" aria-hidden />
         </Button>
@@ -286,10 +300,10 @@ function DownloadButton({ download }: { download: SurahDownload }) {
     <Tooltip
       content={
         download.available
-          ? `Download this surah for offline listening${
-              download.sizeLabel ? ` — ${download.sizeLabel}` : ""
-            }`
-          : "Downloads need the desktop app"
+          ? download.sizeLabel
+            ? t("audio.downloadHintSized", { size: download.sizeLabel })
+            : t("audio.downloadHint")
+          : t("audio.downloadNeedsDesktop")
       }
     >
       <Button
@@ -297,7 +311,7 @@ function DownloadButton({ download }: { download: SurahDownload }) {
         variant="ghost"
         disabled={!download.available}
         onClick={download.start}
-        aria-label="Download this surah"
+        aria-label={t("audio.download")}
       >
         <Download className="size-4" aria-hidden />
       </Button>
@@ -305,23 +319,25 @@ function DownloadButton({ download }: { download: SurahDownload }) {
   );
 }
 
-function downloadAction(download: SurahDownload): MenuAction {
+function downloadAction(download: SurahDownload, t: TFunction): MenuAction {
   if (download.state === "downloading") {
     return {
-      label: `Downloading… ${Math.round(download.progress * 100)}%`,
+      label: t("audio.downloadingMenu", { percent: Math.round(download.progress * 100) }),
       icon: <Loader2 className="size-4 animate-spin" aria-hidden />,
       onSelect: download.cancel,
     };
   }
   if (download.state === "downloaded") {
     return {
-      label: `Remove download (${download.sizeLabel})`,
+      label: t("audio.removeDownloadMenu", { size: download.sizeLabel }),
       icon: <Trash2 className="size-4" aria-hidden />,
       onSelect: download.remove,
     };
   }
   return {
-    label: download.sizeLabel ? `Download surah (${download.sizeLabel})` : "Download surah",
+    label: download.sizeLabel
+      ? t("audio.downloadMenuSized", { size: download.sizeLabel })
+      : t("audio.downloadMenu"),
     icon: <Download className="size-4" aria-hidden />,
     disabled: !download.available,
     onSelect: download.start,

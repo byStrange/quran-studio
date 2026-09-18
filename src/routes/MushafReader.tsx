@@ -38,16 +38,17 @@ import { Button } from "@/components/ui/button";
 import { ErrorState, LoadingBlock } from "@/components/ui/feedback";
 import { Tooltip } from "@/components/ui/primitives";
 import { verseTranslation } from "@/lib/language";
-import { useContentLanguage } from "@/hooks/useProfile";
+import { useLanguage, useT } from "@/providers/I18nProvider";
 
 export function MushafReader() {
+  const t = useT();
   const params = useParams<{ pageNumber: string }>();
   const navigate = useNavigate();
   const pageNumber = Number(params.pageNumber);
   const valid = isValidPage(pageNumber);
 
   const prefs = useUiPrefs();
-  const language = useContentLanguage();
+  const language = useLanguage();
   const updateProfile = useUpdateProfile();
 
   const {
@@ -166,8 +167,8 @@ export function MushafReader() {
     return (
       <div className="p-8">
         <ErrorState
-          title="That page doesn't exist"
-          message={`The mushaf runs from page 1 to ${TOTAL_PAGES}.`}
+          title={t("mushaf.missingTitle")}
+          message={t("mushaf.missingMessage", { total: TOTAL_PAGES })}
           onRetry={() => navigate("/browse")}
         />
       </div>
@@ -182,11 +183,11 @@ export function MushafReader() {
       <header className="shrink-0 border-b border-border bg-surface/60 px-3 py-2.5 backdrop-blur md:px-6 md:py-3">
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-1 md:gap-3">
-            <Tooltip content="Back to the surah list">
+            <Tooltip content={t("reader.backToList")}>
               <Button
                 size="icon"
                 variant="ghost"
-                aria-label="Back to the surah list"
+                aria-label={t("reader.backToList")}
                 onClick={() =>
                   navigate(
                     selectedVerse
@@ -205,7 +206,7 @@ export function MushafReader() {
               variant="ghost"
               disabled={pageNumber <= 1}
               onClick={() => goTo(pageNumber - 1)}
-              aria-label="Previous page"
+              aria-label={t("reader.previousPage")}
             >
               <ChevronRight className="size-4" aria-hidden />
             </Button>
@@ -216,12 +217,14 @@ export function MushafReader() {
                   {surah?.name_english ?? "…"}
                 </h1>
                 {currentJuz !== null ? (
-                  <span className="shrink-0 text-[0.8125rem] text-fg-subtle">Juz {currentJuz}</span>
+                  <span className="shrink-0 text-[0.8125rem] text-fg-subtle">
+                    {t("mushaf.juz", { number: currentJuz })}
+                  </span>
                 ) : null}
               </div>
               <div className="text-[0.6875rem] text-fg-subtle">
-                Page {pageNumber} of {TOTAL_PAGES}
-                {rukus?.length ? ` · ruku ${rukus[0]!.ruku_number}` : ""}
+                {t("mushaf.pageOf", { number: pageNumber, total: TOTAL_PAGES })}
+                {rukus?.length ? t("mushaf.rukuSuffix", { number: rukus[0]!.ruku_number }) : ""}
               </div>
             </div>
 
@@ -230,7 +233,7 @@ export function MushafReader() {
               variant="ghost"
               disabled={pageNumber >= TOTAL_PAGES}
               onClick={() => goTo(pageNumber + 1)}
-              aria-label="Next page"
+              aria-label={t("reader.nextPage")}
             >
               <ChevronLeft className="size-4" aria-hidden />
             </Button>
@@ -241,9 +244,7 @@ export function MushafReader() {
           <div className="hidden items-center gap-3 md:flex">
             <Tooltip
               content={
-                idle
-                  ? "Paused — the timer resumes when you interact again."
-                  : "Time counted toward today's reading."
+                idle ? t("reader.timerPaused") : t("reader.timerRunning")
               }
             >
               <div
@@ -263,22 +264,22 @@ export function MushafReader() {
               </div>
             </Tooltip>
 
-            <Tooltip content="Switch to the study reader — translation and word by word">
+            <Tooltip content={t("reader.switchToStudyHint")}>
               <Button
                 size="icon"
                 variant="ghost"
-                aria-label="Switch to study reader"
+                aria-label={t("reader.switchToStudy")}
                 onClick={switchToStudy}
               >
                 <BookOpenText className="size-4" aria-hidden />
               </Button>
             </Tooltip>
 
-            <Tooltip content="Swap the tafsir panel to the other side">
+            <Tooltip content={t("reader.swapPanel")}>
               <Button
                 size="icon"
                 variant="ghost"
-                aria-label="Swap panel side"
+                aria-label={t("reader.swapPanelLabel")}
                 onClick={() =>
                   updateProfile.mutate({
                     ui_prefs: { tafsirSide: tafsirFirst ? "right" : "left" },
@@ -294,7 +295,7 @@ export function MushafReader() {
             <Button
               size="icon"
               variant="ghost"
-              aria-label="Open tafsir"
+              aria-label={t("reader.openTafsir")}
               onClick={() => setTafsirOpen(true)}
             >
               <BookOpen className="size-4" aria-hidden />
@@ -302,7 +303,7 @@ export function MushafReader() {
             <Button
               size="icon"
               variant="ghost"
-              aria-label="Switch to study reader"
+              aria-label={t("reader.switchToStudy")}
               onClick={switchToStudy}
             >
               <BookOpenText className="size-4" aria-hidden />
@@ -314,17 +315,13 @@ export function MushafReader() {
       {isError || scaleError ? (
         <div className="p-8">
           <ErrorState
-            title="Couldn't load this page"
-            message={
-              scaleError
-                ? "The mushaf page fonts are missing. Run `pnpm fonts:qcf` to vendor them."
-                : "The mushaf layout lives in your Supabase project. Check your connection and try again."
-            }
+            title={t("mushaf.loadFailed")}
+            message={scaleError ? t("mushaf.fontsMissing") : t("mushaf.layoutMessage")}
             onRetry={() => void refetch()}
           />
         </div>
       ) : isLoading || !page ? (
-        <LoadingBlock label="Loading page…" />
+        <LoadingBlock label={t("mushaf.loading")} />
       ) : (
         <SplitPane
           tafsirFirst={tafsirFirst}
@@ -371,17 +368,17 @@ export function MushafReader() {
                     onClick={() => goTo(pageNumber - 1)}
                   >
                     <ChevronRight className="size-4" aria-hidden />
-                    Previous page
+                    {t("reader.previousPage")}
                   </Button>
                   <Button asChild variant="ghost">
-                    <Link to="/browse">All rukus</Link>
+                    <Link to="/browse">{t("common.allRukus")}</Link>
                   </Button>
                   <Button
                     variant="primary"
                     disabled={pageNumber >= TOTAL_PAGES}
                     onClick={() => goTo(pageNumber + 1)}
                   >
-                    Next page
+                    {t("reader.nextPage")}
                     <ChevronLeft className="size-4" aria-hidden />
                   </Button>
                 </div>

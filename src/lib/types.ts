@@ -1,5 +1,5 @@
 import type { Database } from "./database.types";
-import type { ContentLanguage } from "./language";
+import type { Language } from "./i18n";
 import type { TajweedSpan } from "./tajweed";
 
 type Tables = Database["public"]["Tables"];
@@ -66,7 +66,12 @@ export type QuizScope = Database["public"]["Enums"]["quiz_scope"];
  */
 export type VerseContext = Pick<
   Verse,
-  "surah_number" | "ayah_number" | "arabic_text" | "translation_en" | "translation_ru"
+  | "surah_number"
+  | "ayah_number"
+  | "arabic_text"
+  | "translation_en"
+  | "translation_ru"
+  | "translation_uz"
 >;
 
 /**
@@ -84,13 +89,15 @@ export interface VerseWithWords extends Omit<Verse, "tajweed"> {
 /** UI preferences persisted in `profiles.ui_prefs`. */
 export interface UiPrefs {
   /**
-   * Which language the scripture material is shown in — translation,
+   * The one language the app speaks: interface chrome, verse translation,
    * word-by-word gloss, tafsir edition, and AI explanations.
    *
-   * Interface chrome is unaffected and stays English; see `lib/language.ts`
-   * for why the two are kept apart.
+   * Replaces the earlier `contentLanguage`, which set the scripture alone
+   * while the interface stayed English. `useProfileLanguage` still reads that
+   * older key so a profile written before the split was undone keeps its
+   * choice; nothing writes it any more.
    */
-  contentLanguage: ContentLanguage;
+  language: Language;
   /** Which side of the reader the tafsir panel occupies. */
   tafsirSide: "left" | "right";
   /**
@@ -147,7 +154,7 @@ export interface UiPrefs {
 export const DEFAULT_TAFSIR_EDITION = "en-tafisr-ibn-kathir";
 
 export const DEFAULT_UI_PREFS: UiPrefs = {
-  contentLanguage: "en",
+  language: "en",
   tafsirSide: "right",
   tafsirEdition: DEFAULT_TAFSIR_EDITION,
   theme: "system",

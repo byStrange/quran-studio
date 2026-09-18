@@ -6,7 +6,9 @@
  * by every user, so each word explanation and ruku summary is produced once.
  */
 import { invoke } from "@tauri-apps/api/core";
-import { verseTranslation, wordGloss, type ContentLanguage } from "./language";
+import { verseTranslation, wordGloss } from "./language";
+import type { Language } from "./i18n";
+import type { TFunction } from "@/providers/I18nProvider";
 import { supabase } from "./supabase";
 import type { VerseContext, Word } from "./types";
 
@@ -21,6 +23,13 @@ export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+/**
+ * Raised when generation is asked for outside the desktop backend.
+ *
+ * The message is English and is never the one shown: `describeAiError` renders
+ * this case from the dictionary. It exists so the error is still readable in a
+ * console, a log, or a stack trace, where there is no translator.
+ */
 export class AiUnavailableError extends Error {
   constructor(message: string) {
     super(message);
@@ -53,7 +62,7 @@ export interface WordContext {
 
 export async function fetchCachedWordContext(
   wordId: number,
-  language: ContentLanguage,
+  language: Language,
 ): Promise<WordContext | null> {
   const { data, error } = await supabase
     .from("word_ai_context")
@@ -72,7 +81,7 @@ export async function fetchCachedWordContext(
 export async function getWordContext(
   word: Word,
   verse: VerseContext,
-  language: ContentLanguage,
+  language: Language,
   options: { force?: boolean } = {},
 ): Promise<WordContext> {
   if (!options.force) {
@@ -121,7 +130,7 @@ export interface RukuSummary {
 
 export async function fetchCachedRukuSummary(
   rukuNumber: number,
-  language: ContentLanguage,
+  language: Language,
 ): Promise<RukuSummary | null> {
   const { data, error } = await supabase
     .from("ruku_ai_summary")
@@ -138,9 +147,14 @@ export async function getRukuSummary(
     rukuNumber: number;
     surahName: string;
     verseRange: string;
-    verses: Array<{ ayah_number: number; translation_en: string; translation_ru: string | null }>;
+    verses: Array<{
+      ayah_number: number;
+      translation_en: string;
+      translation_ru: string | null;
+      translation_uz: string | null;
+    }>;
   },
-  language: ContentLanguage,
+  language: Language,
   options: { force?: boolean } = {},
 ): Promise<RukuSummary> {
   if (!options.force) {
@@ -182,10 +196,17 @@ export async function getRukuSummary(
   return row;
 }
 
-/** Turns any thrown value into something worth showing a user. */
-export function describeAiError(error: unknown): string {
-  if (error instanceof AiUnavailableError) return error.message;
+/**
+ * Turns any thrown value into something worth showing a user.
+ *
+ * Only the two cases this app produces itself are translated. A message that
+ * came back from Ollama or from Supabase is passed through as it arrived:
+ * it is the only description of what actually went wrong, and replacing it
+ * with a translated generic would throw away the one useful thing in it.
+ */
+export function describeAiError(error: unknown, t: TFunction): string {
+  if (error instanceof AiUnavailableError) return t("ai.notInTauri");
   if (typeof error === "string") return error;
   if (error instanceof Error) return error.message;
-  return "AI generation failed. Please try again.";
+  return t("ai.failed");
 }

@@ -1,10 +1,13 @@
 # Quran Studio
 
 A desktop app for learning and memorizing the Quran **ruku by ruku**. Each of
-the Quran's 558 rukus is a lesson: Arabic text alongside tafsir in English or
-Uzbek,
-a word-by-word breakdown with AI-generated context for each word, memorization
-tracking, vocabulary quizzing, and reading streaks.
+the Quran's 558 rukus is a lesson: Arabic text alongside tafsir, a word-by-word
+breakdown with AI-generated context for each word, memorization tracking,
+vocabulary quizzing, and reading streaks.
+
+The whole app speaks **English, Russian or Uzbek** — one setting picks the
+interface, the verse translation, the word-by-word glosses, the tafsir edition
+and the language the AI writes its explanations in.
 
 Words are learned by saying whether you know them: a miss opens the ayah the
 word came from, with its translation and the word picked out inside it. A round
@@ -59,10 +62,10 @@ pnpm seed
 ```
 
 This downloads the full corpus once (~2 minutes) and writes it to Supabase:
-114 surahs, 6,236 verses with English and Russian translations, 558 rukus,
+114 surahs, 6,236 verses with English, Russian and Uzbek translations, 558 rukus,
 77,429 words, tafsir entries across four editions, and 59,923 tajweed rule
 spans. Downloads are cached under `scripts/seed/.cache`, so re-running
-is cheap. The import finishes by running 14 integrity checks.
+is cheap. The import finishes by running 17 integrity checks.
 
 The running app never calls a third-party Quran API — it only reads Supabase.
 
@@ -123,11 +126,12 @@ pnpm dev         # browser preview — no AI, since that needs the Rust backend
 | `pnpm seed:tajweed` | Backfill only the tajweed spans on an existing database |
 | `pnpm seed:tafsir` | Re-import just the tafsir editions |
 | `pnpm seed:translation-ru` | Import the Russian verse translation (Kuliev) |
+| `pnpm seed:translation-uz` | Import the Uzbek verse translation (Muhammad Sodiq, Latin) |
 | `pnpm seed:wbw-ru` | Import the Russian word-by-word glosses |
 | `pnpm seed:mushaf` | Import the 604-page Madani mushaf layout |
 | `pnpm seed:audio` | Import reciters, surah recordings and ayah timings |
 | `pnpm fonts:qcf` | Vendor the QCF page fonts into `public/fonts/qcf` |
-| `pnpm seed:verify` | Re-run the 14 data integrity checks |
+| `pnpm seed:verify` | Re-run the 17 data integrity checks |
 | `pnpm test` | Run both test suites |
 | `pnpm test:streak` | Verify the streak/grace rules (8 scenarios) |
 | `pnpm test:smoke` | Verify every query, RPC, and RLS policy (29 checks) |
@@ -146,7 +150,8 @@ src-tauri/          Rust backend — holds the Ollama key, proxies AI calls
   src/ollama.rs     Model discovery, chat, prompt construction
 
 src/
-  lib/              Supabase client, generated DB types, AI bridge
+  lib/              Supabase client, generated DB types, AI bridge, i18n core
+  locales/          en / ru / uz dictionaries; en defines the key set
   hooks/            Data access, reading timer, progress mutations
   components/       UI kit (Radix + Tailwind), reader components
   routes/           Dashboard, Browse, Reader, SurahReader, Vocabulary,
@@ -168,8 +173,15 @@ never incremented. A missed day opens a 3-day grace window; one hour of reading
 in a single day inside that window restores the streak where it left off.
 
 **AI caching.** Word explanations and ruku summaries are generated once and
-stored in shared tables, so the second person to open a ruku — or the same
-person on another machine — gets them instantly.
+stored in shared tables, keyed by `(content, language)`, so the second person to
+open a ruku — or the same person on another machine — gets them instantly.
+
+**Languages.** One preference drives everything. `src/locales/en.ts` defines the
+key set and the other two locales are typed against it, so a missing string is a
+compile error. Where a language has no data for something — Uzbek verse
+translations before `pnpm seed:translation-uz`, Uzbek word-by-word glosses,
+which do not exist upstream at all — `src/lib/language.ts` falls back to English
+per item and Settings says so under the picker.
 
 See [DECISIONS.md](./DECISIONS.md) for the reasoning behind these choices, and
 the in-app **About** screen for source attribution.
@@ -183,8 +195,9 @@ mushaf page layout from the quran.com API (Saheeh International translation).
 Tafsir Ibn Kathir (English, abridged), Al-Mukhtasar fi Tafsir al-Qur'an
 al-Karim (Uzbek, Tafsir Center for Quranic Studies), and Tafsir Ibn Kathir and
 Tafsir as-Sa'di (Russian) via the `tafsir_api` project. The Russian verse
-translation is Elmir Kuliev's, from the quran.com API. The Russian word-by-word
-glosses are from the Quranic Universal Library (QUL) by Tarteel. Amiri Quran
+translation is Elmir Kuliev's and the Uzbek is Shaykh Muhammad Sodiq Muhammad
+Yusuf's, both from the quran.com API. The Russian word-by-word glosses are from
+the Quranic Universal Library (QUL) by Tarteel. Amiri Quran
 and Inter typefaces under the SIL Open Font License. The QCF V1 mushaf page
 fonts and surah-name banners are from the King Fahd Glorious Quran Printing
 Complex, mirrored by quran.com. Please respect each source's terms if you redistribute
