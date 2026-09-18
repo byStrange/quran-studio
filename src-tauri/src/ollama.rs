@@ -698,7 +698,7 @@ fn knowledge_schema() -> serde_json::Value {
                         "answer": { "type": "string" },
                         "evidence": { "type": "string" }
                     },
-                    "required": ["verse_id", "kind", "question", "answer"]
+                    "required": ["verse_id", "kind", "question", "answer", "evidence"]
                 }
             }
         },
@@ -716,16 +716,137 @@ fn extract_json(text: &str) -> Option<&str> {
     if end > start { Some(&text[start..=end]) } else { None }
 }
 
+/// Arabic reduced to its letters, with a way back to the original text.
+///
+/// Roughly 40% of the characters in Uthmani text are combining marks, so a
+/// byte-exact comparison of a quoted phrase against the ayah is really a test
+/// of whether the model reproduced the harakat, the superscript alef and the
+/// waqf signs — not of whether the phrase is in the ayah.
+///
+/// Measured against `gemma4:31b-cloud`, that turns out not to bite: 16 of 16
+/// generated questions across two surahs quoted the ayah byte-for-byte, small
+/// high rounded zero and all. The folding is therefore not fixing an observed
+/// failure. It is here because `validate_questions` now *drops* a question
+/// whose quote cannot be located, which makes a false negative cost a question
+/// rather than a highlight — and the model is configurable (`OLLAMA_MODEL`),
+/// so the check has to hold for a smaller one that copies less carefully than
+/// the one this was measured on.
+///
+/// Folding only ever widens what matches, so it cannot reject a quote the
+/// literal check would have accepted.
+///
+/// `starts` keeps the byte offset each surviving character came from, so a
+/// match found in the folded text can be mapped back to the exact original
+/// stretch — which is what the reader is shown, diacritics and all.
+struct Folded {
+    chars: Vec<char>,
+    starts: Vec<usize>,
+}
+
+/// Diacritics, Quranic annotation signs, and the tatweel: written, but not
+/// part of the word for the purpose of "is this phrase in this ayah".
+fn is_arabic_mark(ch: char) -> bool {
+    matches!(ch as u32,
+        0x0610..=0x061A | 0x064B..=0x065F | 0x0670 | 0x06D6..=0x06ED | 0x08D3..=0x08FF | 0x0640)
+}
+
+/// Letters that are written several ways but read as one.
+fn fold_letter(ch: char) -> char {
+    match ch {
+        '\u{0622}' | '\u{0623}' | '\u{0625}' | '\u{0671}' => '\u{0627}', // آ أ إ ٱ -> ا
+        '\u{0624}' => '\u{0648}',                                       // ؤ -> و
+        '\u{0626}' | '\u{0649}' => '\u{064A}',                           // ئ ى -> ي
+        '\u{0629}' => '\u{0647}',                                       // ة -> ه
+        other => other,
+    }
+}
+
+fn fold_arabic(text: &str) -> Folded {
+    let mut chars = Vec::new();
+    let mut starts = Vec::new();
+    let mut in_space = false;
+
+    for (offset, ch) in text.char_indices() {
+        if is_arabic_mark(ch) {
+            continue;
+        }
+        if ch.is_whitespace() {
+            // A run of whitespace is one separator; the model reproduces the
+            // words, not the spacing between them.
+            if in_space {
+                continue;
+            }
+            in_space = true;
+            chars.push(' ');
+            starts.push(offset);
+            continue;
+        }
+        in_space = false;
+        chars.push(fold_letter(ch));
+        starts.push(offset);
+    }
+
+    // A quotation that folds to leading or trailing space would never match.
+    while chars.first() == Some(&' ') {
+        chars.remove(0);
+        starts.remove(0);
+    }
+    while chars.last() == Some(&' ') {
+        chars.pop();
+        starts.pop();
+    }
+
+    Folded { chars, starts }
+}
+
+fn find_subslice(hay: &[char], needle: &[char]) -> Option<usize> {
+    if needle.is_empty() || needle.len() > hay.len() {
+        return None;
+    }
+    (0..=hay.len() - needle.len()).find(|&i| hay[i..i + needle.len()] == *needle)
+}
+
+/// The stretch of `text` that `quote` refers to, as `text` actually spells it.
+///
+/// None when the quote is not in the text at all, which is the signal the
+/// caller acts on: a question whose evidence is not in the ayah did not come
+/// from the ayah.
+fn locate_quote(text: &str, quote: &str) -> Option<String> {
+    let hay = fold_arabic(text);
+    let needle = fold_arabic(quote);
+    let at = find_subslice(&hay.chars, &needle.chars)?;
+
+    let start = hay.starts[at];
+    // Up to where the next surviving character begins, so the marks hanging
+    // off the last matched letter come with it.
+    let end = hay
+        .starts
+        .get(at + needle.chars.len())
+        .copied()
+        .unwrap_or(text.len());
+    Some(text[start..end].trim().to_string())
+}
+
 /// Keeps the questions that are about the ayahs we actually sent.
 ///
 /// Four things are enforced, in order of how badly they go wrong unchecked:
 /// a question must belong to a verse from this round (otherwise it is about
 /// scripture the reader was never shown); there is at most one per verse (the
 /// round is built one-to-one, and a model that writes three about ayah 1 has
-/// lost the plot); question and answer must be non-empty; and `evidence` must
-/// appear verbatim in that ayah's Arabic, or it is dropped rather than shown,
-/// because evidence that is not in the text is the one thing here that could
-/// teach a false reading.
+/// lost the plot); question and answer must be non-empty; and the cited
+/// evidence must be locatable in that ayah — if it is not, **the question is
+/// dropped**, not merely its citation.
+///
+/// That last rule is the one doing the real work. A model asked to quote the
+/// stretch of the ayah carrying the answer can only do it if the answer came
+/// from the ayah; when it reaches for half-remembered tafsir instead, it has
+/// nothing to quote and invents something, and the invention is detectable
+/// without anyone having to judge the religious content. So the failure is
+/// treated as a failed question rather than a missing footnote.
+///
+/// `locate_quote` compares on letters rather than bytes, and hands back the
+/// ayah's own spelling of the matched phrase, so what the reader sees
+/// highlighted is the mushaf's text rather than the model's retyping of it.
 fn validate_questions(
     raw: Vec<GeneratedQuestion>,
     verses: &[QuizVerse],
@@ -750,9 +871,12 @@ fn validate_questions(
         let kind = q.kind.trim().to_lowercase();
         q.kind = if KINDS.contains(&kind.as_str()) { kind } else { "meaning".to_string() };
 
-        if !q.evidence.is_empty() && !verse.arabic.contains(&q.evidence) {
-            q.evidence = String::new();
-        }
+        // No quote, or a quote that is not in the ayah: nothing anchors this
+        // question to the text, so it does not get asked.
+        let Some(evidence) = locate_quote(&verse.arabic, &q.evidence) else {
+            continue;
+        };
+        q.evidence = evidence;
 
         out.push(q);
     }

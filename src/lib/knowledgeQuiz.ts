@@ -11,7 +11,7 @@
  * Nothing generated is treated as scripture. The ayah a question came from is
  * shown beside the answer every time, so the reader is always marking
  * themselves against the text rather than against the model; and the backend
- * drops any question whose cited evidence is not literally in that ayah.
+ * drops any question whose cited evidence cannot be located in that ayah.
  */
 import { invoke } from "@tauri-apps/api/core";
 import { AiUnavailableError, isTauri } from "./ai";
