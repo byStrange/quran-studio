@@ -398,20 +398,6 @@ export const en = {
   "audio.downloadMenu": "Download surah",
   "audio.downloadMenuSized": "Download surah ({size})",
 
-  // --- listen & follow ---------------------------------------------------
-  "listen.listening": "Listening…",
-  "listen.following": "Following",
-  "listen.researching": "Re-searching…",
-  "listen.downloadTitle": "Download speech model?",
-  "listen.downloadBody":
-    "A one-time ~75 MB download is needed for offline voice recognition. Tap the mic again to start.",
-  "listen.download": "Download",
-  "listen.unsupported":
-    "Listen & Follow (Offline Speech Recognition) is currently supported on Desktop platforms.",
-  "listen.stop": "Stop listening",
-  "listen.downloadingModel": "Downloading speech model…",
-  "listen.start": "Listen & follow my recitation",
-  "listen.stopPlaybackFirst": "Stop playback first to use Listen & Follow",
 
   // --- quiz --------------------------------------------------------------
   "quiz.title": "Quiz",

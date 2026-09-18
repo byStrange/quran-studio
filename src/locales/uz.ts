@@ -407,20 +407,6 @@ export const uz: Dictionary = {
   "audio.downloadMenu": "Surani yuklab olish",
   "audio.downloadMenuSized": "Surani yuklab olish ({size})",
 
-  // --- listen & follow ---------------------------------------------------
-  "listen.listening": "Tinglanmoqda…",
-  "listen.following": "Kuzatilmoqda",
-  "listen.researching": "Qaytadan qidirilmoqda…",
-  "listen.downloadTitle": "Nutq modeli yuklab olinsinmi?",
-  "listen.downloadBody":
-    "Oflayn nutqni tanish uchun bir martalik ~75 MB yuklash kerak. Boshlash uchun mikrofonni yana bosing.",
-  "listen.download": "Yuklab olish",
-  "listen.unsupported":
-    "«Tinglab kuzatish» (oflayn nutqni tanish) hozircha faqat ish stoli platformalarida ishlaydi.",
-  "listen.stop": "Tinglashni to'xtatish",
-  "listen.downloadingModel": "Nutq modeli yuklanmoqda…",
-  "listen.start": "Qiroatimni tinglab kuzatib borish",
-  "listen.stopPlaybackFirst": "Avval ijroni to'xtating",
 
   // --- quiz --------------------------------------------------------------
   "quiz.title": "Test",

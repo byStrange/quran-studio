@@ -43,7 +43,6 @@ import type { RepeatMode } from "@/lib/types";
 import { ayahRangeLabel, cn, formatClock } from "@/lib/utils";
 import { useT } from "@/providers/I18nProvider";
 import { AudioBar } from "@/components/reader/AudioBar";
-import { ListenFAB } from "@/components/reader/ListenFAB";
 import { VerseCard } from "@/components/reader/VerseCard";
 import { SplitPane } from "@/components/reader/SplitPane";
 import { FocusMode } from "@/components/reader/FocusMode";
@@ -110,8 +109,6 @@ export function Reader() {
   const [focusIndex, setFocusIndex] = useState(0);
   // Only consulted below md, where the tafsir is a sheet rather than a column.
   const [tafsirOpen, setTafsirOpen] = useState(false);
-  /** Verse the Listen & Follow matcher is tracking, or null when not listening. */
-  const [listenVerseId, setListenVerseId] = useState<number | null>(null);
   const isDesktop = useIsDesktop();
   const { sessionSeconds, idle } = useReadingTimer(valid ? rukuNumber : null);
 
@@ -145,39 +142,26 @@ export function Reader() {
   const recitingVerseId = player.currentVerseId;
 
   /**
-   * The "active verse" comes from either the recitation player or the Listen
-   * & Follow matcher — whichever is actively providing a signal. Listen mode
-   * takes priority when it is active (the player bar is hidden while listening).
-   */
-  const activeVerseId = listenVerseId ?? recitingVerseId;
-  /** Whether auto-scroll is driven by listen mode (always on) or the player (pref-gated). */
-  const isListenActive = listenVerseId !== null;
-
-  /**
-   * Keeps the ayah being recited — or listened to — on screen.
+   * Keeps the ayah being recited on screen.
    *
    * Smooth scrolling rather than a jump: the ayah changes every few seconds
    * and a hard cut each time is disorienting to read against. In focus mode
    * there is nothing to scroll — the ayah on screen is chosen by index — so
    * following means moving the index instead.
-   *
-   * When in listen mode, auto-scroll is always on — the entire point of the
-   * feature is following the user, so gating it on the followRecitation pref
-   * would defeat its purpose. When in playback mode, it respects the pref.
    */
   useEffect(() => {
-    if (activeVerseId === null) return;
-    if (!isListenActive && !prefs.followRecitation) return;
-    const index = (verses ?? []).findIndex((verse) => verse.id === activeVerseId);
+    if (recitingVerseId === null) return;
+    if (!prefs.followRecitation) return;
+    const index = (verses ?? []).findIndex((verse) => verse.id === recitingVerseId);
     if (index < 0) return;
     if (focusMode) {
       setFocusIndex(index);
       return;
     }
     document
-      .getElementById(`verse-${activeVerseId}`)
+      .getElementById(`verse-${recitingVerseId}`)
       ?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [activeVerseId, isListenActive, prefs.followRecitation, focusMode, verses]);
+  }, [recitingVerseId, prefs.followRecitation, focusMode, verses]);
 
   // Reset per-ruku view state when navigating between lessons.
   useEffect(() => {
@@ -777,11 +761,9 @@ export function Reader() {
                     wordStatuses={wordStatuses ?? new Map()}
                     onOpenFocus={() => openFocus(index)}
                     tajweed={prefs.tajweed}
-                    reciting={activeVerseId === verse.id}
+                    reciting={recitingVerseId === verse.id}
                     recitingWordPosition={
-                      prefs.highlightWords && !isListenActive
-                        ? player.currentWordPosition
-                        : null
+                      prefs.highlightWords ? player.currentWordPosition : null
                     }
                     onPlayFromHere={() => player.playVerse(verse.id)}
                     canPlay={player.available}
@@ -826,7 +808,7 @@ export function Reader() {
         />
       )}
 
-      {!rukuLoading && !versesLoading && !isError && !isListenActive ? (
+      {!rukuLoading && !versesLoading && !isError ? (
         <AudioBar
           player={player}
           reciters={reciters}
@@ -841,15 +823,6 @@ export function Reader() {
           download={download}
           unmemorizedCount={unmemorizedVerseIds.length}
           compact={!isDesktop}
-        />
-      ) : null}
-
-      {/* Listen & Follow FAB — study mode only, hidden during focus mode. */}
-      {!rukuLoading && !versesLoading && !isError && !focusMode ? (
-        <ListenFAB
-          verses={verses ?? []}
-          onVerseMatch={setListenVerseId}
-          disabled={player.playing}
         />
       ) : null}
 
