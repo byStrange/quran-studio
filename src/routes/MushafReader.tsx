@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
+  ArrowLeft,
   BookOpen,
   BookOpenText,
   ChevronLeft,
@@ -180,7 +181,25 @@ export function MushafReader() {
     <div className="flex h-full flex-col">
       <header className="shrink-0 border-b border-border bg-surface/60 px-3 py-2.5 backdrop-blur md:px-6 md:py-3">
         <div className="flex items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-1 md:gap-3">
+            <Tooltip content="Back to the surah list">
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Back to the surah list"
+                onClick={() =>
+                  navigate(
+                    selectedVerse
+                      ? `/browse?surah=${selectedVerse.surah_number}`
+                      : "/browse",
+                  )
+                }
+              >
+                <ArrowLeft className="size-4" aria-hidden />
+              </Button>
+            </Tooltip>
+            <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
+
             <Button
               size="icon"
               variant="ghost"

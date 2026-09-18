@@ -15,6 +15,7 @@ import {
   editionMatchesLanguage,
   isContentLanguage,
 } from "@/lib/language";
+import type { ReaderMode } from "@/lib/types";
 import { Page } from "@/components/layout/AppShell";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -184,19 +185,21 @@ export function Settings() {
               <div>
                 <div className="text-[0.8125rem] font-medium text-fg">Default layout</div>
                 <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
-                  Study shows translation and word-by-word. Mushaf reproduces the printed Madani
-                  page, for revising from the layout you memorised.
+                  Study shows one ruku with translation and word-by-word. Surah runs the whole
+                  surah in one scroll. Mushaf reproduces the printed Madani page, for revising from
+                  the layout you memorised. Each is also a toggle in the reader's header.
                 </p>
               </div>
               <SelectField
                 value={prefs.readerMode}
                 onValueChange={(value) =>
                   updateProfile.mutate({
-                    ui_prefs: { readerMode: value as "study" | "mushaf" },
+                    ui_prefs: { readerMode: value as ReaderMode },
                   })
                 }
                 options={[
                   { value: "study", label: "Study" },
+                  { value: "surah", label: "Surah" },
                   { value: "mushaf", label: "Mushaf" },
                 ]}
                 className="w-32"

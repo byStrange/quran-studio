@@ -88,6 +88,36 @@ export function useUpdateProfile() {
       if (error) throw error;
       return data;
     },
+    /**
+     * Preferences are applied before the write lands.
+     *
+     * Every one of them is a switch the reader just flipped — tajweed, the
+     * panel side, which reader a ruku opens in — and a round trip before the
+     * UI reflects it reads as the toggle not working. The reader mode makes it
+     * load-bearing rather than cosmetic: the ruku reader redirects on it, so a
+     * stale value would bounce someone straight back out of the reader they
+     * just switched to.
+     */
+    onMutate: async (patch) => {
+      if (!patch.ui_prefs) return;
+      const key = ["profile", user?.id];
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<Profile>(key);
+      if (previous) {
+        queryClient.setQueryData<Profile>(key, {
+          ...previous,
+          ui_prefs: {
+            ...DEFAULT_UI_PREFS,
+            ...((previous.ui_prefs as Partial<UiPrefs> | null) ?? {}),
+            ...patch.ui_prefs,
+          },
+        });
+      }
+      return { previous };
+    },
+    onError: (_error, _patch, context) => {
+      if (context?.previous) queryClient.setQueryData(["profile", user?.id], context.previous);
+    },
     onSuccess: (data) => {
       queryClient.setQueryData(["profile", user?.id], data);
       // Streak day boundaries depend on the timezone.

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
+  ArrowLeft,
   BookMarked,
   BookOpen,
   ChevronLeft,
@@ -14,6 +15,7 @@ import {
   Loader2,
   Palette,
   Rows3,
+  ScrollText,
 } from "lucide-react";
 import { useRukus, useSurahVerseIds, useSurahs, useSurahVerses } from "@/hooks/useQuranData";
 import {
@@ -108,12 +110,37 @@ export function SurahReader() {
   const [visibleVerseId, setVisibleVerseId] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const [searchParams] = useSearchParams();
+  /**
+   * The ayah to open on, from `?ayah=`.
+   *
+   * This is how the ruku reader hands over when the continuous view is toggled
+   * on: switching lands where the reader was rather than at the top of a
+   * 286-ayah surah. It is held in state and cleared once reached, because the
+   * ayahs arrive a page at a time — an ayah deep in the surah can only be
+   * scrolled to after the pages up to it have been pulled in.
+   */
+  const anchorParam = Number(searchParams.get("ayah"));
+  const anchorAyah = Number.isInteger(anchorParam) && anchorParam > 0 ? anchorParam : null;
+  const [pendingAnchor, setPendingAnchor] = useState<number | null>(anchorAyah);
+
   // --- recitation ----------------------------------------------------------
 
   const { data: reciters } = useReciters();
   const reciter = useActiveReciter(prefs.reciterId);
   const { data: recitation } = useRecitationFile(reciter?.id ?? null, surahNumber);
-  const { data: timings } = useRecitationTimings(reciter?.id ?? null, verseIds);
+  /**
+   * The recitation covers the surah, not the ayahs that happen to be rendered.
+   *
+   * The player stops at the last ayah it has a timing for, so handing it the
+   * loaded page would end the audio at ayah 40 of Al-Baqarah while the reader
+   * is still scrolling — and the ayahs arrive a page at a time precisely so
+   * that nobody has to wait for all 286 before pressing play. The surah's ids
+   * are one small request that is already made for the progress markers, so
+   * playback is scoped to them and the passage is the whole surah from the
+   * first press onward.
+   */
+  const { data: timings } = useRecitationTimings(reciter?.id ?? null, surahVerseIdList);
 
   const download = useSurahDownload({
     reciterId: reciter?.id ?? null,
@@ -123,13 +150,13 @@ export function SurahReader() {
   });
 
   const unmemorizedVerseIds = useMemo(
-    () => verseIds.filter((id) => !memorized?.has(id)),
-    [verseIds, memorized],
+    () => surahVerseIdList.filter((id) => !memorized?.has(id)),
+    [surahVerseIdList, memorized],
   );
 
   const player = useRecitationPlayer({
     src: download.localSrc ?? recitation?.audio_url ?? null,
-    verseIds,
+    verseIds: surahVerseIdList,
     timings,
     rate: prefs.playbackRate,
     repeatMode: prefs.repeatMode,
@@ -147,13 +174,35 @@ export function SurahReader() {
     verses.find((v) => v.id === currentVerseId)?.ruku_number ?? verses[0]?.ruku_number ?? null;
   const { sessionSeconds, idle } = useReadingTimer(valid ? currentRuku : null);
 
-  // Keep the ayah being recited on screen, exactly as the ruku reader does.
+  const loadedVerseIds = useMemo(() => new Set(verseIds), [verseIds]);
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = query;
+
+  /**
+   * Keeps the ayah being recited on screen — and rendered at all.
+   *
+   * The recitation runs the whole surah while the reader holds 40 ayahs at a
+   * time, so playback reaching past the last loaded ayah has to pull the next
+   * page in. Without that, the audio keeps going while the highlight, the word
+   * following and the ruku the time is logged against all stop at the last
+   * ayah that happens to be on screen.
+   */
   useEffect(() => {
-    if (!prefs.followRecitation) return;
     const id = player.currentVerseId;
     if (id === null) return;
+    if (!loadedVerseIds.has(id)) {
+      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+      return;
+    }
+    if (!prefs.followRecitation) return;
     document.getElementById(`verse-${id}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [player.currentVerseId, prefs.followRecitation]);
+  }, [
+    player.currentVerseId,
+    prefs.followRecitation,
+    loadedVerseIds,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  ]);
 
   // --- which ayah is on screen --------------------------------------------
 
@@ -188,7 +237,6 @@ export function SurahReader() {
   // --- page loading --------------------------------------------------------
 
   const loadMoreRef = useRef<HTMLDivElement>(null);
-  const { fetchNextPage, hasNextPage, isFetchingNextPage } = query;
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -211,6 +259,24 @@ export function SurahReader() {
     setExpandedVerses(new Set());
     setVisibleVerseId(null);
   }, [surahNumber]);
+
+  useEffect(() => setPendingAnchor(anchorAyah), [surahNumber, anchorAyah]);
+
+  // Pages load in order, so reaching an anchor deep in the surah means asking
+  // for the next page until the ayah is there to scroll to.
+  useEffect(() => {
+    if (pendingAnchor === null) return;
+    const verse = verses.find((v) => v.ayah_number === pendingAnchor);
+    if (!verse) {
+      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+      return;
+    }
+    const element = document.getElementById(`verse-${verse.id}`);
+    if (!element) return;
+    element.scrollIntoView({ block: "start" });
+    setSelectedAyah(verse.ayah_number);
+    setPendingAnchor(null);
+  }, [pendingAnchor, verses, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // --- per-ayah actions ----------------------------------------------------
 
@@ -275,7 +341,27 @@ export function SurahReader() {
     navigate(`/read/page/${page}`);
   }, [verses, selectedAyah, navigate, updateProfile]);
 
+  /**
+   * Turns the continuous view off and hands back to the ruku reader — the
+   * mushaf toggle's handover, in reverse. The mode is a stored preference, so
+   * leaving here deliberately is also what turns it off; otherwise the ruku
+   * reader would redirect straight back and the toggle could never be undone.
+   */
+  const openRuku = useCallback(
+    (targetRuku: number | null) => {
+      updateProfile.mutate({ ui_prefs: { readerMode: "study" } });
+      navigate(targetRuku ? `/read/${targetRuku}` : "/browse");
+    },
+    [navigate, updateProfile],
+  );
+
   const mobileActions: MenuAction[] = [
+    {
+      label: "Continuous surah view",
+      icon: <ScrollText className="size-4" aria-hidden />,
+      active: true,
+      onSelect: () => openRuku(currentRuku),
+    },
     {
       label: "Quiz this surah's words",
       icon: <GraduationCap className="size-4" aria-hidden />,
@@ -323,7 +409,21 @@ export function SurahReader() {
     <div className="flex h-full flex-col">
       <header className="shrink-0 border-b border-border bg-surface/60 px-3 py-2.5 backdrop-blur md:px-6 md:py-3">
         <div className="flex items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-1 md:gap-3">
+            {/* The way back to the list belongs in the header: reading a surah
+                top to bottom means the bottom of the page is a long way away. */}
+            <Tooltip content="Back to the surah list">
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Back to the surah list"
+                onClick={() => navigate(`/browse?surah=${surahNumber}`)}
+              >
+                <ArrowLeft className="size-4" aria-hidden />
+              </Button>
+            </Tooltip>
+            <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
+
             <Button
               size="icon"
               variant="ghost"
@@ -362,6 +462,18 @@ export function SurahReader() {
           </div>
 
           <div className="hidden items-center gap-0.5 md:flex">
+            <Tooltip content="Continuous surah view is on — switch back to one ruku at a time">
+              <Button
+                size="icon"
+                variant="outline"
+                aria-label="Continuous surah view"
+                aria-pressed
+                onClick={() => openRuku(currentRuku)}
+              >
+                <ScrollText className="size-4" aria-hidden />
+              </Button>
+            </Tooltip>
+
             <Tooltip content="Quiz this surah's memorized words">
               <Button
                 size="icon"
@@ -515,7 +627,7 @@ export function SurahReader() {
                           onQuiz={() =>
                             navigate(`/quiz?scope=ruku&ruku=${verse.ruku_number}&start=1`)
                           }
-                          onOpenRuku={() => navigate(`/read/${verse.ruku_number}`)}
+                          onOpenRuku={() => openRuku(verse.ruku_number)}
                         />
                       ) : null}
 
@@ -662,6 +774,7 @@ function RukuDivider({
     <div className="flex items-center gap-3 pt-3">
       <button
         onClick={onOpenRuku}
+        title="Study this ruku on its own"
         className={cn(
           "shrink-0 rounded-lg px-2 py-1 text-[0.6875rem] font-medium uppercase tracking-wider",
           "text-fg-subtle transition-colors hover:bg-surface-2 hover:text-fg",

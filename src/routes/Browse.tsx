@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ChevronRight,
   GraduationCap,
-  Rows3,
+  ScrollText,
   Search,
   Sparkles,
   WholeWord,
@@ -166,7 +166,7 @@ export function Browse() {
                       aria-label={`Read all of ${surah.name_english}`}
                       onClick={() => navigate(`/read/surah/${surah.number}`)}
                     >
-                      <Rows3 className="size-4" aria-hidden />
+                      <ScrollText className="size-4" aria-hidden />
                     </Button>
                   </Tooltip>
 

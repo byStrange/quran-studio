@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
+  ArrowLeft,
   BookMarked,
   BookOpen,
   ChevronLeft,
@@ -14,7 +15,7 @@ import {
   ListTree,
   MoreHorizontal,
   Palette,
-  Rows3,
+  ScrollText,
   Sparkles,
 } from "lucide-react";
 import { useRuku, useRukuVerses, useSurahs, useSurahVerseIds } from "@/hooks/useQuranData";
@@ -325,6 +326,13 @@ export function Reader() {
   );
 
   /**
+   * Both handovers below pick a position first and set the mode second, and
+   * the redirect that follows reacts to that same mode change. This marks the
+   * handover so the redirect leaves the chosen position alone.
+   */
+  const handingOver = useRef(false);
+
+  /**
    * Hands over to the mushaf reader at the page the reader is looking at —
    * the selected ayah's page when there is one, otherwise where the ruku opens.
    */
@@ -332,18 +340,43 @@ export function Reader() {
     const selected = verses?.find((verse) => verse.ayah_number === selectedAyah);
     const page = selected?.page_number ?? ruku?.page_start ?? verses?.[0]?.page_number;
     if (!page) return;
+    handingOver.current = true;
     updateProfile.mutate({ ui_prefs: { readerMode: "mushaf" } });
     navigate(`/read/page/${page}`);
   }, [verses, selectedAyah, ruku, navigate, updateProfile]);
 
-  // A reader who has chosen the mushaf gets it wherever a ruku is opened from
-  // — the browser, the dashboard, a bookmark. Only this direction redirects:
-  // the mushaf reader never sends anyone back here, so the two cannot ping-pong.
+  /**
+   * Hands over to the continuous reader at the ayah on screen, and turns the
+   * mode on so every ruku opened afterwards lands there too — the toggle is a
+   * way of reading, not a one-off jump.
+   */
+  const switchToSurah = useCallback(() => {
+    if (surahNumber === null) return;
+    const ayah = selectedAyah ?? ruku?.ayah_start ?? verses?.[0]?.ayah_number;
+    handingOver.current = true;
+    updateProfile.mutate({ ui_prefs: { readerMode: "surah" } });
+    navigate(`/read/surah/${surahNumber}${ayah ? `?ayah=${ayah}` : ""}`);
+  }, [surahNumber, selectedAyah, ruku, verses, navigate, updateProfile]);
+
+  // A reader who has chosen the mushaf or the continuous surah gets it wherever
+  // a ruku is opened from — the browser, the dashboard, a bookmark. Only this
+  // direction redirects: neither of the other two readers sends anyone back
+  // here on its own, so none of them can ping-pong.
   useEffect(() => {
-    if (prefs.readerMode !== "mushaf") return;
-    const page = ruku?.page_start ?? verses?.[0]?.page_number;
-    if (page) navigate(`/read/page/${page}`, { replace: true });
-  }, [prefs.readerMode, ruku, verses, navigate]);
+    if (handingOver.current) return;
+    if (prefs.readerMode === "mushaf") {
+      const page = ruku?.page_start ?? verses?.[0]?.page_number;
+      if (page) navigate(`/read/page/${page}`, { replace: true });
+      return;
+    }
+    if (prefs.readerMode === "surah" && ruku) {
+      // An ayah asked for by whoever linked here (the tafsir nudge, a quiz
+      // result) is where the reader wanted to land; the ruku's first ayah is
+      // the fallback, not an override.
+      const ayah = requestedAyah ?? ruku.ayah_start;
+      navigate(`/read/surah/${ruku.surah_number}?ayah=${ayah}`, { replace: true });
+    }
+  }, [prefs.readerMode, ruku, verses, requestedAyah, navigate]);
 
   const memorizedCount = useMemo(
     () => verseIds.filter((id) => memorized?.has(id)).length,
@@ -392,10 +425,10 @@ export function Reader() {
       onSelect: () => navigate(`/quiz?scope=ruku&ruku=${rukuNumber}&start=1`),
     },
     {
-      label: "Read the whole surah",
-      icon: <Rows3 className="size-4" aria-hidden />,
+      label: "Continuous surah view",
+      icon: <ScrollText className="size-4" aria-hidden />,
       disabled: surahNumber === null,
-      onSelect: () => navigate(`/read/surah/${surahNumber}`),
+      onSelect: switchToSurah,
     },
     {
       label: "Mushaf page view",
@@ -435,7 +468,24 @@ export function Reader() {
     <div className="flex h-full flex-col">
       <header className="shrink-0 border-b border-border bg-surface/60 px-3 py-2.5 backdrop-blur md:px-6 md:py-3">
         <div className="flex items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-1 md:gap-3">
+            {/* Every way in here is a list — the browser, the dashboard, a
+                quiz result — so the way out is the first thing in the header
+                rather than something to be found at the bottom of the ruku. */}
+            <Tooltip content="Back to the surah list">
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Back to the surah list"
+                onClick={() =>
+                  navigate(surahNumber === null ? "/browse" : `/browse?surah=${surahNumber}`)
+                }
+              >
+                <ArrowLeft className="size-4" aria-hidden />
+              </Button>
+            </Tooltip>
+            <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
+
             <Button
               size="icon"
               variant="ghost"
@@ -549,15 +599,16 @@ export function Reader() {
               </Button>
             </Tooltip>
 
-            <Tooltip content="Read the whole surah, top to bottom">
+            <Tooltip content="Continuous surah view — the whole surah in one scroll">
               <Button
                 size="icon"
                 variant="ghost"
-                aria-label="Read the whole surah"
+                aria-label="Continuous surah view"
+                aria-pressed={false}
                 disabled={surahNumber === null}
-                onClick={() => navigate(`/read/surah/${surahNumber}`)}
+                onClick={switchToSurah}
               >
-                <Rows3 className="size-4" aria-hidden />
+                <ScrollText className="size-4" aria-hidden />
               </Button>
             </Tooltip>
 
@@ -736,14 +787,11 @@ export function Reader() {
                     <ChevronLeft className="size-4" aria-hidden />
                     Previous ruku
                   </Button>
-                  <div className="flex items-center gap-1">
-                    <Button asChild variant="ghost">
-                      <Link to="/browse">All rukus</Link>
-                    </Button>
-                    <Button asChild variant="ghost" disabled={surahNumber === null}>
-                      <Link to={`/read/surah/${surahNumber}`}>Whole surah</Link>
-                    </Button>
-                  </div>
+                  <Button asChild variant="ghost">
+                    <Link to={surahNumber === null ? "/browse" : `/browse?surah=${surahNumber}`}>
+                      All rukus
+                    </Link>
+                  </Button>
                   <Button
                     variant="primary"
                     disabled={rukuNumber >= TOTAL_RUKUS}

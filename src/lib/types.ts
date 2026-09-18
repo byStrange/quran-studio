@@ -49,6 +49,13 @@ export interface RecitationTiming {
  */
 export type RepeatMode = "off" | "ayah" | "range" | "unmemorized";
 
+/**
+ * Which of the three readers a ruku opens in. Stored as a preference rather
+ * than chosen per visit: it is a way of reading, not a per-lesson decision, so
+ * the toggle in the reader's header sticks until it is turned off again.
+ */
+export type ReaderMode = "study" | "surah" | "mushaf";
+
 /** How much of the memorized Quran one quiz round draws from. */
 export type QuizScope = Database["public"]["Enums"]["quiz_scope"];
 
@@ -108,12 +115,14 @@ export interface UiPrefs {
    * Which reader opening a ruku lands in.
    *
    * "study" is the ruku reader: translation, word-by-word, tafsir alongside.
-   * "mushaf" is the printed Madani page, which is what someone revising from
-   * memory wants — the same words in the same places as the paper copy they
-   * memorised from. Study is the default because it is the one that teaches;
-   * the mushaf is a page turn away either way.
+   * "surah" is the same reader with the whole surah in one scroll, for someone
+   * reading rather than drilling a lesson. "mushaf" is the printed Madani
+   * page, which is what someone revising from memory wants — the same words in
+   * the same places as the paper copy they memorised from. Study is the
+   * default because it is the one that teaches; the other two are one toggle
+   * away in the reader's header either way.
    */
-  readerMode: "study" | "mushaf";
+  readerMode: ReaderMode;
   /**
    * Which reciter to play, as a `reciters.id`.
    *
