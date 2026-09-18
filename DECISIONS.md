@@ -178,6 +178,36 @@ player bar and takes one surah at a time, into
 completion. A local copy wins over the CDN whenever one exists, so nothing has
 to be re-chosen when the connection goes.
 
+**The Uzbek Ibn Kathir is scraped and re-segmented, because no API carries it.**
+Uzbek tafsir was left out of the first pass for want of a source. There is one:
+shomila.islomiy.info publishes the full Uzbek translation of Ibn Kathir as book
+178 of the Shomil library. It is a library website, not an API — one page per
+surah (Baqara is 6 MB of Word-pasted HTML), no per-ayah anchors, ids or URLs,
+and nothing in the markup saying which ayah a paragraph belongs to.
+
+What the book does have is a convention: each ayah is printed as its own
+paragraph with its number in front, and the commentary on it runs until the
+next such line. That recovers the ayah ranges, once two things are handled.
+The typesetting is inconsistent — `1-`, `8 —`, `1.` and `41. –` all occur, and
+only some surahs bold the ayah line — so each surah's own style is measured
+rather than assumed. And a number prefix alone is not evidence, because the
+commentary is full of numbered lists; the ayah lines are taken as the longest
+chain of candidates whose numbers only move forward, which is what keeps one
+stray number early in a page from swallowing everything below it.
+
+That lands 6,096 of 6,236 ayahs with no supervision. The remaining eight
+surahs never number their ayahs at all — they quote each one inside the prose
+— and no amount of pattern-matching will find what is not there, so they are
+anchored by hand in a local review tool and the corrections are committed
+beside the parser. `scripts/tafsir-uz/README.md` has the detail.
+
+The scrape is kept as a separate pipeline from `scripts/seed/` rather than
+folded into it. The seed fetches editions from an upstream catalogue and can
+be re-run from nothing; this one depends on 76 MB of downloaded pages and on
+hand corrections, and re-running it is a different kind of act. Registering
+the edition in `TAFSIR_EDITIONS` would have made `pnpm seed:tafsir` try to
+fetch a slug that no upstream has, so `import.ts` writes its own edition row.
+
 ---
 
 ## Database
@@ -619,9 +649,8 @@ progress, the accent badge once the count reaches the ruku's length.
 **The app opens by offering one unread tafsir.** The failure mode this
 addresses is not that commentary is hard to reach, it is that nothing ever
 asks, so the memorized-but-unread gap grows quietly. `next_unread_tafsir`
-returns the first memorized ayah, in mushaf order, whose commentary has not
-been read — positional rather than random, because the aim is to finish them.
-It is offered in a dialog that can be read in place, marked read, or opened in
+returns a random memorized ayah whose commentary has not been read. It is offered
+in a dialog that can be read in place, marked read, or opened in
 the reader at that ayah (which the reader accepts as `?ayah=`). "Not read" is
 judged over the entry's whole range, so a passage covering 2:1-5 is not
 re-offered against a different ayah number, and the range comes back as
@@ -662,6 +691,77 @@ parameter rather than component state, so stepping into a ruku and coming back
 lands on the same surah with its rukus still showing. The list is how a reader
 picks the next ruku, and collapsing it on every return made that two steps
 every time.
+
+**An answer is given twice.** A reader who says "I know it" used to be
+believed, which made the word list a record of confidence rather than of
+knowledge — and confidence is the one thing a memorizer judges worst. So a
+round now reveals the answer whichever way the reader claimed (a claim is not a
+reason to skip the text, it is a reason to check it) and asks again against
+what they can now see. The second answer is what scores and what moves a word's
+status; the first is kept as `quiz_attempts.claimed` and
+`knowledge_quiz_answers.claimed`. The gap between the two is reported
+separately from accuracy, because "I cannot tell what I know" and "I do not
+know it" are different problems with different fixes. The confirmation starts
+pre-selected on the claim: the common case is that the reader was right about
+being right, and making them say so twice in two different words turns the
+check into a rhythm they stop reading.
+
+**Knowledge questions are generated, not stored.** "Which ayah says this" is
+not a column, so it cannot be a query. The app draws ayahs from the scope
+(`quiz_verse_pool`) and the model writes one question per ayah, with the
+instructions in `src-tauri/src/ollama.rs` next to the key they are sent with —
+the frontend can no more compose a quiz prompt than it can compose any other.
+Questions are not cached and not shared between users, unlike word
+explanations and ruku summaries: a second round on the same ruku should not be
+the same ten questions, and what makes a question worth asking is which ayahs
+*this* reader has memorized.
+
+**Nothing generated is presented as scripture.** The ayah a question came from
+is shown beside every answer, so the reader marks themselves against the text
+rather than against the model, and an answer that drifted is visibly wrong
+rather than quietly authoritative. The model must also cite the phrase of the
+ayah that carries the answer, and the backend drops any citation that is not
+literally in that ayah's Arabic — a cheap, mechanical check that catches the
+failure that matters most here, which is teaching someone a false reading of
+the Quran. Questions about ayahs outside the round are dropped for the same
+reason.
+
+**The scoreboard reports both quiz types and neither as one number.** All-time
+accuracy is settled by the first week and then stops moving, so a 30-day figure
+sits beside it. Accuracy is broken down by surah and by question kind because
+"71%" is not actionable and "you cannot place ayahs in an-Nisāʾ" is.
+
+---
+
+## Tajweed colours
+
+**The palette is the Mushaf at-Tajweed sheet, not a house palette.** Readers
+arrive having learnt these colours off paper, so a nicer green is simply a
+wrong one, and a deviation reads as the app getting the *rule* wrong rather
+than the colour. The values are the printed Dar al-Maʿrifah convention as
+published in Tarteel's `tajweed_color_new.scss`, matched hex for hex in light
+mode.
+
+**It replaced an equally real sheet, deliberately.** The app first shipped the
+older web palette (Tarteel's original `tajweed.scss`, the one behind the
+quran.com rule classes this app imports): qalqalah in red, the four madd rules
+in four blues. That is not a made-up palette — it is hex-for-hex what several
+major apps still ship — but it is not what a reader coming from a printed
+mushaf recognises, and GTAF's Al Quran disagrees with *both* sheets, colouring
+ikhfāʾ red and qalqalah green. There is no single standard to defer to, so the
+tie is broken towards the printed convention: it is the one people learn from
+paper, and the one the rest converge on.
+
+**The rule classes and the colours are independent.** Spans still arrive
+carrying quran.com's rule names, which are the older sheet's vocabulary. A
+class says which rule applies; `lib/tajweed.ts` says what colour the reader has
+been taught to expect for it.
+
+**Dark mode keeps the hue and moves nothing else.** The sheet is drawn for ink
+on paper and its darker half disappears on a dark surface, so each colour keeps
+its hue exactly — that is what a reader recognises — and only lightness and
+chroma move, by the least that clears 4.5:1 against `--surface`. Colours
+already legible there are left at their printed value.
 
 ---
 

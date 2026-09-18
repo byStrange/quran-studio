@@ -35,6 +35,111 @@ export type Database = {
         }
         Relationships: []
       }
+      knowledge_quiz_answers: {
+        Row: {
+          answered_at: string
+          claimed: boolean
+          correct: boolean
+          expected: string
+          id: number
+          kind: Database["public"]["Enums"]["knowledge_question_kind"]
+          position: number
+          question: string
+          session_id: string
+          user_id: string
+          verse_id: number | null
+        }
+        Insert: {
+          answered_at?: string
+          claimed: boolean
+          correct: boolean
+          expected: string
+          id?: never
+          kind: Database["public"]["Enums"]["knowledge_question_kind"]
+          position: number
+          question: string
+          session_id: string
+          user_id: string
+          verse_id?: number | null
+        }
+        Update: {
+          answered_at?: string
+          claimed?: boolean
+          correct?: boolean
+          expected?: string
+          id?: never
+          kind?: Database["public"]["Enums"]["knowledge_question_kind"]
+          position?: number
+          question?: string
+          session_id?: string
+          user_id?: string
+          verse_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_quiz_answers_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_quiz_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_quiz_answers_verse_id_fkey"
+            columns: ["verse_id"]
+            isOneToOne: false
+            referencedRelation: "quran_verses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      knowledge_quiz_sessions: {
+        Row: {
+          answered_count: number
+          completed_at: string | null
+          correct_count: number
+          id: string
+          language: string
+          model_used: string | null
+          question_count: number
+          revised_count: number
+          ruku_number: number | null
+          scope: Database["public"]["Enums"]["quiz_scope"]
+          started_at: string
+          surah_number: number | null
+          user_id: string
+        }
+        Insert: {
+          answered_count?: number
+          completed_at?: string | null
+          correct_count?: number
+          id?: string
+          language?: string
+          model_used?: string | null
+          question_count?: number
+          revised_count?: number
+          ruku_number?: number | null
+          scope: Database["public"]["Enums"]["quiz_scope"]
+          started_at?: string
+          surah_number?: number | null
+          user_id: string
+        }
+        Update: {
+          answered_count?: number
+          completed_at?: string | null
+          correct_count?: number
+          id?: string
+          language?: string
+          model_used?: string | null
+          question_count?: number
+          revised_count?: number
+          ruku_number?: number | null
+          scope?: Database["public"]["Enums"]["quiz_scope"]
+          started_at?: string
+          surah_number?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       memorized_verses: {
         Row: {
           memorized_at: string
@@ -88,6 +193,7 @@ export type Database = {
       quiz_attempts: {
         Row: {
           answered_at: string
+          claimed: boolean | null
           correct: boolean
           id: number
           user_id: string
@@ -95,6 +201,7 @@ export type Database = {
         }
         Insert: {
           answered_at?: string
+          claimed?: boolean | null
           correct: boolean
           id?: never
           user_id: string
@@ -102,6 +209,7 @@ export type Database = {
         }
         Update: {
           answered_at?: string
+          claimed?: boolean | null
           correct?: boolean
           id?: never
           user_id?: string
@@ -767,6 +875,34 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      finish_knowledge_quiz: {
+        Args: { p_session_id: string }
+        Returns: undefined
+      }
+      knowledge_quiz_by_surah: {
+        Args: never
+        Returns: {
+          answered: number
+          correct: number
+          surah_name: string
+          surah_number: number
+        }[]
+      }
+      knowledge_quiz_history: {
+        Args: { p_limit?: number }
+        Returns: {
+          answered_count: number
+          completed_at: string
+          correct_count: number
+          id: string
+          revised_count: number
+          ruku_number: number
+          scope: Database["public"]["Enums"]["quiz_scope"]
+          started_at: string
+          surah_name: string
+          surah_number: number
+        }[]
+      }
       log_reading: {
         Args: {
           p_ruku_number?: number
@@ -841,10 +977,64 @@ export type Database = {
           word_id: number
         }[]
       }
+      quiz_scoreboard: {
+        Args: never
+        Returns: {
+          knowledge_answered: number
+          knowledge_answered_30d: number
+          knowledge_by_kind: Json
+          knowledge_correct: number
+          knowledge_correct_30d: number
+          knowledge_overclaimed: number
+          knowledge_recovered: number
+          knowledge_sessions: number
+          vocab_attempts: number
+          vocab_attempts_30d: number
+          vocab_correct: number
+          vocab_correct_30d: number
+          vocab_overclaimed: number
+          vocab_recovered: number
+          words_learned: number
+          words_learning: number
+        }[]
+      }
+      quiz_verse_pool: {
+        Args: {
+          p_language?: string
+          p_limit?: number
+          p_ruku?: number
+          p_scope?: Database["public"]["Enums"]["quiz_scope"]
+          p_surah?: number
+        }
+        Returns: {
+          arabic_text: string
+          ayah_number: number
+          pool_size: number
+          ruku_number: number
+          surah_name: string
+          surah_number: number
+          translation_en: string
+          translation_ru: string
+          verse_id: number
+        }[]
+      }
       reading_overview: { Args: never; Returns: Json }
       recompute_streak: { Args: { p_user_id: string }; Returns: undefined }
+      record_knowledge_answer: {
+        Args: {
+          p_claimed: boolean
+          p_correct: boolean
+          p_expected: string
+          p_kind: Database["public"]["Enums"]["knowledge_question_kind"]
+          p_position: number
+          p_question: string
+          p_session_id: string
+          p_verse_id: number
+        }
+        Returns: undefined
+      }
       record_quiz_attempt: {
-        Args: { p_correct: boolean; p_word_id: number }
+        Args: { p_claimed?: boolean; p_correct: boolean; p_word_id: number }
         Returns: undefined
       }
       ruku_progress: {
@@ -859,6 +1049,17 @@ export type Database = {
         }[]
       }
       set_word_glosses_ru: { Args: { p_rows: Json }; Returns: number }
+      start_knowledge_quiz: {
+        Args: {
+          p_language?: string
+          p_model?: string
+          p_question_count: number
+          p_ruku?: number
+          p_scope: Database["public"]["Enums"]["quiz_scope"]
+          p_surah?: number
+        }
+        Returns: string
+      }
       vocabulary_overview: { Args: never; Returns: Json }
       word_progress_by_ruku: {
         Args: never
@@ -872,6 +1073,12 @@ export type Database = {
       }
     }
     Enums: {
+      knowledge_question_kind:
+        | "locate"
+        | "wording"
+        | "meaning"
+        | "continuation"
+        | "detail"
       quiz_scope: "ruku" | "surah" | "global"
       word_status: "new" | "learning" | "learned"
     }
@@ -1001,6 +1208,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      knowledge_question_kind: [
+        "locate",
+        "wording",
+        "meaning",
+        "continuation",
+        "detail",
+      ],
+      quiz_scope: ["ruku", "surah", "global"],
       word_status: ["new", "learning", "learned"],
     },
   },

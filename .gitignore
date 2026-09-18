@@ -25,3 +25,21 @@ scripts/seed/.cache/
 # Supabase CLI local state
 supabase/.temp/
 supabase/.branches/
+
+# Uzbek Ibn Kathir working files: the scraped pages (76 MB) and the parse
+# output, both regenerable from fetch.sh + parse.ts. The hand corrections in
+# scripts/tafsir-uz/overrides/ are NOT ignored — those are the work.
+scripts/tafsir-uz/raw/
+scripts/tafsir-uz/out/
+
+# Whisper model + local build scratch: the model is downloaded at runtime,
+# patch_whisper.cjs was a one-shot codemod already applied to whisper.rs.
+model.bin
+patch_whisper.cjs
+test-matcher.ts
+
+# Throwaway output from listing the tree while sorting out this commit
+filelist.txt
+tracked.txt
+untracked.txt
+quran-studio-source.tar.gz

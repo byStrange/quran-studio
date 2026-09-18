@@ -1,5 +1,5 @@
 /**
- * Tajweed rules, as the reader presents them.
+ * Tajweed rules, as the Tarteel Mushaf presents them.
  *
  * The rule names come from the import (`scripts/seed/tajweed.ts`); everything
  * here is presentation — the label a reader sees, what the rule asks them to
@@ -7,12 +7,15 @@
  * tokens so both themes are defined in one place, and are referenced by name
  * rather than value so a span only ever needs `data-tajweed`.
  *
- * The palette is the standard tajweed one, matched hex for hex in light mode
- * (#537FFF madd ṭabīʿī, #FF7E1E ghunnah, #DD0008 qalqalah, #9400A8 ikhfāʾ,
- * #169200 idghām, #AAAAAA silent, …) — the same values every implementation of
- * these rule classes ships, including the quran.com source the spans come
- * from. It is deliberately not a house palette: readers arrive having learnt
- * these colours from a printed mushaf, so a "nicer" green is just a wrong one.
+ * The palette follows the Tarteel Mushaf colour system, documented at
+ * https://support.tarteel.ai/en/articles/14936922-understanding-tajweed-colors-in-the-tarteel-mushaf
+ *
+ * Madd escalates by obligation: Yellow (ṭabīʿī) → Light Orange (ʿāriḍ
+ * li-sukūn) → Orange-Red (wājib muttaṣil) → Dark Red (lāzim).
+ * Ghunnah = Green, Qalqalah = Light Blue, Tafkhim = Dark Blue, Silent = Grey.
+ *
+ * Note: Izhar, Idgham, and Ikhfa are not part of the Tarteel colour system
+ * but remain in the rule set with their previous colours for visual distinction.
  */
 
 export const TAJWEED_RULES = [
@@ -44,7 +47,7 @@ export interface TajweedSpan {
   e: number;
 }
 
-export type TajweedGroup = "madd" | "nun" | "meem" | "other";
+export type TajweedGroup = "madd" | "ghunnah" | "qalqalah" | "tafkhim" | "silent" | "other";
 
 export interface TajweedRuleInfo {
   label: string;
@@ -54,71 +57,68 @@ export interface TajweedRuleInfo {
 }
 
 export const TAJWEED_GROUPS: Array<{ id: TajweedGroup; title: string }> = [
-  { id: "madd", title: "Prolongation" },
-  { id: "nun", title: "Nūn sākinah & tanwīn" },
-  { id: "meem", title: "Mīm sākinah" },
-  { id: "other", title: "Other" },
+  { id: "madd", title: "Prolongation (Madd)" },
+  { id: "ghunnah", title: "Nasalization (Ghunnah)" },
+  { id: "qalqalah", title: "Echoing Sound (Qalqalah)" },
+  { id: "tafkhim", title: "Emphatic Pronunciation (Tafkhim)" },
+  { id: "silent", title: "Silent Letters" },
+  { id: "other", title: "Other Rules" },
 ];
 
 export const TAJWEED_INFO: Record<TajweedRule, TajweedRuleInfo> = {
   madda_normal: {
-    label: "Madd ṭabīʿī",
-    hint: "Natural prolongation — hold for 2 counts.",
+    label: "Madd Ṭabīʿī",
+    hint: "Normal prolongation — hold for 2 vowel counts.",
     group: "madd",
   },
   madda_permissible: {
-    label: "Madd munfaṣil",
-    hint: "Permissible prolongation — 2, 4 or 5 counts.",
+    label: "Madd ʿĀriḍ li-Sukūn",
+    hint: "Permissible prolongation — 2, 4, or 6 counts when pausing at end of verse.",
     group: "madd",
   },
   madda_obligatory: {
-    label: "Madd muttaṣil",
-    hint: "Obligatory prolongation — 4 or 5 counts.",
+    label: "Madd Wājib Muttaṣil",
+    hint: "Obligatory prolongation — 4 to 5 counts; Madd letter followed by Hamzah in same word.",
     group: "madd",
   },
   madda_necessary: {
-    label: "Madd lāzim",
-    hint: "Necessary prolongation — hold for 6 counts.",
+    label: "Madd Lāzim",
+    hint: "Necessary prolongation — must hold for 6 vowel counts.",
     group: "madd",
+  },
+  ghunnah: {
+    label: "Ghunnah",
+    hint: "Nasalization from the nose lasting 2 vowel counts — on ن and م.",
+    group: "ghunnah",
+  },
+  qalaqah: {
+    label: "Qalqalah",
+    hint: "Echoing bounce on ق ط ب ج د when carrying sukūn; especially audible when stopping.",
+    group: "qalqalah",
   },
   ikhafa: {
     label: "Ikhfāʾ",
-    hint: "Nūn sākinah or tanwīn hidden, with nasalisation.",
-    group: "nun",
-  },
-  idgham_ghunnah: {
-    label: "Idghām with ghunnah",
-    hint: "Merged into the next letter, nasalised.",
-    group: "nun",
-  },
-  idgham_wo_ghunnah: {
-    label: "Idghām without ghunnah",
-    hint: "Merged into the next letter, no nasalisation.",
-    group: "nun",
-  },
-  iqlab: {
-    label: "Iqlāb",
-    hint: "Nūn or tanwīn becomes a mīm sound before bāʾ.",
-    group: "nun",
+    hint: "Nūn sākinah or tanwīn hidden before certain letters, with nasalisation.",
+    group: "other",
   },
   ikhafa_shafawi: {
     label: "Ikhfāʾ shafawī",
     hint: "Mīm sākinah hidden before bāʾ.",
-    group: "meem",
+    group: "other",
+  },
+  idgham_ghunnah: {
+    label: "Idghām with ghunnah",
+    hint: "Merged into the next letter, nasalised.",
+    group: "other",
+  },
+  idgham_wo_ghunnah: {
+    label: "Idghām without ghunnah",
+    hint: "Merged into the next letter, no nasalisation.",
+    group: "other",
   },
   idgham_shafawi: {
     label: "Idghām shafawī",
     hint: "Mīm sākinah merged into a following mīm.",
-    group: "meem",
-  },
-  ghunnah: {
-    label: "Ghunnah",
-    hint: "Nasalisation held for 2 counts.",
-    group: "other",
-  },
-  qalaqah: {
-    label: "Qalqalah",
-    hint: "Echoing bounce on a letter carrying sukūn.",
     group: "other",
   },
   idgham_mutajanisayn: {
@@ -131,20 +131,25 @@ export const TAJWEED_INFO: Record<TajweedRule, TajweedRuleInfo> = {
     hint: "Merged between letters with close points of articulation.",
     group: "other",
   },
+  iqlab: {
+    label: "Iqlāb",
+    hint: "Nūn or tanwīn becomes a mīm sound before bāʾ.",
+    group: "other",
+  },
   ham_wasl: {
     label: "Hamzat al-waṣl",
-    hint: "Connecting hamza — silent when joined to the word before.",
-    group: "other",
+    hint: "Connecting hamza — written but silent when joined to the preceding word.",
+    group: "silent",
   },
   laam_shamsiyah: {
     label: "Lām shamsiyyah",
-    hint: "Silent lām; the letter after it doubles.",
-    group: "other",
+    hint: "Silent lām; the following letter doubles.",
+    group: "silent",
   },
   slnt: {
     label: "Silent",
-    hint: "Written but not pronounced.",
-    group: "other",
+    hint: "Written but not pronounced during recitation.",
+    group: "silent",
   },
 };
 

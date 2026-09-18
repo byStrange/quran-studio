@@ -501,6 +501,188 @@ async function main(): Promise<void> {
       return counted === first.word_count ? null : `counts sum to ${counted}, expected ${first.word_count}`;
     });
 
+    // --- knowledge quizzes -------------------------------------------------
+
+    await check("quiz_verse_pool draws a ruku's ayahs", async () => {
+      const { data, error } = await client.rpc("quiz_verse_pool", {
+        p_scope: "ruku",
+        p_ruku: 1,
+        p_limit: 10,
+      });
+      if (error) return error.message;
+      const rows = data ?? [];
+      if (rows.length === 0) return "ruku 1 drew no ayahs";
+      if (rows.some((v) => v.ruku_number !== 1)) return "an ayah from another ruku was drawn";
+      if (rows.some((v) => !v.arabic_text || !v.translation_en)) return "an ayah came back unusable";
+      if (rows.some((v) => !v.surah_name)) return "an ayah came back without its surah name";
+      return rows[0]!.pool_size >= rows.length ? null : "pool_size is smaller than the page";
+    });
+
+    await check("record_quiz_attempt keeps the claim beside the confirmation", async () => {
+      const { data: pool, error: poolError } = await client.rpc("quiz_pool", {
+        p_scope: "ruku",
+        p_ruku: 1,
+        p_limit: 30,
+      });
+      if (poolError) return poolError.message;
+      const word = (pool ?? [])[0];
+      if (!word) return "no word to answer";
+
+      // Claimed, then conceded at the reveal: the concession is what scores.
+      const { error } = await client.rpc("record_quiz_attempt", {
+        p_word_id: word.word_id,
+        p_correct: false,
+        p_claimed: true,
+      });
+      if (error) return error.message;
+
+      const { data: attempt } = await client
+        .from("quiz_attempts")
+        .select("claimed, correct")
+        .eq("word_id", word.word_id)
+        .order("answered_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!attempt) return "no attempt was recorded";
+      if (attempt.claimed !== true) return `claim stored as ${attempt.claimed}`;
+      if (attempt.correct !== false) return `confirmation stored as ${attempt.correct}`;
+
+      const { data: progress } = await client
+        .from("user_word_progress")
+        .select("status")
+        .eq("word_id", word.word_id)
+        .maybeSingle();
+      return progress?.status === "learning"
+        ? null
+        : `a withdrawn claim left status ${progress?.status}`;
+    });
+
+    let knowledgeSession: string | null = null;
+
+    await check("a knowledge round records answers and totals them", async () => {
+      const { data: verses, error: verseError } = await client.rpc("quiz_verse_pool", {
+        p_scope: "ruku",
+        p_ruku: 1,
+        p_limit: 2,
+      });
+      if (verseError) return verseError.message;
+      const drawn = verses ?? [];
+      if (drawn.length < 2) return "ruku 1 drew fewer than two ayahs";
+
+      const { data: sessionId, error: startError } = await client.rpc("start_knowledge_quiz", {
+        p_scope: "ruku",
+        p_question_count: 2,
+        p_ruku: 1,
+        p_model: "smoke-test",
+      });
+      if (startError) return startError.message;
+      knowledgeSession = sessionId;
+
+      const answer = (position: number, index: number, claimed: boolean, correct: boolean) =>
+        client.rpc("record_knowledge_answer", {
+          p_session_id: sessionId,
+          p_position: position,
+          p_verse_id: drawn[index]!.verse_id,
+          p_kind: "locate",
+          p_question: `smoke question ${position}`,
+          p_expected: "smoke answer",
+          p_claimed: claimed,
+          p_correct: correct,
+        });
+
+      const first = await answer(0, 0, true, true);
+      if (first.error) return first.error.message;
+      const second = await answer(1, 1, true, false);
+      if (second.error) return second.error.message;
+
+      const { data: session } = await client
+        .from("knowledge_quiz_sessions")
+        .select("answered_count, correct_count, revised_count, completed_at")
+        .eq("id", sessionId)
+        .maybeSingle();
+      if (!session) return "the session row is not readable";
+      if (session.answered_count !== 2) return `answered_count is ${session.answered_count}`;
+      if (session.correct_count !== 1) return `correct_count is ${session.correct_count}`;
+      // One answer was claimed and then conceded.
+      if (session.revised_count !== 1) return `revised_count is ${session.revised_count}`;
+
+      // Changing your mind corrects the answer rather than adding a second one.
+      const again = await answer(1, 1, true, true);
+      if (again.error) return again.error.message;
+      const { data: revised } = await client
+        .from("knowledge_quiz_sessions")
+        .select("answered_count, correct_count, revised_count")
+        .eq("id", sessionId)
+        .maybeSingle();
+      if (revised?.answered_count !== 2) return `a revision changed the count to ${revised?.answered_count}`;
+      if (revised?.correct_count !== 2) return `a revision left correct_count at ${revised?.correct_count}`;
+      if (revised?.revised_count !== 0) return `revised_count is ${revised?.revised_count} after the change`;
+
+      const finished = await client.rpc("finish_knowledge_quiz", { p_session_id: sessionId });
+      if (finished.error) return finished.error.message;
+      const { data: closed } = await client
+        .from("knowledge_quiz_sessions")
+        .select("completed_at")
+        .eq("id", sessionId)
+        .maybeSingle();
+      return closed?.completed_at ? null : "the round did not close";
+    });
+
+    await check("cannot record into another user's knowledge round", async () => {
+      const otherEmail = `smoke-quiz-${Date.now()}@quran-studio.test`;
+      const { data: other } = await admin.auth.admin.createUser({
+        email: otherEmail,
+        password: "another-password!A1",
+        email_confirm: true,
+      });
+      const otherId = other.user!.id;
+      const { data: theirs } = await admin
+        .from("knowledge_quiz_sessions")
+        .insert({ user_id: otherId, scope: "global", question_count: 1 })
+        .select("id")
+        .single();
+
+      const { error } = await client.rpc("record_knowledge_answer", {
+        p_session_id: theirs!.id,
+        p_position: 0,
+        p_verse_id: 1,
+        p_kind: "locate",
+        p_question: "smoke",
+        p_expected: "smoke",
+        p_claimed: true,
+        p_correct: true,
+      });
+      await admin.auth.admin.deleteUser(otherId);
+      return error ? null : "wrote an answer into a session belonging to someone else";
+    });
+
+    await check("quiz_scoreboard reports both quiz types", async () => {
+      const { data, error } = await client.rpc("quiz_scoreboard");
+      if (error) return error.message;
+      const row = (data ?? [])[0];
+      if (!row) return "no scoreboard row";
+      if (row.vocab_attempts === 0) return "vocabulary attempts were not counted";
+      if (row.vocab_overclaimed === 0) return "the withdrawn claim was not counted";
+      if (row.knowledge_answered !== 2) return `knowledge_answered is ${row.knowledge_answered}`;
+      if (row.knowledge_correct !== 2) return `knowledge_correct is ${row.knowledge_correct}`;
+      const kinds = (row.knowledge_by_kind ?? []) as Array<{ kind: string; answered: number }>;
+      return kinds.some((k) => k.kind === "locate" && k.answered === 2)
+        ? null
+        : "the per-kind breakdown does not match the answers";
+    });
+
+    await check("knowledge_quiz_history lists the round just played", async () => {
+      const { data, error } = await client.rpc("knowledge_quiz_history", { p_limit: 5 });
+      if (error) return error.message;
+      const rows = data ?? [];
+      if (!knowledgeSession) return "no session was opened";
+      const mine = rows.find((r) => r.id === knowledgeSession);
+      if (!mine) return "the finished round is not in the history";
+      return mine.scope === "ruku" && mine.ruku_number === 1
+        ? null
+        : "the round came back with the wrong scope";
+    });
+
     await check("next_unread_tafsir offers a memorized ayah's commentary", async () => {
       // 2:3 is memorized here and nothing in its range has been marked read.
       // Al-Fatiha's entry may or may not collapse across ayah 2, which is

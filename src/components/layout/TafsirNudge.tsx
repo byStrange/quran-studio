@@ -24,9 +24,8 @@ let promptedThisLaunch = false;
  *
  * The problem it answers is not that tafsir is hard to reach — it is that
  * nothing ever asks. So the app opens with one question: would you look at the
- * commentary on this ayah you have memorized? It offers the first unread
- * passage in mushaf order rather than a random one, because the aim is to
- * finish them, and a random draw of six thousand finishes nowhere.
+ * commentary on this ayah you have memorized? It offers a random unread
+ * passage from the verses you have memorized.
  *
  * The passage is readable inside the dialog: the reader can take the offer
  * without leaving what they were doing, mark it read, and carry on.

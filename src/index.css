@@ -40,27 +40,37 @@
   --ring: oklch(0.53 0.11 165 / 0.45);
   --shadow-color: 150 20% 20%;
 
-  /* Tajweed. These are the standard tajweed colours — the palette the rules
-     were digitised alongside, shipped by every implementation of the same
-     rule classes (tajweed.js, alquran.cloud, the quran.com data this app
-     imports). They are *not* a house palette: a reader arrives already knowing
-     that ikhfāʾ is that purple and iqlāb is that sky blue, and any deviation
-     reads as the app getting the rule wrong. Each hex is given so the match
-     stays checkable; the oklch form round-trips to it exactly. */
-  --tj-madd-normal: oklch(0.6327 0.1963 266.5); /* #537FFF */
-  --tj-madd-permissible: oklch(0.5411 0.2544 270.5); /* #4050FF */
-  --tj-madd-obligatory: oklch(0.4498 0.1988 266); /* #2144C1 */
-  --tj-madd-necessary: oklch(0.3667 0.2441 264.2); /* #000EBC */
-  --tj-ikhfa: oklch(0.4814 0.229 321.7); /* #9400A8 */
-  --tj-ikhfa-shafawi: oklch(0.5955 0.263 336.5); /* #D500B7 */
-  --tj-idgham-ghunnah: oklch(0.5739 0.1916 141.7); /* #169200 */
-  --tj-idgham-plain: oklch(0.5739 0.1916 141.7); /* #169200 */
-  --tj-idgham-shafawi: oklch(0.696 0.2081 136.3); /* #58B800 */
-  --tj-idgham-near: oklch(0.709 0 90); /* #A1A1A1 */
-  --tj-iqlab: oklch(0.7574 0.1471 232.2); /* #26BFFD */
-  --tj-ghunnah: oklch(0.7297 0.1833 50.1); /* #FF7E1E */
-  --tj-qalqalah: oklch(0.5639 0.2309 28.6); /* #DD0008 */
-  --tj-silent: oklch(0.738 0 90); /* #AAAAAA */
+  /* Tajweed — Tarteel Mushaf colour system.
+
+     These are the colours used by the Tarteel Mushaf, as described at
+     https://support.tarteel.ai/en/articles/14936922-understanding-tajweed-colors-in-the-tarteel-mushaf
+
+     Madd escalates by obligation: yellow (ṭabīʿī, natural 2 counts) →
+     light orange (ʿāriḍ li-sukūn, permissible at end of verse) →
+     orange-red (wājib muttaṣil, obligatory 4–5 counts) →
+     dark red (lāzim, necessary 6 counts).
+     Ghunnah is green, Qalqalah is light blue, Tafkhim/heavy is dark blue,
+     silent letters are grey.
+
+     Rules not in the Tarteel system (ikhfāʾ, idghām, iqlāb) keep their
+     previous colours so they remain visually distinct.
+
+     Each hex is given so the match stays checkable. */
+  --tj-madd-normal: oklch(0.8792 0.1685 98.5);       /* #E8C800 — Yellow */
+  --tj-madd-permissible: oklch(0.7713 0.148 57.0);   /* #E8A000 — Light Orange */
+  --tj-madd-obligatory: oklch(0.6284 0.196 32.0);    /* #CC4400 — Orange-Red */
+  --tj-madd-necessary: oklch(0.4785 0.1927 358.3);   /* #A9045C — Dark Red */
+  --tj-ikhfa: oklch(0.4814 0.229 321.7);             /* #9400A8 */
+  --tj-ikhfa-shafawi: oklch(0.5955 0.263 336.5);     /* #D500B7 */
+  --tj-idgham-ghunnah: oklch(0.5739 0.1916 141.7);   /* #169200 */
+  --tj-idgham-plain: oklch(0.5739 0.1916 141.7);     /* #169200 */
+  --tj-idgham-shafawi: oklch(0.696 0.2081 136.3);    /* #58B800 */
+  --tj-idgham-near: oklch(0.709 0 90);               /* #A1A1A1 */
+  --tj-iqlab: oklch(0.7574 0.1471 232.2);            /* #26BFFD */
+  --tj-ghunnah: oklch(0.5739 0.1916 141.7);          /* #169200 — Green */
+  --tj-qalqalah: oklch(0.7574 0.1471 232.2);         /* #26BFFD — Light Blue */
+  --tj-tafkhim: oklch(0.3958 0.1319 259.0);          /* #00369E — Dark Blue */
+  --tj-silent: oklch(0.738 0 90);                    /* #AAAAAA — Grey */
 }
 
 .dark {
@@ -94,28 +104,26 @@
   --ring: oklch(0.72 0.13 165 / 0.5);
   --shadow-color: 160 30% 3%;
 
-  /* The standard palette is drawn for ink on paper, and its darker half —
-     madd lāzim at #000EBC especially — disappears against this surface. So
-     each colour keeps the standard *hue* exactly, which is what a reader
-     recognises, and only lightness and chroma move, by the least that clears
-     4.5:1 against `--surface`. Ordering survives the lift: madd still deepens
-     and saturates with obligation, iqlāb is still the one bright sky blue
-     (unchanged — it already reads here), silent letters are still the greys.
-     Change a hue here and it stops being the standard palette. */
-  --tj-madd-normal: oklch(0.74 0.131 266.5);
-  --tj-madd-permissible: oklch(0.7 0.153 270.5);
-  --tj-madd-obligatory: oklch(0.66 0.176 266);
-  --tj-madd-necessary: oklch(0.62 0.2 264.2);
+  /* Tarteel Mushaf colours, lifted for legibility against dark surface.
+     Hues are kept exactly; only lightness/chroma adjusted to clear 4.5:1.
+     Yellow (madd ṭabīʿī) → light orange (permissible) → orange-red (obligatory)
+     → dark red (lāzim). Ghunnah = green, Qalqalah = light blue,
+     Tafkhim = dark blue (lifted), silent = grey. */
+  --tj-madd-normal: oklch(0.88 0.165 98.5);          /* Yellow, as-is — already bright */
+  --tj-madd-permissible: oklch(0.82 0.148 57.0);     /* Light orange, lifted */
+  --tj-madd-obligatory: oklch(0.72 0.18 32.0);       /* Orange-red, lifted */
+  --tj-madd-necessary: oklch(0.633 0.193 358.3);     /* Dark red, lifted */
   --tj-ikhfa: oklch(0.68 0.23 321.7);
   --tj-ikhfa-shafawi: oklch(0.7 0.24 336.5);
   --tj-idgham-ghunnah: oklch(0.72 0.2 141.7);
   --tj-idgham-plain: oklch(0.72 0.2 141.7);
   --tj-idgham-shafawi: oklch(0.84 0.22 136.3);
-  --tj-idgham-near: oklch(0.6 0.008 90);
-  --tj-iqlab: oklch(0.7574 0.1471 232.2); /* #26BFFD, as-is */
-  --tj-ghunnah: oklch(0.76 0.155 50.1);
-  --tj-qalqalah: oklch(0.66 0.21 28.6);
-  --tj-silent: oklch(0.645 0.008 90);
+  --tj-idgham-near: oklch(0.605 0.008 90);
+  --tj-iqlab: oklch(0.7574 0.1471 232.2);            /* #26BFFD, as-is */
+  --tj-ghunnah: oklch(0.72 0.2 141.7);               /* Green, lifted */
+  --tj-qalqalah: oklch(0.7574 0.1471 232.2);         /* Light blue, as-is */
+  --tj-tafkhim: oklch(0.6 0.15 259.0);               /* Dark blue, lifted */
+  --tj-silent: oklch(0.645 0.008 90);                /* Grey, as-is */
 }
 
 @theme inline {
