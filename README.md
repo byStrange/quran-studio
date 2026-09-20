@@ -9,12 +9,15 @@ The whole app speaks **English, Russian or Uzbek** — one setting picks the
 interface, the verse translation, the word-by-word glosses, the tafsir edition
 and the language the AI writes its explanations in.
 
-Words are learned by saying whether you know them: a miss opens the ayah the
-word came from, with its translation and the word picked out inside it. A round
-covers one ruku, one surah's memorized ayahs, or everything memorized — and
-every ruku has a quiz button beside it. The app opens with the next tafsir you
-haven't read for an ayah you have memorized, and a whole surah can be read end
-to end in one continuous scroll.
+Words are learned on a spaced schedule. A card shows the Arabic, you turn it
+over to the gloss and the ayah the word was used in, and you say how it went —
+*again*, *hard*, *good* or *easy* — with the interval each answer would buy
+printed on the button. A word counts as learned only once its interval reaches
+three weeks, which no single lucky round can buy. A round covers whatever is
+due, one ruku, one surah or everything you have memorized, and every ruku has a
+quiz button beside it. The app opens with the next tafsir you haven't read for
+an ayah you have memorized, and a whole surah can be read end to end in one
+continuous scroll.
 
 Recitation plays from the reciter's own continuous surah recording — the reader
 follows the ayah, and the word, as it is sung — with 13 reciters, per-surah

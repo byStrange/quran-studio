@@ -22,12 +22,12 @@ import { useRuku, useRukuVerses, useSurahs, useSurahVerseIds } from "@/hooks/use
 import {
   useMemorizedVerses,
   useTafsirReadVerses,
-  useWordsLearnedVerses,
   useToggleMemorized,
   useToggleTafsirRead,
-  useToggleWordsLearned,
+  useSetWordsStatus,
   useWordProgress,
 } from "@/hooks/useProgress";
+import { learnedVerseIds, quizzableWordIds } from "@/lib/vocabulary";
 import {
   useActiveReciter,
   useReciters,
@@ -39,7 +39,7 @@ import { useSurahDownload } from "@/hooks/useAudioDownloads";
 import { useUiPrefs, useUpdateProfile } from "@/hooks/useProfile";
 import { useReadingTimer } from "@/hooks/useReadingTimer";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
-import type { RepeatMode } from "@/lib/types";
+import type { RepeatMode, Word } from "@/lib/types";
 import { ayahRangeLabel, cn, formatClock } from "@/lib/utils";
 import { useT } from "@/providers/I18nProvider";
 import { AudioBar } from "@/components/reader/AudioBar";
@@ -84,10 +84,33 @@ export function Reader() {
     () => verseIds.filter((id) => !memorized?.has(id)),
     [verseIds, memorized],
   );
-  const { data: wordsLearned } = useWordsLearnedVerses(verseIds);
   const { data: wordStatuses } = useWordProgress(wordIds);
   const toggleMemorized = useToggleMemorized();
-  const toggleWordsLearned = useToggleWordsLearned();
+  const setWordsStatus = useSetWordsStatus();
+
+  /**
+   * The ayahs whose words are all learned — read off the word list rather than
+   * kept in a table of its own. The marker used to be its own row, which meant
+   * an ayah could have every word marked learned and still show as unmarked.
+   * There is one fact now, and this is a reading of it.
+   */
+  const wordsLearned = useMemo(
+    () => learnedVerseIds(verses ?? [], wordStatuses ?? new Map()),
+    [verses, wordStatuses],
+  );
+
+  /** Marks or unmarks every word in an ayah, which is what the marker means. */
+  const setVerseWordsLearned = useCallback(
+    (verse: { id: number; words: Word[] }) => {
+      const wordIds = quizzableWordIds(verse.words);
+      if (wordIds.length === 0) return;
+      setWordsStatus.mutate({
+        wordIds,
+        status: wordsLearned.has(verse.id) ? "learning" : "learned",
+      });
+    },
+    [setWordsStatus, wordsLearned],
+  );
 
   const surahNumber = ruku?.surah_number ?? null;
 
@@ -375,7 +398,7 @@ export function Reader() {
   );
 
   const wordsLearnedCount = useMemo(
-    () => verseIds.filter((id) => wordsLearned?.has(id)).length,
+    () => verseIds.filter((id) => wordsLearned.has(id)).length,
     [verseIds, wordsLearned],
   );
 
@@ -747,13 +770,8 @@ export function Reader() {
                         read: !(tafsirRead?.has(verse.id) ?? false),
                       })
                     }
-                    wordsLearned={wordsLearned?.has(verse.id) ?? false}
-                    onToggleWordsLearned={() =>
-                      toggleWordsLearned.mutate({
-                        verseIds: [verse.id],
-                        learned: !(wordsLearned?.has(verse.id) ?? false),
-                      })
-                    }
+                    wordsLearned={wordsLearned.has(verse.id)}
+                    onToggleWordsLearned={() => setVerseWordsLearned(verse)}
                     selected={selectedAyah === verse.ayah_number}
                     onSelect={() => showTafsirFor(verse.ayah_number)}
                     wordsExpanded={expandedVerses.has(verse.id)}
@@ -844,13 +862,8 @@ export function Reader() {
               read: !(tafsirRead?.has(verse.id) ?? false),
             })
           }
-          wordsLearned={wordsLearned ?? new Set()}
-          onToggleWordsLearned={(verse) =>
-            toggleWordsLearned.mutate({
-              verseIds: [verse.id],
-              learned: !(wordsLearned?.has(verse.id) ?? false),
-            })
-          }
+          wordsLearned={wordsLearned}
+          onToggleWordsLearned={setVerseWordsLearned}
           wordStatuses={wordStatuses ?? new Map()}
           sessionSeconds={sessionSeconds}
           loading={versesLoading}

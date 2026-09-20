@@ -5,7 +5,7 @@ import { Check, RefreshCw, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { VerseContext, Word, WordStatus } from "@/lib/types";
 import { describeAiError, getWordContext, isTauri } from "@/lib/ai";
-import { useSetWordStatus } from "@/hooks/useProgress";
+import { useSetWordsStatus } from "@/hooks/useProgress";
 import { useLanguage, useT } from "@/providers/I18nProvider";
 import { wordGloss } from "@/lib/language";
 import { Button } from "@/components/ui/button";
@@ -118,7 +118,7 @@ export function WordChip({
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const setStatus = useSetWordStatus();
+  const setStatus = useSetWordsStatus();
   const language = useLanguage();
   const current = status ?? "none";
 
@@ -166,7 +166,7 @@ export function WordChip({
               className="flex-1"
               onClick={() =>
                 setStatus.mutate({
-                  wordId: word.id,
+                  wordIds: [word.id],
                   status: current === "learned" ? "learning" : "learned",
                 })
               }
@@ -178,7 +178,7 @@ export function WordChip({
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => setStatus.mutate({ wordId: word.id, status: "learning" })}
+                onClick={() => setStatus.mutate({ wordIds: [word.id], status: "learning" })}
               >
                 {t("word.learning")}
               </Button>

@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { GraduationCap, Library } from "lucide-react";
+import { AlarmClock, GraduationCap, Library } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSurahs } from "@/hooks/useQuranData";
-import { useSetWordStatus } from "@/hooks/useProgress";
-import { useLanguage, useT } from "@/providers/I18nProvider";
+import { useSetWordsStatus, useVocabularyOverview } from "@/hooks/useProgress";
+import { useIntervalUnits, useLanguage, useT } from "@/providers/I18nProvider";
 import { wordGloss } from "@/lib/language";
+import { formatInterval, isDue, minutesUntil } from "@/lib/vocabulary";
 import { Page } from "@/components/layout/AppShell";
 import { Card, CardBody, StatTile } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,8 @@ interface VocabRow {
   status: WordStatus;
   review_count: number;
   correct_count: number;
+  /** When the card next wants asking. Null only for rows written before the schedule. */
+  due_at: string | null;
   word: {
     id: number;
     arabic: string;
@@ -35,25 +38,13 @@ export function Vocabulary() {
   const { user } = useAuth();
   const language = useLanguage();
   const { data: surahs } = useSurahs();
-  const setStatus = useSetWordStatus();
+  const setStatus = useSetWordsStatus();
+  const units = useIntervalUnits();
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [surahFilter, setSurahFilter] = useState<string>("all");
 
-  const overview = useQuery({
-    queryKey: ["vocabulary-overview", user?.id],
-    enabled: Boolean(user),
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("vocabulary_overview");
-      if (error) throw error;
-      return data as unknown as {
-        encountered: number;
-        learned: number;
-        learning: number;
-        rukus_read: number;
-      };
-    },
-  });
+  const overview = useVocabularyOverview();
 
   const words = useQuery({
     queryKey: ["vocabulary", user?.id, statusFilter, surahFilter],
@@ -62,14 +53,21 @@ export function Vocabulary() {
       let query = supabase
         .from("user_word_progress")
         .select(
-          "status, review_count, correct_count, " +
+          "status, review_count, correct_count, due_at, " +
             "word:quran_words!inner(id, arabic, transliteration, gloss_en, gloss_ru, " +
             "verse:quran_verses!inner(surah_number, ayah_number, ruku_number))",
         )
-        .order("updated_at", { ascending: false })
         .limit(500);
 
-      if (statusFilter !== "all") query = query.eq("status", statusFilter as WordStatus);
+      // Due words are ordered by how overdue they are, everything else by when
+      // it was last touched: the first list is a queue to work through, the
+      // second is a record to look things up in.
+      if (statusFilter === "due") {
+        query = query.lte("due_at", new Date().toISOString()).order("due_at", { ascending: true });
+      } else {
+        query = query.order("updated_at", { ascending: false });
+        if (statusFilter !== "all") query = query.eq("status", statusFilter as WordStatus);
+      }
       if (surahFilter !== "all") {
         query = query.eq("word.verse.surah_number", Number(surahFilter));
       }
@@ -82,6 +80,7 @@ export function Vocabulary() {
 
   const statusFilters = [
     { value: "all", label: t("vocab.allWords") },
+    { value: "due", label: t("vocab.dueNow") },
     { value: "learning", label: t("vocab.learning") },
     { value: "learned", label: t("vocab.learned") },
   ];
@@ -111,22 +110,32 @@ export function Vocabulary() {
         </Button>
       }
     >
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {/* "Due" leads, and it is the only tile that is a thing to do rather
+          than a score: how many words are learned settles slowly and says
+          nothing about this evening. */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <StatTile
-          label={t("vocab.encountered")}
-          value={overview.data?.encountered ?? 0}
-          hint={t("vocab.encounteredHint")}
+          label={t("vocab.dueNow")}
+          value={overview.data?.due ?? 0}
+          accent
+          icon={<AlarmClock className="size-4" />}
+          hint={t("vocab.dueNowHint")}
         />
         <StatTile
           label={t("vocab.learned")}
           value={overview.data?.learned ?? 0}
-          accent
           icon={<Library className="size-4" />}
+          hint={t("vocab.learnedHint")}
         />
         <StatTile
           label={t("vocab.learning")}
           value={overview.data?.learning ?? 0}
           hint={t("vocab.learningHint")}
+        />
+        <StatTile
+          label={t("vocab.encountered")}
+          value={overview.data?.encountered ?? 0}
+          hint={t("vocab.encounteredHint")}
         />
         <StatTile
           label={t("vocab.rukusRead")}
@@ -192,23 +201,39 @@ export function Vocabulary() {
                     </Link>
                   </div>
 
-                  {row.review_count > 0 ? (
-                    <div className="hidden w-24 shrink-0 text-[0.75rem] tabular-nums text-fg-subtle sm:block">
-                      {t("vocab.correctOf", {
-                        correct: row.correct_count,
-                        total: row.review_count,
-                      })}
+                  {/* The schedule sits where the tally used to, because it is
+                      the thing that has an answer: "3/5 correct" is a history,
+                      "due now" and "out at 2mo" are where the word stands. The
+                      tally stays underneath it, smaller. */}
+                  <div className="hidden w-28 shrink-0 text-right sm:block">
+                    <div
+                      className={cn(
+                        "text-[0.75rem] tabular-nums",
+                        isDue(row.due_at) ? "font-medium text-gold-soft-fg" : "text-fg-subtle",
+                      )}
+                    >
+                      {row.review_count === 0
+                        ? t("vocab.notQuizzed")
+                        : isDue(row.due_at)
+                          ? t("vocab.dueNow")
+                          : t("vocab.dueIn", {
+                              interval: formatInterval(minutesUntil(row.due_at) ?? 0, units),
+                            })}
                     </div>
-                  ) : (
-                    <div className="hidden w-24 shrink-0 text-[0.75rem] text-fg-subtle sm:block">
-                      {t("vocab.notQuizzed")}
-                    </div>
-                  )}
+                    {row.review_count > 0 ? (
+                      <div className="mt-0.5 text-[0.6875rem] tabular-nums text-fg-subtle">
+                        {t("vocab.correctOf", {
+                          correct: row.correct_count,
+                          total: row.review_count,
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
 
                   <button
                     onClick={() =>
                       setStatus.mutate({
-                        wordId: row.word.id,
+                        wordIds: [row.word.id],
                         status: row.status === "learned" ? "learning" : "learned",
                       })
                     }

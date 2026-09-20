@@ -1,33 +1,42 @@
 /**
- * The vocabulary round: one word at a time, answered from memory.
+ * The vocabulary round: one card at a time, answered from memory and graded.
  *
- * There are no options to pick between, because four answers drawn from the
- * same glossary can be narrowed down without knowing the word — that tested
- * elimination rather than vocabulary. The reader claims, the gloss and the
- * ayah it was used in are shown, and they confirm against them; see
- * `SelfAssess` for why the answer is given twice.
+ * The front is the Arabic and nothing else. There is no "do you know it?" to
+ * answer first — a claim made before the reveal only ever measured confidence,
+ * and the grade after the reveal measures the same thing better, because by
+ * then the reader can see what they were claiming about. So: show the word,
+ * turn it over, say how it went.
  *
- * What is written down is the confirmation, not the claim: knowing a word
- * marks it learned, missing it marks it learning, including from learned,
- * which is the whole point of coming back to a word you once knew.
+ * "How it went" is four answers rather than two, and that is the whole point
+ * of the round. A boolean could only put a word on or off a list, so the only
+ * schedule it could support was "missed words first" — which in a ten-card
+ * round means the four you just failed are the first four you see next, while
+ * you still remember failing them. A grade buys an interval instead: minutes
+ * after a lapse, a day once it graduates, then weeks. The intervals are drawn
+ * on the buttons, so the choice is between consequences rather than adjectives.
+ *
+ * A grade also advances the card. There is no confirm step and no Next button,
+ * because the grade *is* the answer and asking for a second click after it is
+ * how a review session stops being one.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { GraduationCap, Repeat2, RotateCcw, Settings2, X } from "lucide-react";
+import { Eye, GraduationCap, Repeat2, RotateCcw, Settings2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
-import { useLanguage, useT } from "@/providers/I18nProvider";
+import { useLanguage, useT, useIntervalUnits } from "@/providers/I18nProvider";
 import { verseTranslation } from "@/lib/language";
+import { formatInterval, gradePassed, isDue, minutesUntil, type ReviewGrade } from "@/lib/vocabulary";
 import type { WordStatus } from "@/lib/types";
 import { verseKey } from "@/lib/utils";
 import { Card, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState, LoadingBlock } from "@/components/ui/feedback";
-import { SelfAssess, type SelfAssessResult } from "./SelfAssess";
+import { GradeBar } from "./GradeBar";
 import { HighlightedArabic, RoundHeader, RoundSummary, type RoundConfig } from "./round";
 
-/** One word as the round drew it, with the ayah it came from. */
+/** One card as the round drew it: the word, its ayah, and its schedule. */
 interface QuizWord {
   word_id: number;
   arabic: string;
@@ -43,7 +52,16 @@ interface QuizWord {
   translation_en: string;
   translation_ru: string;
   translation_uz: string;
+  ease: number;
+  interval_days: number;
+  reps: number;
+  due_at: string | null;
+  next_again_minutes: number;
+  next_hard_minutes: number;
+  next_good_minutes: number;
+  next_easy_minutes: number;
   pool_size: number;
+  due_count: number;
 }
 
 export function VocabularyRound({
@@ -59,12 +77,11 @@ export function VocabularyRound({
   const language = useLanguage();
 
   const [index, setIndex] = useState(0);
-  const [answer, setAnswer] = useState<SelfAssessResult | null>(null);
+  const [revealed, setRevealed] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
-  const [revisedCount, setRevisedCount] = useState(0);
   const [missed, setMissed] = useState<QuizWord[]>([]);
   const [done, setDone] = useState(false);
-  /** A round rebuilt from the words missed in the previous one, bypassing the draw. */
+  /** A round rebuilt from the cards failed in the previous one, bypassing the draw. */
   const [custom, setCustom] = useState<QuizWord[] | null>(null);
 
   const round = useQuery({
@@ -86,16 +103,22 @@ export function VocabularyRound({
   });
 
   const record = useMutation({
-    mutationFn: async (input: { wordId: number; claimed: boolean; correct: boolean }) => {
-      const { error } = await supabase.rpc("record_quiz_attempt", {
+    mutationFn: async (input: { wordId: number; grade: ReviewGrade }) => {
+      const { error } = await supabase.rpc("record_vocab_review", {
         p_word_id: input.wordId,
-        p_correct: input.correct,
-        p_claimed: input.claimed,
+        p_grade: input.grade,
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      for (const key of ["vocabulary", "vocabulary-overview", "word-progress", "ruku-word-stats", "quiz-scoreboard"]) {
+      for (const key of [
+        "vocabulary",
+        "vocabulary-overview",
+        "word-progress",
+        "ruku-word-stats",
+        "ruku-progress",
+        "quiz-scoreboard",
+      ]) {
         queryClient.invalidateQueries({ queryKey: [key] });
       }
     },
@@ -104,30 +127,53 @@ export function VocabularyRound({
   const questions = custom ?? round.data ?? [];
   const question = questions[index];
 
-  // Written down on the way out of a question rather than on the claim: the
-  // reader is still allowed to change the answer until they move on, and one
-  // question should leave one attempt behind, not one per change of mind.
-  const next = useCallback(() => {
-    if (!question || !answer) return;
-    record.mutate({ wordId: question.word_id, claimed: answer.claimed, correct: answer.correct });
-    if (answer.correct) setCorrectCount((n) => n + 1);
-    else setMissed((words) => [...words, question]);
-    if (answer.claimed !== answer.correct) setRevisedCount((n) => n + 1);
+  const grade = useCallback(
+    (value: ReviewGrade) => {
+      if (!question) return;
+      record.mutate({ wordId: question.word_id, grade: value });
+      if (gradePassed(value)) setCorrectCount((n) => n + 1);
+      else setMissed((words) => [...words, question]);
 
-    setAnswer(null);
-    if (index + 1 >= questions.length) setDone(true);
-    else setIndex(index + 1);
-  }, [answer, index, question, questions.length, record]);
+      setRevealed(false);
+      if (index + 1 >= questions.length) setDone(true);
+      else setIndex(index + 1);
+    },
+    [index, question, questions.length, record],
+  );
 
   const reset = (words: QuizWord[] | null) => {
     setCustom(words);
     setIndex(0);
-    setAnswer(null);
+    setRevealed(false);
     setCorrectCount(0);
-    setRevisedCount(0);
     setMissed([]);
     setDone(false);
   };
+
+  useEffect(() => {
+    if (revealed || done) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === " " || event.key === "Enter") {
+        event.preventDefault();
+        setRevealed(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [revealed, done]);
+
+  const intervals = useMemo(
+    () =>
+      question
+        ? {
+            again: question.next_again_minutes,
+            hard: question.next_hard_minutes,
+            good: question.next_good_minutes,
+            easy: question.next_easy_minutes,
+          }
+        : { again: 0, hard: 0, good: 0, easy: 0 },
+    [question],
+  );
 
   if (round.isError) {
     return (
@@ -153,11 +199,13 @@ export function VocabularyRound({
       <Card>
         <EmptyState
           icon={<GraduationCap className="size-5" />}
-          title={t("quiz.emptyScope")}
+          title={config.scope === "due" ? t("quiz.nothingDue") : t("quiz.emptyScope")}
           description={
-            config.scope === "surah"
-              ? t("quiz.emptySurahDescription")
-              : t("quiz.emptyDescription")
+            config.scope === "due"
+              ? t("quiz.nothingDueDescription")
+              : config.scope === "global"
+                ? t("quiz.emptyDescription")
+                : t("quiz.emptyScopeDescription")
           }
           action={
             <div className="flex gap-2">
@@ -181,7 +229,7 @@ export function VocabularyRound({
       <RoundSummary
         correct={correctCount}
         answered={answered}
-        revised={revisedCount}
+        revised={0}
         verdicts={{
           strong: t("quiz.verdictStrong"),
           solid: t("quiz.verdictSolid"),
@@ -249,7 +297,7 @@ export function VocabularyRound({
       <RoundHeader
         index={index}
         total={questions.length}
-        answered={answer !== null}
+        answered={revealed}
         onSetup={onSetup}
       />
 
@@ -262,37 +310,83 @@ export function VocabularyRound({
             {question!.transliteration ? (
               <div className="mt-2 text-sm italic text-fg-subtle">{question!.transliteration}</div>
             ) : null}
-            <div className="mt-1.5 text-[0.75rem] text-fg-subtle">
-              {verseKey(question!.surah_number, question!.ayah_number)}
+            <div className="mt-1.5 flex items-center justify-center gap-2 text-[0.75rem] text-fg-subtle">
+              <span className="tabular-nums">
+                {verseKey(question!.surah_number, question!.ayah_number)}
+              </span>
+              <CardState word={question!} />
             </div>
           </div>
 
-          <SelfAssess
-            questionKey={question!.word_id}
-            prompt={t("quiz.doYouKnow")}
-            onAnswer={setAnswer}
-            onNext={next}
-            nextLabel={index + 1 >= questions.length ? t("quiz.finish") : t("quiz.next")}
-          >
-            <div className="rounded-xl border border-border bg-surface-2/50 p-4">
-              <p className="text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
-                {t("quiz.itMeans")}
+          {!revealed ? (
+            <div className="mx-auto mt-8 max-w-md">
+              <Button variant="primary" className="w-full" onClick={() => setRevealed(true)}>
+                <Eye className="size-4" aria-hidden />
+                {t("quiz.showAnswer")}
+              </Button>
+              <p className="mt-3 text-center text-[0.6875rem] text-fg-subtle">
+                {t("quiz.showAnswerHint")}
               </p>
-              <p className="mt-1.5 text-[0.9375rem] font-medium text-fg">{question!.gloss}</p>
-
-              <p className="mt-4 text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
-                {t("quiz.inContext", {
-                  reference: verseKey(question!.surah_number, question!.ayah_number),
-                })}
-              </p>
-              <p className="arabic mt-2 text-fg" dir="rtl">
-                <HighlightedArabic text={question!.verse_arabic} mark={question!.arabic} />
-              </p>
-              <p className="mt-3 text-[0.9375rem] leading-relaxed text-fg-muted">{translation}</p>
             </div>
-          </SelfAssess>
+          ) : (
+            <div className="mt-7 animate-fade-in">
+              <div className="rounded-xl border border-border bg-surface-2/50 p-4">
+                <p className="text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
+                  {t("quiz.itMeans")}
+                </p>
+                <p className="mt-1.5 text-[0.9375rem] font-medium text-fg">{question!.gloss}</p>
+
+                <p className="mt-4 text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
+                  {t("quiz.inContext", {
+                    reference: verseKey(question!.surah_number, question!.ayah_number),
+                  })}
+                </p>
+                <p className="arabic mt-2 text-fg" dir="rtl">
+                  <HighlightedArabic text={question!.verse_arabic} mark={question!.arabic} />
+                </p>
+                <p className="mt-3 text-[0.9375rem] leading-relaxed text-fg-muted">{translation}</p>
+              </div>
+
+              <p className="mt-5 text-center text-[0.8125rem] text-fg-subtle">
+                {t("quiz.howDidItGo")}
+              </p>
+              <div className="mt-3">
+                <GradeBar intervals={intervals} onGrade={grade} />
+              </div>
+            </div>
+          )}
         </CardBody>
       </Card>
     </>
+  );
+}
+
+/**
+ * Where this card stands before it is answered — new, waiting, or ahead of
+ * schedule. One line, and only when it says something: a word being asked for
+ * the first time is a different kind of question from one coming back after
+ * three weeks, and the reader grades them differently once they know which is
+ * which.
+ */
+function CardState({ word }: { word: QuizWord }) {
+  const t = useT();
+  const units = useIntervalUnits();
+
+  if (!word.tracked) {
+    return <span className="rounded-full bg-surface-2 px-2 py-0.5">{t("quiz.cardNew")}</span>;
+  }
+  if (isDue(word.due_at)) {
+    return (
+      <span className="rounded-full bg-gold-soft/60 px-2 py-0.5 text-fg-muted">
+        {t("quiz.cardDue")}
+      </span>
+    );
+  }
+  return (
+    <span className="rounded-full bg-surface-2 px-2 py-0.5">
+      {t("quiz.cardAhead", {
+        interval: formatInterval(minutesUntil(word.due_at) ?? 0, units),
+      })}
+    </span>
   );
 }

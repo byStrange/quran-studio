@@ -31,7 +31,11 @@ export function RoundHeader({
 }: {
   index: number;
   total: number;
-  /** Whether the current question has been claimed, so the bar moves on the claim. */
+  /**
+   * Whether the current question has been answered far enough for the bar to
+   * move: claimed, in the comprehension round, or turned over in the
+   * vocabulary one.
+   */
   answered: boolean;
   onSetup: () => void;
 }) {
@@ -117,6 +121,7 @@ export function scopeLabel(
   config: Pick<RoundConfig, "scope" | "surah" | "ruku">,
   surahName: string | undefined,
 ): string {
+  if (config.scope === "due") return t("quiz.scopeDue");
   if (config.scope === "ruku") return t("browse.rukuLabel", { number: config.ruku ?? "" }).trim();
   if (config.scope === "surah") return surahName ?? t("quiz.surah");
   return t("quiz.allMemorized");

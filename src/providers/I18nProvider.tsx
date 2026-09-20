@@ -29,6 +29,7 @@ import { ru } from "@/locales/ru";
 import { uz } from "@/locales/uz";
 import { useProfileLanguage } from "@/hooks/useProfile";
 import type { DurationUnits } from "@/lib/utils";
+import type { IntervalUnits } from "@/lib/vocabulary";
 
 const DICTIONARIES: Record<Language, Dictionary> = { en, ru, uz };
 
@@ -88,6 +89,27 @@ export function useDurationUnits(): DurationUnits {
   const { t } = useI18n();
   return useMemo(
     () => ({ hour: t("unit.hour"), minute: t("unit.minute"), second: t("unit.second") }),
+    [t],
+  );
+}
+
+/**
+ * The interval suffixes, for `formatInterval`.
+ *
+ * Split out for the same reason `useDurationUnits` is: the formatter is a pure
+ * function called from render and from scripts alike, so it takes its units
+ * rather than reaching for a context that is not always there.
+ */
+export function useIntervalUnits(): IntervalUnits {
+  const { t } = useI18n();
+  return useMemo(
+    () => ({
+      minute: t("unit.minute"),
+      hour: t("unit.hour"),
+      day: t("unit.day"),
+      month: t("unit.month"),
+      year: t("unit.year"),
+    }),
     [t],
   );
 }

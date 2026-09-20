@@ -615,12 +615,20 @@ those fall back to English rather than importing shifted.
 from `user_word_progress`, which meant the deck only ever held words the reader
 had remembered to mark — so "finish this ruku, then learn its words" began with
 a dozen taps before a single question could be asked. `quiz_pool` now takes a
-scope: `ruku` (every word in the ruku), `surah` (words in that surah's
-memorized ayahs), `global` (every memorized ayah). Answers still write to
-`user_word_progress`; that is where they are *recorded*, not where the
-questions are chosen from. Ruku scope deliberately does not require the ruku to
-be marked memorized — reciting it and knowing its vocabulary are separate
-steps, and the second follows the first.
+scope: `due` (whatever the schedule says is ready), `ruku` (every word in the
+ruku), `surah` (every word in the surah), `global` (every memorized ayah).
+Answers still write to `user_word_progress`; that is where they are *recorded*,
+not where the questions are chosen from.
+
+**Only "everything memorized" asks what has been memorized.** Naming a ruku
+never required it to be marked memorized — reciting a passage and knowing its
+vocabulary are separate steps, and the second follows the first. Naming a surah
+used to, which made the same request succeed from the reader's quiz button and
+fail from the quiz screen, with an empty round and a message about marking
+ayahs. One door open and one door shut for one question. A named passage is now
+taken at face value in both pools, and `global` keeps the memorized filter
+because that is the entire meaning of that scope: test me on what I actually
+know by heart.
 
 **The multiple-choice round is gone.** Four options drawn from a shared gloss
 pool can be narrowed down without knowing the word: eliminate the two that are
@@ -633,13 +641,71 @@ where it is used, not as a glossary entry. `quiz_distractors` was dropped with
 the format it served, and `quiz_pool` returns the verse instead of three wrong
 answers.
 
-Answers are graded the way the reader asked for: knowing a word marks it
-*learned*, missing it marks it *learning* — including from *learned*, which is
-what makes revisiting a word worth anything. A word that was never tracked
-enters the list at the answer it was given, so the ruku round is also how words
-get onto the list. The pool prioritises words already being learned, then ones
-never asked, then ones already known, and reports `pool_size` alongside the
-page of words so "10 of 43" needs no second request.
+A word that was never tracked enters the list at the answer it was given, so a
+ruku round is also how words get onto the list, with no marking step first.
+`pool_size` comes back alongside the page of words so "10 of 43" needs no
+second request.
+
+**The vocabulary round is an Anki card, and the answer is one of four grades.**
+Blind recall with a yes/no answer could only ever put a word on or off a list,
+so the only schedule it could support was "missed words first" — which in a
+ten-card round means the four you just failed are the first four you see next,
+while you still remember failing them. Answering them then is recall from the
+previous screen, and under the old rule that second answer marked them learned
+and they left the deck. The round is now: the Arabic alone, a *show answer*
+step, then the gloss and the ayah it was used in, then *again / hard / good /
+easy*. The grade buys an interval — a minute or ten while the word is still in
+the learning steps, then a day, then weeks — and the interval each button would
+buy is drawn on the button, because "hard" and "good" are adjectives a reader
+has to guess the consequence of and "6m" and "10d" are the consequence.
+
+The claim-before-reveal step that both rounds shared is gone from this one. It
+was there to stop a reader being scored on confidence, and a four-point grade
+given *after* the reveal measures the same thing better, because by then they
+can see what they were claiming about. The comprehension round keeps it: there
+is no schedule behind an ayah for a grade to feed, so the claim is the only
+calibration signal it has. `quiz_attempts.claimed` stays for the history it
+already holds.
+
+**The scheduler is one function, in the database.** `srs_next(ease, interval,
+reps, grade)` is an SM-2 variant with Anki's learning steps and is `immutable`,
+so `quiz_pool` calls it four times per card dealt to label the buttons and
+`record_vocab_review` calls it once to apply the answer. One copy of the
+arithmetic, and a label that is a promise the write keeps. It lives in SQL
+rather than the client for the same reason the rest of the scoring does: the
+client is a view of the deck, not its owner.
+
+A lapse costs ease and ten minutes only when the card had reached a real
+interval. Failing a word you are meeting for the first time is what learning
+steps are *for*, so it costs one minute and no ease — charging it would slow
+that word down for the rest of its life.
+
+**"Learned" means the word survived three weeks, not that the last answer was
+yes.** The old rule was a single boolean, which one lucky round could buy and
+one bad one could take away, and which made the word list a record of the most
+recent answer. `word_status` is now derived from the schedule: `learned` when
+the interval has reached `srs_mature_days()` — 21, Anki's maturity line — which
+takes about six correct answers spread across weeks and cannot be reached any
+faster. A single *again* throws the interval away and the word is learning
+again. The column stays, because half the app filters on it, but nothing writes
+it by hand: `set_words_status` exists so a reader can still say "I know this
+one" outright, and it says it as a schedule — out at the maturity line, or back
+to due now — so a declaration and a round of answers leave the deck in the same
+shape. It never shortens an interval a word genuinely earned.
+
+**"Words learned" on an ayah is a reading of the word list, not a row.**
+`words_learned_verses` was a second, disagreeing answer to a question
+`user_word_progress` already answered: an ayah could have every one of its words
+marked learned and still show as unlearned, or be marked while half its words
+were not, and nothing said which was the true one. The marker is now computed —
+an ayah counts when every word in it that *can* be asked has been learned — so
+dropping one word back turns it off, which is what the reader expects it to
+mean. The button that used to write that row now does what it always claimed to
+do, which is mark the words. Words with no gloss are excluded from both sides
+of the test, for the same reason `quiz_pool` skips them: a word that can never
+be asked must never be the thing holding an ayah back. The migration walks the
+old rows into the word list before dropping the table, so every marker that
+existed survives.
 
 **A ruku's memorized state is computed, never stamped.** The header used to
 carry a button that marked every ayah in the ruku memorized at once, which read

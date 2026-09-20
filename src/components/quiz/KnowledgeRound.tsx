@@ -195,7 +195,7 @@ export function KnowledgeRound({
           title={t("quiz.nothingToAsk")}
           description={
             config.scope === "surah"
-              ? t("quiz.emptySurahDescription")
+              ? t("quiz.nothingToAskSurah")
               : config.scope === "ruku"
                 ? t("quiz.nothingToAskRuku")
                 : t("quiz.nothingToAskGlobal")

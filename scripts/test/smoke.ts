@@ -428,7 +428,7 @@ async function main(): Promise<void> {
       return rows.some((r) => !r.tracked) ? null : "every word was already tracked";
     });
 
-    await check("quiz_pool asks only memorized ayahs outside ruku scope", async () => {
+    await check("quiz_pool asks only memorized ayahs in the global scope", async () => {
       const { data, error } = await client.rpc("quiz_pool", { p_scope: "global", p_limit: 30 });
       if (error) return error.message;
       const rows = (data ?? []) as Array<{ surah_number: number; ayah_number: number }>;
@@ -437,7 +437,24 @@ async function main(): Promise<void> {
       return stray.length === 0 ? null : `${stray.length} words came from unmemorized ayahs`;
     });
 
-    await check("record_quiz_attempt teaches, then demotes, a word", async () => {
+    // The rule the two scopes used to disagree about: a ruku was taken whole
+    // and a surah was cut down to its memorized ayahs, so naming a passage
+    // worked from the reader and was refused from the quiz screen.
+    await check("quiz_pool takes a named surah whole, memorized or not", async () => {
+      const { data, error } = await client.rpc("quiz_pool", {
+        p_scope: "surah",
+        p_surah: 1,
+        p_limit: 50,
+      });
+      if (error) return error.message;
+      const rows = (data ?? []) as Array<{ surah_number: number; ayah_number: number }>;
+      if (rows.length === 0) return "surah 1 drew no words";
+      if (rows.some((r) => r.surah_number !== 1)) return "words leaked in from another surah";
+      // Only 1:1 is memorized, so anything past it proves the filter is gone.
+      return rows.some((r) => r.ayah_number > 1) ? null : "only the memorized ayah was drawn";
+    });
+
+    await check("record_vocab_review schedules a word, and a lapse unschedules it", async () => {
       const { data: pool, error: poolError } = await client.rpc("quiz_pool", {
         p_scope: "ruku",
         p_ruku: 1,
@@ -447,40 +464,162 @@ async function main(): Promise<void> {
       const fresh = (pool ?? []).find((w) => !w.tracked);
       if (!fresh) return "no untracked word to answer";
 
-      const statusOf = async (): Promise<string | undefined> => {
+      const card = async () => {
         const { data } = await client
           .from("user_word_progress")
-          .select("status")
+          .select("status, interval_days, reps, lapses, due_at")
           .eq("word_id", fresh.word_id)
           .maybeSingle();
-        return data?.status;
+        return data;
       };
 
-      // A miss is how a word gets onto the list in the first place.
-      const miss = await client.rpc("record_quiz_attempt", {
+      // An answer is how a word gets onto the list in the first place, and a
+      // failing one leaves it in the learning steps rather than off the list.
+      const again = await client.rpc("record_vocab_review", {
         p_word_id: fresh.word_id,
-        p_correct: false,
+        p_grade: "again",
       });
-      if (miss.error) return miss.error.message;
-      const afterMiss = await statusOf();
-      if (afterMiss !== "learning") return `a miss left status ${afterMiss}`;
+      if (again.error) return again.error.message;
+      const afterAgain = await card();
+      if (afterAgain?.status !== "learning") return `a lapse left status ${afterAgain?.status}`;
+      if ((afterAgain?.interval_days ?? -1) !== 0) return "a lapse kept an interval";
+      if (!afterAgain?.due_at) return "a lapse left the word unscheduled";
 
-      const hit = await client.rpc("record_quiz_attempt", {
+      // Two good answers graduate it out of the learning steps to a real
+      // interval — and one good answer is deliberately not enough.
+      const first = await client.rpc("record_vocab_review", {
         p_word_id: fresh.word_id,
-        p_correct: true,
+        p_grade: "good",
       });
-      if (hit.error) return hit.error.message;
-      const afterHit = await statusOf();
-      if (afterHit !== "learned") return `knowing a word left status ${afterHit}`;
+      if (first.error) return first.error.message;
+      const afterFirst = await card();
+      if ((afterFirst?.interval_days ?? -1) !== 0) return "one good answer graduated the card";
 
-      // Knowing it once is not forever: missing it again drops it back.
-      const lapse = await client.rpc("record_quiz_attempt", {
+      const second = await client.rpc("record_vocab_review", {
         p_word_id: fresh.word_id,
-        p_correct: false,
+        p_grade: "good",
       });
-      if (lapse.error) return lapse.error.message;
-      const afterLapse = await statusOf();
-      return afterLapse === "learning" ? null : `a learned word did not demote (${afterLapse})`;
+      if (second.error) return second.error.message;
+      const afterSecond = await card();
+      if ((afterSecond?.interval_days ?? 0) < 1) return "two good answers did not graduate the card";
+      // Still learning: "learned" is 21 days away, which is the whole point.
+      if (afterSecond?.status !== "learning") {
+        return `a two-day-old card claims status ${afterSecond?.status}`;
+      }
+
+      // Easy from here takes a much longer step than good would have.
+      const easy = await client.rpc("record_vocab_review", {
+        p_word_id: fresh.word_id,
+        p_grade: "easy",
+      });
+      if (easy.error) return easy.error.message;
+      const afterEasy = await card();
+      return (afterEasy?.interval_days ?? 0) > (afterSecond?.interval_days ?? 0)
+        ? null
+        : "easy did not lengthen the interval";
+    });
+
+    await check("a word is learned only once it has survived the spacing", async () => {
+      const { data: pool, error: poolError } = await client.rpc("quiz_pool", {
+        p_scope: "ruku",
+        p_ruku: 1,
+        p_limit: 50,
+      });
+      if (poolError) return poolError.message;
+      const fresh = (pool ?? []).find((w) => !w.tracked);
+      if (!fresh) return "no untracked word to answer";
+
+      // Answered right every time, from nothing. The status must not flip on
+      // the first correct answer the way the old boolean rule did.
+      const statuses: string[] = [];
+      for (let i = 0; i < 6; i++) {
+        const { error } = await client.rpc("record_vocab_review", {
+          p_word_id: fresh.word_id,
+          p_grade: "good",
+        });
+        if (error) return error.message;
+        const { data } = await client
+          .from("user_word_progress")
+          .select("status, interval_days")
+          .eq("word_id", fresh.word_id)
+          .maybeSingle();
+        statuses.push(data?.status ?? "?");
+      }
+      if (statuses[0] !== "learning") return `one right answer gave status ${statuses[0]}`;
+      if (!statuses.includes("learned")) return `six right answers never matured: ${statuses.join(",")}`;
+
+      // And one lapse takes it straight back.
+      const { error } = await client.rpc("record_vocab_review", {
+        p_word_id: fresh.word_id,
+        p_grade: "again",
+      });
+      if (error) return error.message;
+      const { data } = await client
+        .from("user_word_progress")
+        .select("status")
+        .eq("word_id", fresh.word_id)
+        .maybeSingle();
+      return data?.status === "learning" ? null : `a lapse left status ${data?.status}`;
+    });
+
+    await check("the due scope holds exactly what has come round", async () => {
+      // Every card answered above is scheduled minutes or days ahead, which is
+      // the point of the schedule — so one is aged into the past to have
+      // something to find. Ordinary row ownership, through RLS.
+      const { data: card } = await client
+        .from("user_word_progress")
+        .select("word_id")
+        .not("due_at", "is", null)
+        .limit(1)
+        .maybeSingle();
+      if (!card) return "no scheduled card to age";
+      const { error: ageError } = await client
+        .from("user_word_progress")
+        .update({ due_at: new Date(Date.now() - 86_400_000).toISOString() })
+        .eq("word_id", card.word_id);
+      if (ageError) return ageError.message;
+
+      const { data, error } = await client.rpc("quiz_pool", { p_scope: "due", p_limit: 30 });
+      if (error) return error.message;
+      const rows = data ?? [];
+      if (!rows.some((r) => r.word_id === card.word_id)) return "the overdue card was not drawn";
+      const now = Date.now();
+      const early = rows.filter((r) => !r.due_at || Date.parse(r.due_at) > now);
+      if (early.length > 0) return `${early.length} cards were drawn before they were due`;
+      if ((rows[0]!.due_count ?? 0) < rows.length) return "due_count is smaller than the page";
+      // The four projections are what the grade buttons are labelled with, so
+      // they have to be ordered or the labels would mislead.
+      return rows.every(
+        (r) =>
+          r.next_again_minutes < r.next_good_minutes &&
+          r.next_good_minutes <= r.next_easy_minutes,
+      )
+        ? null
+        : "the projected intervals are not ordered";
+    });
+
+    await check("set_words_status declares a word learned, with a schedule", async () => {
+      const { data: word } = await client
+        .from("quran_words")
+        .select("id")
+        .not("gloss_en", "is", null)
+        .limit(1)
+        .single();
+      const { error } = await client.rpc("set_words_status", {
+        p_word_ids: [word!.id],
+        p_status: "learned",
+      });
+      if (error) return error.message;
+      const { data } = await client
+        .from("user_word_progress")
+        .select("status, interval_days, due_at")
+        .eq("word_id", word!.id)
+        .maybeSingle();
+      if (data?.status !== "learned") return `status is ${data?.status}`;
+      if ((data?.interval_days ?? 0) < 21) return `interval is ${data?.interval_days}`;
+      return data?.due_at && Date.parse(data.due_at) > Date.now()
+        ? null
+        : "a learned word was left due immediately";
     });
 
     await check("word_progress_by_ruku totals a ruku's words", async () => {
@@ -492,6 +631,7 @@ async function main(): Promise<void> {
         learned_count: number;
         learning_count: number;
         untouched_count: number;
+        due_count: number;
       }>;
       if (rows.length !== 558) return `got ${rows.length} rukus`;
       const first = rows.find((r) => r.ruku_number === 1);
@@ -518,7 +658,7 @@ async function main(): Promise<void> {
       return rows[0]!.pool_size >= rows.length ? null : "pool_size is smaller than the page";
     });
 
-    await check("record_quiz_attempt keeps the claim beside the confirmation", async () => {
+    await check("an attempt records the grade beside the pass it implies", async () => {
       const { data: pool, error: poolError } = await client.rpc("quiz_pool", {
         p_scope: "ruku",
         p_ruku: 1,
@@ -528,33 +668,24 @@ async function main(): Promise<void> {
       const word = (pool ?? [])[0];
       if (!word) return "no word to answer";
 
-      // Claimed, then conceded at the reveal: the concession is what scores.
-      const { error } = await client.rpc("record_quiz_attempt", {
+      // `hard` passes: it is "right, with effort", not a miss. The scoreboard
+      // counts `correct` and does not care which passing grade it was.
+      const { error } = await client.rpc("record_vocab_review", {
         p_word_id: word.word_id,
-        p_correct: false,
-        p_claimed: true,
+        p_grade: "hard",
       });
       if (error) return error.message;
 
       const { data: attempt } = await client
         .from("quiz_attempts")
-        .select("claimed, correct")
+        .select("grade, correct")
         .eq("word_id", word.word_id)
         .order("answered_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       if (!attempt) return "no attempt was recorded";
-      if (attempt.claimed !== true) return `claim stored as ${attempt.claimed}`;
-      if (attempt.correct !== false) return `confirmation stored as ${attempt.correct}`;
-
-      const { data: progress } = await client
-        .from("user_word_progress")
-        .select("status")
-        .eq("word_id", word.word_id)
-        .maybeSingle();
-      return progress?.status === "learning"
-        ? null
-        : `a withdrawn claim left status ${progress?.status}`;
+      if (attempt.grade !== "hard") return `grade stored as ${attempt.grade}`;
+      return attempt.correct === true ? null : `a hard pass was stored as correct=${attempt.correct}`;
     });
 
     let knowledgeSession: string | null = null;

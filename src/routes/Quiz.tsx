@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
+  AlarmClock,
   BookMarked,
   BrainCircuit,
   Globe2,
@@ -13,6 +14,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { useLanguage, useT } from "@/providers/I18nProvider";
 import { useRukus, useSurahs } from "@/hooks/useQuranData";
+import { useVocabularyOverview } from "@/hooks/useProgress";
 import { getAiStatus, isTauri } from "@/lib/ai";
 import type { QuizScope } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -50,12 +52,31 @@ const MODES: Array<{
   },
 ];
 
+/**
+ * The scopes, in the order they are worth offering.
+ *
+ * "Due" leads because it is the one a reader should press most evenings: it
+ * asks whatever the schedule says is ready, wherever in the Quran it sits, and
+ * it is the only scope that needs nothing marked at all. The other three are
+ * for deciding to work on a particular passage.
+ *
+ * Only `global` consults what has been memorized, and `vocabularyOnly` is what
+ * keeps `due` out of the comprehension round — nothing schedules an ayah.
+ */
 const SCOPES: Array<{
   value: QuizScope;
   title: TranslationKey;
   description: TranslationKey;
   icon: typeof Layers;
+  vocabularyOnly?: boolean;
 }> = [
+  {
+    value: "due",
+    title: "quiz.scopeDue",
+    description: "quiz.scopeDueDescription",
+    icon: AlarmClock,
+    vocabularyOnly: true,
+  },
   {
     value: "ruku",
     title: "quiz.scopeRuku",
@@ -85,7 +106,11 @@ const SCOPES: Array<{
  * about what it says is the smaller of the two choices. So scope, length and
  * the scoreboard live here, and each round type owns only its own questions.
  *
- * Both rounds answer the same way — claim, reveal, confirm; see `SelfAssess`.
+ * The two rounds no longer answer the same way. A vocabulary card is turned
+ * over and graded on a four-point scale that buys it an interval; a
+ * comprehension question is claimed, revealed and confirmed. That divergence
+ * is deliberate — a word has a schedule and an ayah does not — so each round
+ * owns its own answering step and this screen owns only the setup.
  *
  * The URL carries the whole configuration so that a ruku tile can link
  * straight into a round rather than dropping the reader on a form.
@@ -104,7 +129,11 @@ export function Quiz() {
   );
   const [scope, setScope] = useState<QuizScope>(() => {
     const value = params.get("scope");
-    return value === "ruku" || value === "surah" || value === "global" ? value : "global";
+    if (value === "ruku" || value === "surah" || value === "global" || value === "due") return value;
+    // Whatever is due is the round a reader opening this screen cold almost
+    // always wants; "everything memorized" was only ever the default because
+    // it was the widest one, and it is empty until something is marked.
+    return params.get("mode") === "knowledge" ? "global" : "due";
   });
   const [surahNumber, setSurahNumber] = useState<number | null>(() => numberParam(params, "surah"));
   const [rukuNumber, setRukuNumber] = useState<number | null>(() => numberParam(params, "ruku"));
@@ -120,8 +149,21 @@ export function Quiz() {
     [rukus, surahNumber],
   );
 
+  const knowledge = mode === "knowledge";
+  const scopes = useMemo(() => SCOPES.filter((s) => !knowledge || !s.vocabularyOnly), [knowledge]);
+
+  // Switching to comprehension out of a due round leaves the picker on a scope
+  // that round has no meaning for, so it lands on the widest one instead.
+  useEffect(() => {
+    if (knowledge && scope === "due") setScope("global");
+  }, [knowledge, scope]);
+
+  /** What is waiting across the whole deck, for the "due" tile's own count. */
+  const vocabulary = useVocabularyOverview();
+
   const ready =
     scope === "global" ||
+    scope === "due" ||
     (scope === "surah" && surahNumber !== null) ||
     (scope === "ruku" && rukuNumber !== null);
 
@@ -218,7 +260,6 @@ export function Quiz() {
     })),
   ];
 
-  const knowledge = mode === "knowledge";
   const startDisabled = !ready || poolSize.data === 0 || (knowledge && !aiReady);
 
   return (
@@ -268,8 +309,8 @@ export function Quiz() {
               <p className="mb-2.5 text-[0.8125rem] font-medium text-fg">
                 {t("quiz.scopeQuestion")}
               </p>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {SCOPES.map((option) => (
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {scopes.map((option) => (
                   <Choice
                     key={option.value}
                     selected={scope === option.value}
@@ -277,6 +318,13 @@ export function Quiz() {
                     icon={<option.icon className="size-4 shrink-0" aria-hidden />}
                     title={t(option.title)}
                     description={t(option.description)}
+                    // The only count worth carrying on a tile: it is the one
+                    // that says whether pressing it will find anything.
+                    badge={
+                      option.value === "due" && (vocabulary.data?.due ?? 0) > 0
+                        ? String(vocabulary.data!.due)
+                        : undefined
+                    }
                   />
                 ))}
               </div>
@@ -351,13 +399,17 @@ export function Quiz() {
                       ? t("quiz.countingAyahs")
                       : t("quiz.countingWords")
                     : poolSize.data === 0
-                      ? scope === "surah"
-                        ? t("quiz.noneInSurah")
-                        : scope === "ruku"
+                      ? scope === "due"
+                        ? t("quiz.noneDue")
+                        : scope === "surah"
                           ? knowledge
-                            ? t("quiz.noneInRukuAyahs")
-                            : t("quiz.noneInRuku")
-                          : t("quiz.noneMemorized")
+                            ? t("quiz.noneInSurahAyahs")
+                            : t("quiz.noneInSurah")
+                          : scope === "ruku"
+                            ? knowledge
+                              ? t("quiz.noneInRukuAyahs")
+                              : t("quiz.noneInRuku")
+                            : t("quiz.noneMemorized")
                       : (knowledge
                           ? t("quiz.poolSizeAyahs", { count: poolSize.data ?? 0 })
                           : t("quiz.poolSize", { count: poolSize.data ?? 0 })) +
@@ -388,12 +440,15 @@ function Choice({
   icon,
   title,
   description,
+  badge,
 }: {
   selected: boolean;
   onSelect: () => void;
   icon: ReactNode;
   title: string;
   description: string;
+  /** A count the tile carries, when it has one worth reading at a glance. */
+  badge?: string;
 }) {
   return (
     <button
@@ -414,6 +469,11 @@ function Choice({
       >
         {icon}
         {title}
+        {badge ? (
+          <span className="ml-auto rounded-full bg-accent px-1.5 py-0.5 text-[0.6875rem] font-semibold tabular-nums text-accent-fg">
+            {badge}
+          </span>
+        ) : null}
       </span>
       <span className="mt-1.5 block text-[0.75rem] leading-relaxed text-fg-subtle">
         {description}

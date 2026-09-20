@@ -195,6 +195,7 @@ export type Database = {
           answered_at: string
           claimed: boolean | null
           correct: boolean
+          grade: Database["public"]["Enums"]["review_grade"] | null
           id: number
           user_id: string
           word_id: number
@@ -203,6 +204,7 @@ export type Database = {
           answered_at?: string
           claimed?: boolean | null
           correct: boolean
+          grade?: Database["public"]["Enums"]["review_grade"] | null
           id?: never
           user_id: string
           word_id: number
@@ -211,6 +213,7 @@ export type Database = {
           answered_at?: string
           claimed?: boolean | null
           correct?: boolean
+          grade?: Database["public"]["Enums"]["review_grade"] | null
           id?: never
           user_id?: string
           word_id?: number
@@ -760,7 +763,12 @@ export type Database = {
         Row: {
           correct_count: number
           created_at: string
+          due_at: string | null
+          ease: number
+          interval_days: number
+          lapses: number
           last_reviewed_at: string | null
+          reps: number
           review_count: number
           status: Database["public"]["Enums"]["word_status"]
           updated_at: string
@@ -770,7 +778,12 @@ export type Database = {
         Insert: {
           correct_count?: number
           created_at?: string
+          due_at?: string | null
+          ease?: number
+          interval_days?: number
+          lapses?: number
           last_reviewed_at?: string | null
+          reps?: number
           review_count?: number
           status?: Database["public"]["Enums"]["word_status"]
           updated_at?: string
@@ -780,7 +793,12 @@ export type Database = {
         Update: {
           correct_count?: number
           created_at?: string
+          due_at?: string | null
+          ease?: number
+          interval_days?: number
+          lapses?: number
           last_reviewed_at?: string | null
+          reps?: number
           review_count?: number
           status?: Database["public"]["Enums"]["word_status"]
           updated_at?: string
@@ -825,32 +843,6 @@ export type Database = {
             columns: ["word_id"]
             isOneToOne: false
             referencedRelation: "quran_words"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      words_learned_verses: {
-        Row: {
-          learned_at: string
-          user_id: string
-          verse_id: number
-        }
-        Insert: {
-          learned_at?: string
-          user_id: string
-          verse_id: number
-        }
-        Update: {
-          learned_at?: string
-          user_id?: string
-          verse_id?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "words_learned_verses_verse_id_fkey"
-            columns: ["verse_id"]
-            isOneToOne: false
-            referencedRelation: "quran_verses"
             referencedColumns: ["id"]
           },
         ]
@@ -967,8 +959,17 @@ export type Database = {
         Returns: {
           arabic: string
           ayah_number: number
+          due_at: string | null
+          due_count: number
+          ease: number
           gloss: string
+          interval_days: number
+          next_again_minutes: number
+          next_easy_minutes: number
+          next_good_minutes: number
+          next_hard_minutes: number
           pool_size: number
+          reps: number
           ruku_number: number
           status: Database["public"]["Enums"]["word_status"]
           surah_number: number
@@ -1020,6 +1021,7 @@ export type Database = {
           surah_number: number
           translation_en: string
           translation_ru: string
+          translation_uz: string
           verse_id: number
         }[]
       }
@@ -1038,9 +1040,19 @@ export type Database = {
         }
         Returns: undefined
       }
-      record_quiz_attempt: {
-        Args: { p_claimed?: boolean; p_correct: boolean; p_word_id: number }
-        Returns: undefined
+      record_vocab_review: {
+        Args: {
+          p_grade: Database["public"]["Enums"]["review_grade"]
+          p_word_id: number
+        }
+        Returns: {
+          due_at: string | null
+          ease: number
+          interval_days: number
+          lapses: number
+          reps: number
+          status: Database["public"]["Enums"]["word_status"]
+        }[]
       }
       ruku_progress: {
         Args: never
@@ -1054,6 +1066,27 @@ export type Database = {
         }[]
       }
       set_word_glosses_ru: { Args: { p_rows: Json }; Returns: number }
+      set_words_status: {
+        Args: {
+          p_status: Database["public"]["Enums"]["word_status"]
+          p_word_ids: number[]
+        }
+        Returns: number
+      }
+      srs_mature_days: { Args: never; Returns: number }
+      srs_next: {
+        Args: {
+          p_ease: number
+          p_grade: Database["public"]["Enums"]["review_grade"]
+          p_interval_days: number
+          p_reps: number
+        }
+        Returns: Database["public"]["CompositeTypes"]["srs_step"]
+      }
+      srs_status: {
+        Args: { p_interval_days: number; p_reps: number; p_reviewed: boolean }
+        Returns: Database["public"]["Enums"]["word_status"]
+      }
       start_knowledge_quiz: {
         Args: {
           p_language?: string
@@ -1069,6 +1102,7 @@ export type Database = {
       word_progress_by_ruku: {
         Args: never
         Returns: {
+          due_count: number
           learned_count: number
           learning_count: number
           ruku_number: number
@@ -1084,11 +1118,17 @@ export type Database = {
         | "meaning"
         | "continuation"
         | "detail"
-      quiz_scope: "ruku" | "surah" | "global"
+      quiz_scope: "ruku" | "surah" | "global" | "due"
+      review_grade: "again" | "hard" | "good" | "easy"
       word_status: "new" | "learning" | "learned"
     }
     CompositeTypes: {
-      [_ in never]: never
+      srs_step: {
+        ease: number | null
+        interval_days: number | null
+        reps: number | null
+        due_minutes: number | null
+      }
     }
   }
 }

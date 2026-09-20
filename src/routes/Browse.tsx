@@ -315,11 +315,15 @@ function RukuTile({
 
       <div className="flex items-center justify-between gap-2 border-t border-border/60 px-3 py-1">
         <span className="truncate text-[0.6875rem] tabular-nums text-fg-subtle">
+          {/* What is due wins the line when there is any: it is the only one
+              of the three numbers that is a thing to do now. */}
           {toLearn === null
             ? "—"
-            : toLearn === 0
-              ? t("browse.allWordsLearned", { count: words!.word_count })
-              : t("browse.wordsToLearn", { count: words!.word_count, remaining: toLearn })}
+            : words!.due_count > 0
+              ? t("browse.wordsDue", { count: words!.word_count, due: words!.due_count })
+              : toLearn === 0
+                ? t("browse.allWordsLearned", { count: words!.word_count })
+                : t("browse.wordsToLearn", { count: words!.word_count, remaining: toLearn })}
         </span>
         <button
           onClick={onQuiz}

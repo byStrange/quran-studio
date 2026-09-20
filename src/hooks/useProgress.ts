@@ -235,6 +235,8 @@ export interface RukuWordStats {
   learned_count: number;
   learning_count: number;
   untouched_count: number;
+  /** How many of this ruku's words the schedule wants asking now. */
+  due_count: number;
 }
 
 // --- tafsir nudge ----------------------------------------------------------
@@ -373,76 +375,75 @@ export function useAllWordProgress() {
   });
 }
 
-export function useSetWordStatus() {
-  const { user } = useAuth();
+/**
+ * Says a word's status outright, without a review.
+ *
+ * Takes a list because that is what the ayah-level marker is: "the words in
+ * this ayah are learned" is one act and one write, not one per word. A single
+ * chip passes a list of one.
+ *
+ * It goes through `set_words_status` rather than writing the column, because
+ * the column is a cache of the word's schedule and a review would recompute it
+ * straight back. The RPC expresses the claim as a schedule instead — learned
+ * puts the word out at the maturity line, learning brings it back to due now —
+ * so a declaration and a round of answers leave the deck in the same shape.
+ */
+export function useSetWordsStatus() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ wordId, status }: { wordId: number; status: WordStatus }) => {
-      const { error } = await supabase.from("user_word_progress").upsert(
-        {
-          user_id: user!.id,
-          word_id: wordId,
-          status,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,word_id" },
-      );
+    mutationFn: async ({ wordIds, status }: { wordIds: number[]; status: WordStatus }) => {
+      if (wordIds.length === 0) return;
+      const { error } = await supabase.rpc("set_words_status", {
+        p_word_ids: wordIds,
+        p_status: status,
+      });
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["word-progress"] });
-      queryClient.invalidateQueries({ queryKey: ["memorization-overview"] });
-      queryClient.invalidateQueries({ queryKey: ["vocabulary"] });
-    },
-  });
-}
-
-// --- words learned (verse level) -------------------------------------------
-
-export function useWordsLearnedVerses(verseIds?: number[]) {
-  const { user } = useAuth();
-  return useQuery({
-    queryKey: ["words-learned-verses", user?.id, verseIds?.join(",") ?? "all"],
-    enabled: Boolean(user),
-    queryFn: async (): Promise<Set<number>> => {
-      if (verseIds?.length === 0) return new Set();
-      let query = supabase.from("words_learned_verses").select("verse_id");
-      if (verseIds) query = query.in("verse_id", verseIds);
-      const { data, error } = await query;
-      if (error) throw error;
-      return new Set((data ?? []).map((row) => row.verse_id));
-    },
-  });
-}
-
-export function useToggleWordsLearned() {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ verseIds, learned }: { verseIds: number[]; learned: boolean }) => {
-      if (verseIds.length === 0) return;
-      if (learned) {
-        const { error } = await supabase
-          .from("words_learned_verses")
-          .upsert(
-            verseIds.map((verseId) => ({ user_id: user!.id, verse_id: verseId })),
-            { onConflict: "user_id,verse_id" },
-          );
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("words_learned_verses")
-          .delete()
-          .eq("user_id", user!.id)
-          .in("verse_id", verseIds);
-        if (error) throw error;
+      for (const key of [
+        "word-progress",
+        "memorization-overview",
+        "vocabulary",
+        "vocabulary-overview",
+        "ruku-progress",
+        "ruku-word-stats",
+        "quiz-scoreboard",
+      ]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["words-learned-verses"] });
-      queryClient.invalidateQueries({ queryKey: ["ruku-progress"] });
+  });
+}
+
+// --- vocabulary ------------------------------------------------------------
+
+export interface VocabularyOverview {
+  encountered: number;
+  learned: number;
+  learning: number;
+  /** Words the schedule wants asking now — the number that is a thing to do. */
+  due: number;
+  rukus_read: number;
+}
+
+/**
+ * The vocabulary totals, shared by the vocabulary page and the quiz picker.
+ *
+ * The picker needs only `due`, but it needs it before a scope is chosen — the
+ * "due today" tile has to carry its own count for the reader to have a reason
+ * to press it — and one cached row serves both screens.
+ */
+export function useVocabularyOverview() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["vocabulary-overview", user?.id],
+    enabled: Boolean(user),
+    staleTime: 30_000,
+    queryFn: async (): Promise<VocabularyOverview> => {
+      const { data, error } = await supabase.rpc("vocabulary_overview");
+      if (error) throw error;
+      return data as unknown as VocabularyOverview;
     },
   });
 }

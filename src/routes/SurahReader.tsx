@@ -21,12 +21,12 @@ import { useRukus, useSurahVerseIds, useSurahs, useSurahVerses } from "@/hooks/u
 import {
   useAllWordProgress,
   useMemorizedVerses,
+  useSetWordsStatus,
   useTafsirReadVerses,
   useToggleMemorized,
   useToggleTafsirRead,
-  useToggleWordsLearned,
-  useWordsLearnedVerses,
 } from "@/hooks/useProgress";
+import { learnedVerseIds, quizzableWordIds } from "@/lib/vocabulary";
 import {
   useActiveReciter,
   useRecitationFile,
@@ -97,13 +97,21 @@ export function SurahReader() {
   const surahVerseIdList = useMemo(() => [...(surahVerseIds?.values() ?? [])], [surahVerseIds]);
   const { data: memorized } = useMemorizedVerses(surahVerseIdList);
   const { data: tafsirRead } = useTafsirReadVerses(surahVerseIdList);
-  const { data: wordsLearned } = useWordsLearnedVerses(surahVerseIdList);
   // Word statuses span the surah's whole vocabulary, so they are read from the
   // user's own list rather than named in the query.
   const { data: wordStatuses } = useAllWordProgress();
   const toggleMemorized = useToggleMemorized();
   const toggleTafsirRead = useToggleTafsirRead();
-  const toggleWordsLearned = useToggleWordsLearned();
+  const setWordsStatus = useSetWordsStatus();
+
+  /**
+   * The ayahs whose words are all learned, derived from the word list rather
+   * than stored beside it — the same reading the ruku reader does.
+   */
+  const wordsLearned = useMemo(
+    () => learnedVerseIds(verses, wordStatuses ?? new Map()),
+    [verses, wordStatuses],
+  );
 
   const [selectedAyah, setSelectedAyah] = useState<number | null>(null);
   const [expandedVerses, setExpandedVerses] = useState<Set<number>>(new Set());
@@ -648,11 +656,11 @@ export function SurahReader() {
                             read: !(tafsirRead?.has(verse.id) ?? false),
                           })
                         }
-                        wordsLearned={wordsLearned?.has(verse.id) ?? false}
+                        wordsLearned={wordsLearned.has(verse.id)}
                         onToggleWordsLearned={() =>
-                          toggleWordsLearned.mutate({
-                            verseIds: [verse.id],
-                            learned: !(wordsLearned?.has(verse.id) ?? false),
+                          setWordsStatus.mutate({
+                            wordIds: quizzableWordIds(verse.words),
+                            status: wordsLearned.has(verse.id) ? "learning" : "learned",
                           })
                         }
                         selected={selectedAyah === verse.ayah_number}
