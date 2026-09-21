@@ -113,7 +113,13 @@ export function AudioBar({
 
   if (!player.available) {
     return (
-      <div className="flex shrink-0 items-center gap-2 border-t border-border bg-surface/80 px-3 py-2 text-[0.8125rem] text-fg-subtle backdrop-blur md:px-6">
+      <div
+        className={cn(
+          "flex shrink-0 items-center gap-2 border-t border-border bg-surface/80 px-3 py-2",
+          "text-[0.8125rem] text-fg-subtle backdrop-blur md:px-6",
+          "pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-2",
+        )}
+      >
         <AudioLines className="size-4 shrink-0" aria-hidden />
         {reciters && reciters.length === 0
           ? t("audio.noneImported")
@@ -130,7 +136,13 @@ export function AudioBar({
         </div>
       ) : null}
 
-      <div className="flex items-center gap-2 px-3 py-2 md:gap-3 md:px-6 md:py-2.5">
+      <div
+        className={cn(
+          "flex items-center gap-2 px-3 py-2 md:gap-3 md:px-6 md:py-2.5",
+          // This is the last thing above the home indicator on a phone.
+          "pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-2.5",
+        )}
+      >
         <Tooltip content={t("audio.previousAyah")}>
           <Button
             size="icon"

@@ -417,7 +417,14 @@ export function SurahReader() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="shrink-0 border-b border-border bg-surface/60 px-3 py-2.5 backdrop-blur md:px-6 md:py-3">
+      <header
+        className={cn(
+          "shrink-0 border-b border-border bg-surface/60 px-3 py-2.5 backdrop-blur md:px-6 md:py-3",
+          // The shell hands the whole screen to the reader on a phone, so this
+          // is what sits under the status bar and has to clear it.
+          "pt-[max(0.625rem,env(safe-area-inset-top))] md:pt-3",
+        )}
+      >
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-1 md:gap-3">
             {/* The way back to the list belongs in the header: reading a surah
@@ -611,12 +618,10 @@ export function SurahReader() {
           tafsirOpen={tafsirOpen}
           onTafsirOpenChange={setTafsirOpen}
           reader={
-            <div
-              ref={scrollRef}
-              data-verse-scroll
-              className="h-full overflow-y-auto px-4 py-4 md:px-6 md:py-6"
-            >
-              <div className="mx-auto max-w-3xl space-y-4">
+            // Flush: the column carries no padding of its own, so the only
+            // horizontal inset the Quran sits behind is each row's gutter.
+            <div ref={scrollRef} data-verse-scroll className="h-full overflow-y-auto">
+              <div className="mx-auto max-w-3xl">
                 {prefs.tajweed ? <TajweedLegend /> : null}
 
                 {verses.map((verse, index) => {
@@ -625,7 +630,7 @@ export function SurahReader() {
                   const ruku = startsRuku ? rukuByNumber.get(verse.ruku_number) : undefined;
 
                   return (
-                    <div key={verse.id} className="space-y-4">
+                    <div key={verse.id}>
                       {startsRuku ? (
                         <RukuDivider
                           rukuNumber={verse.ruku_number}
@@ -680,7 +685,10 @@ export function SurahReader() {
                   );
                 })}
 
-                <div ref={loadMoreRef} className="flex flex-col items-center gap-3 py-6">
+                <div
+                  ref={loadMoreRef}
+                  className="reader-gutter flex flex-col items-center gap-3 py-7"
+                >
                   {hasNextPage ? (
                     <Button
                       variant="outline"
@@ -705,7 +713,7 @@ export function SurahReader() {
                     </div>
                   )}
 
-                  <div className="flex w-full items-center justify-between pt-2 pb-8">
+                  <div className="flex w-full items-center justify-between gap-3 pt-5 pb-10">
                     <Button
                       variant="outline"
                       disabled={surahNumber <= 1}
@@ -786,7 +794,7 @@ function RukuDivider({
   t: TFunction;
 }) {
   return (
-    <div className="flex items-center gap-3 pt-3">
+    <div className="reader-gutter flex items-center gap-3 pt-7 pb-1">
       <button
         onClick={onOpenRuku}
         title={t("surah.studyThisRuku")}

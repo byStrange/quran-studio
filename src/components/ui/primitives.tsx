@@ -210,13 +210,23 @@ export function ProgressBar({
 
 // --- Tooltip ---------------------------------------------------------------
 
-export function Tooltip({ content, children }: { content: ReactNode; children: ReactNode }) {
+export function Tooltip({
+  content,
+  children,
+  side,
+}: {
+  content: ReactNode;
+  children: ReactNode;
+  /** Defaults to above. The icon rail asks for `right`, where there is room. */
+  side?: "top" | "right" | "bottom" | "left";
+}) {
   return (
     <RadixTooltip.Provider delayDuration={350}>
       <RadixTooltip.Root>
         <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
         <RadixTooltip.Portal>
           <RadixTooltip.Content
+            side={side}
             sideOffset={6}
             className={cn(
               "z-50 max-w-xs rounded-lg border border-border bg-surface px-2.5 py-1.5",

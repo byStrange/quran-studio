@@ -4,6 +4,10 @@
 /* Theme is driven by a `.dark` class on <html>, set before first paint. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Hover is a desktop affordance. A phone has no pointer to rest anywhere,
+   so anything revealed on hover is simply missing there. */
+@custom-variant can-hover (@media (hover: hover) and (pointer: fine));
+
 /* ---------------------------------------------------------------------------
    Palette
    Light is warm paper rather than pure white; dark is a desaturated green-black
@@ -40,6 +44,11 @@
   --ring: oklch(0.53 0.11 165 / 0.45);
   --shadow-color: 150 20% 20%;
 
+  /* The single gap between the Quran text and the edge of its column.
+     The reading view has no cards, so this is the only horizontal inset
+     in play — every flush row reads it rather than inventing its own. */
+  --reader-gutter: 1.25rem;
+
   /* Tajweed — Tarteel Mushaf colour system.
 
      These are the colours used by the Tarteel Mushaf, as described at
@@ -71,6 +80,15 @@
   --tj-qalqalah: oklch(0.7574 0.1471 232.2);         /* #26BFFD — Light Blue */
   --tj-tafkhim: oklch(0.3958 0.1319 259.0);          /* #00369E — Dark Blue */
   --tj-silent: oklch(0.738 0 90);                    /* #AAAAAA — Grey */
+}
+
+/* A window wide enough for the reader to have breathing room gets more of it.
+   Declared here rather than in a layer: the base value above is unlayered and
+   would otherwise outrank it whatever the viewport. */
+@media (min-width: 768px) {
+  :root {
+    --reader-gutter: 2rem;
+  }
 }
 
 .dark {
@@ -162,6 +180,9 @@
   --animate-fade-in: fade-in 0.24s ease-out;
   --animate-rise: rise 0.28s cubic-bezier(0.2, 0.7, 0.3, 1);
   --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-menu-in: menu-in 0.26s cubic-bezier(0.22, 0.75, 0.3, 1);
+  --animate-menu-out: menu-out 0.18s ease-in;
+  --animate-menu-row: menu-row 0.34s cubic-bezier(0.22, 0.75, 0.3, 1) backwards;
 }
 
 @keyframes fade-in {
@@ -177,6 +198,26 @@
 @keyframes shimmer {
   from { background-position: -200% 0; }
   to { background-position: 200% 0; }
+}
+
+/* The full-screen menu arrives from the edge it is anchored to rather than
+   simply appearing: on a phone the menu replaces the whole screen, and a
+   cut with no motion reads as a navigation, not a panel. */
+@keyframes menu-in {
+  from { opacity: 0; transform: translateX(-8%); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes menu-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateX(-6%); }
+}
+
+/* Rows follow the panel in, each a beat behind the one above it. The delay
+   comes from `--i` on the row, so the stagger is set where the list is. */
+@keyframes menu-row {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
 }
 
 @layer base {
@@ -244,13 +285,46 @@
 }
 
 @layer components {
+  /* --- Reading surface ----------------------------------------------------
+
+     The reading views are laid out like a printed mushaf rather than a feed of
+     cards: ayahs run flush to the column and are separated by a rule, so the
+     only horizontal inset between the Quran and the edge of the screen is the
+     gutter. Anything that sits in the reading column — a verse, the tajweed
+     legend, the ruku summary — takes its inset from here and adds none of its
+     own, which is what keeps the two insets from stacking. */
+  .reader-gutter {
+    padding-inline: var(--reader-gutter);
+  }
+
+  /* Per-ayah actions are chrome, not content. On a pointer device they stay
+     out of the way until the ayah is pointed at or something inside it takes
+     focus; a touch screen has nothing to point with, so there they are simply
+     always on. The progress markers are not chrome and never carry this. */
+  .verse-quiet {
+    transition: opacity 0.18s ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .verse-quiet {
+      opacity: 0;
+    }
+    .verse-row:hover .verse-quiet,
+    .verse-row:focus-within .verse-quiet,
+    .verse-row[data-reciting] .verse-quiet {
+      opacity: 1;
+    }
+  }
+
   /* Quran text needs a larger optical size and much looser leading than UI
-     copy — Arabic diacritics stack above and below the baseline. */
+     copy — Arabic diacritics stack above and below the baseline. Without a
+     card around it the line runs the full column, so the size tracks the
+     viewport instead of being fixed at the desktop measure. */
   .arabic {
     font-family: var(--font-arabic);
     direction: rtl;
     line-height: 2.15;
-    font-size: 1.9rem;
+    font-size: clamp(1.6rem, 1.15rem + 1.9vw, 2rem);
     letter-spacing: 0;
   }
 
@@ -299,6 +373,13 @@
 
   .tj-swatch {
     background-color: currentColor;
+  }
+
+  /* One row of the full-screen menu, held back by its index so the list
+     resolves top to bottom rather than all at once. */
+  .menu-row {
+    animation: var(--animate-menu-row);
+    animation-delay: calc(var(--i, 0) * 45ms + 60ms);
   }
 
   /* Long-form prose: tafsir and AI summaries. */

@@ -6,7 +6,6 @@ import type { VerseWithWords } from "@/lib/types";
 import { useLanguage, useT } from "@/providers/I18nProvider";
 import { ayahRangeLabel, toParagraphs } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/feedback";
 import { useToast } from "@/components/ui/toast";
 
@@ -62,7 +61,9 @@ export function RukuSummaryCard({
   const busy = generate.isPending;
 
   return (
-    <Card className="border-accent/25 bg-accent-soft/25 p-5">
+    // Flush like everything else in the reading column; the tint alone marks
+    // it out as the one block here that is not the Quran.
+    <section className="reader-gutter border-b border-border bg-accent-soft/20 py-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-2 text-[0.6875rem] font-medium uppercase tracking-wider text-accent-soft-fg">
           <Sparkles className="size-3.5" aria-hidden />
@@ -127,6 +128,6 @@ export function RukuSummaryCard({
         </Button>
         <span className="text-[0.6875rem] text-fg-subtle">{t("summary.quizHint")}</span>
       </div>
-    </Card>
+    </section>
   );
 }

@@ -34,13 +34,15 @@ export function TajweedLegend() {
   };
 
   return (
-    <div className="rounded-card border border-border bg-surface">
+    // Flush with the ayahs below it: in a reading view made of rows, a card
+    // here would be the one boxed thing on the page.
+    <div className="border-b border-border">
       <button
         type="button"
         onClick={toggle}
         aria-expanded={open}
         className={cn(
-          "flex w-full items-center gap-2 px-5 py-3 text-left",
+          "reader-gutter flex w-full items-center gap-2 py-3.5 text-left",
           "text-[0.8125rem] text-fg-muted transition-colors hover:text-fg",
         )}
       >
@@ -54,7 +56,7 @@ export function TajweedLegend() {
       </button>
 
       {open ? (
-        <div className="grid gap-x-8 gap-y-5 border-t border-border px-5 py-4 sm:grid-cols-2">
+        <div className="reader-gutter grid gap-x-8 gap-y-5 border-t border-border py-4 sm:grid-cols-2">
 {TAJWEED_GROUPS.map((group) => {
             const rules = rulesByGroup(group);
 

@@ -475,7 +475,14 @@ export function Reader() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="shrink-0 border-b border-border bg-surface/60 px-3 py-2.5 backdrop-blur md:px-6 md:py-3">
+      <header
+        className={cn(
+          "shrink-0 border-b border-border bg-surface/60 px-3 py-2.5 backdrop-blur md:px-6 md:py-3",
+          // The shell hands the whole screen to the reader on a phone, so this
+          // is what sits under the status bar and has to clear it.
+          "pt-[max(0.625rem,env(safe-area-inset-top))] md:pt-3",
+        )}
+      >
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-1 md:gap-3">
             {/* Every way in here is a list — the browser, the dashboard, a
@@ -747,8 +754,10 @@ export function Reader() {
           tafsirOpen={tafsirOpen}
           onTafsirOpenChange={setTafsirOpen}
           reader={
-            <div data-verse-scroll className="h-full overflow-y-auto px-4 py-4 md:px-6 md:py-6">
-              <div className="mx-auto max-w-3xl space-y-4">
+            // Flush: the column carries no padding of its own, so the only
+            // horizontal inset the Quran sits behind is each row's gutter.
+            <div data-verse-scroll className="h-full overflow-y-auto">
+              <div className="mx-auto max-w-3xl">
                 {prefs.tajweed ? <TajweedLegend /> : null}
 
                 <RukuSummaryCard
@@ -788,7 +797,7 @@ export function Reader() {
                   />
                 ))}
 
-                <div className="flex items-center justify-between pt-2 pb-8">
+                <div className="reader-gutter flex items-center justify-between gap-3 pt-7 pb-10">
                   <Button
                     variant="outline"
                     disabled={rukuNumber <= 1}
