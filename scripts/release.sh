@@ -6,10 +6,10 @@
 #   pnpm release 0.2.0 --dry  show what it would do, change nothing
 #
 # This does not build anything. Pushing the tag is the whole trigger: the
-# Release workflow builds the Android APK and the macOS DMG, writes the notes
-# from the commits since the last tag, and publishes the GitHub Release. Doing
-# it here instead would tie what ships to whatever this one machine can build,
-# which on Linux is not a DMG.
+# Release workflow builds the Android APK and the Linux AppImage, writes the
+# notes from the commits since the last tag, and publishes the GitHub Release.
+# Doing it here instead would tie what ships to whatever this one machine can
+# build, and an Android APK is not one of those things.
 #
 # The version is written to package.json and tauri.conf.json together, because
 # they are the two places the app reports its own version from and a release

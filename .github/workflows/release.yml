@@ -1,8 +1,12 @@
 name: Release
 
 # A tag is the whole trigger. `git tag v0.2.0 && git push --tags` builds the
-# Android APK and the macOS DMG, writes the notes from the commits since the
-# last tag, and publishes a GitHub Release with both attached.
+# Android APK and the Linux AppImage, writes the notes from the commits since
+# the last tag, and publishes a GitHub Release with both attached.
+#
+# The macOS DMG job is kept below but switched off: set the repository
+# variable BUILD_MACOS to `true` to bring it back. Nothing else needs
+# changing — the release job already tolerates it being skipped.
 #
 # Running it by hand builds the same artifacts and publishes nothing — the
 # release job is gated on the ref actually being a tag, so a manual run is a
@@ -171,9 +175,83 @@ jobs:
           path: artifacts/*.apk
           if-no-files-found: error
 
+  # --- Linux ---------------------------------------------------------------
+
+  linux:
+    # Not ubuntu-latest on purpose. An AppImage links against the glibc of the
+    # machine that built it and will not start on anything older, so the oldest
+    # runner still supported is the one that reaches the most desktops.
+    runs-on: ubuntu-22.04
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # Tauri v2 builds against webkit2gtk 4.1 (v1 used 4.0), and the AppImage
+      # bundler shells out to patchelf to rewrite the interpreter paths.
+      - name: Install the GTK/WebKit build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: linux
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          # Baked into the frontend bundle by Vite. The publishable key is
+          # client-safe; access is constrained by Row Level Security.
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          # linuxdeploy strips every binary it bundles and fails the build on
+          # any it cannot. The release profile already sets `strip = true`, so
+          # there is nothing left for it to do but go wrong. This matches what
+          # `pnpm app:build` does locally.
+          NO_STRIP: "true"
+        with:
+          # tauri.conf.json pins deb and appimage; this asks for the one that
+          # runs anywhere. Drop the flag to publish the .deb alongside it.
+          args: --bundles appimage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+
   # --- macOS ---------------------------------------------------------------
 
   macos:
+    # Off unless the repository variable says otherwise. The job is kept whole
+    # rather than deleted because the ad-hoc signing below is the part that is
+    # expensive to work out again.
+    if: ${{ vars.BUILD_MACOS == 'true' }}
     # macos-latest is Apple Silicon; the universal target cross-builds x86_64 too.
     runs-on: macos-latest
     environment: prod
@@ -227,9 +305,20 @@ jobs:
   # --- publish -------------------------------------------------------------
 
   release:
-    needs: [changelog, android, macos]
+    needs: [changelog, android, linux, macos]
     # A manual run builds and stops here. Only a tag is a release.
-    if: startsWith(github.ref, 'refs/tags/v')
+    #
+    # `always()` is load-bearing: a skipped dependency skips the job that needs
+    # it, so without this, switching the macOS job off would quietly stop
+    # publishing releases altogether. Every other result is then checked by
+    # hand, because `always()` also survives outright failures.
+    if: >-
+      always()
+      && startsWith(github.ref, 'refs/tags/v')
+      && needs.changelog.result == 'success'
+      && needs.android.result == 'success'
+      && needs.linux.result == 'success'
+      && needs.macos.result != 'failure'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -248,4 +337,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
             --notes-file notes.md \
-            artifacts/android/* artifacts/macos/*
+            artifacts/*/*
