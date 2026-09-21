@@ -78,7 +78,10 @@ fi
 
 export PATH="$(cd "$(dirname "$0")" && pwd):$PATH"
 export CMAKE="$(cd "$(dirname "$0")" && pwd)/cmake-wrapper.sh"
-ln -sf "$(cd "$(dirname "$0")" && pwd)/cmake-wrapper.sh" "$(cd "$(dirname "$0")" && pwd)/cmake"
+# Relative, and pointed at a name rather than a path: an absolute symlink is
+# only correct on the machine that wrote it, so every build on a different
+# checkout used to rewrite it and leave the tree dirty.
+ln -sfn cmake-wrapper.sh "$(cd "$(dirname "$0")" && pwd)/cmake"
 
 cd "$(dirname "$0")/.."
 
