@@ -1,0 +1,251 @@
+name: Release
+
+# A tag is the whole trigger. `git tag v0.2.0 && git push --tags` builds the
+# Android APK and the macOS DMG, writes the notes from the commits since the
+# last tag, and publishes a GitHub Release with both attached.
+#
+# Running it by hand builds the same artifacts and publishes nothing — the
+# release job is gated on the ref actually being a tag, so a manual run is a
+# way to find out whether a release *would* build without spending a version
+# number on the answer.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # --- notes ---------------------------------------------------------------
+
+  changelog:
+    runs-on: ubuntu-latest
+    outputs:
+      notes: ${{ steps.build.outputs.notes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The generator walks back to the previous tag, which a shallow
+          # checkout does not contain.
+          fetch-depth: 0
+
+      - id: build
+        run: |
+          notes="$(bash scripts/changelog.sh "${GITHUB_REF_NAME}")"
+          echo "$notes"
+          {
+            echo 'notes<<CHANGELOG_EOF'
+            echo "$notes"
+            echo 'CHANGELOG_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+  # --- Android -------------------------------------------------------------
+
+  android:
+    runs-on: ubuntu-latest
+    # The Supabase secrets are environment-scoped, not repo-scoped; without
+    # this they resolve to empty strings and the build silently ships an app
+    # that cannot reach its database.
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The QCF mushaf fonts in public/fonts are LFS-tracked. Without this
+          # the checkout yields pointer files, which Vite copies into dist
+          # verbatim and the app ships with unrenderable Arabic text.
+          lfs: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # The Android Gradle plugin wants 17, and the runner's default is newer.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The NDK version is pinned rather than floating: it is the one the
+      # Rust targets are linked against, and a silent bump is a class of
+      # failure that only shows up at link time.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: >-
+            platform-tools
+            platforms;android-34
+            build-tools;34.0.0
+            ndk;27.1.12297006
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: android
+
+      - run: pnpm install --frozen-lockfile
+
+      # src-tauri/gen is gitignored, so CI has no Gradle project until this
+      # runs. It also lays down the launcher icons, which `android init`
+      # otherwise leaves as the Tauri template logo.
+      - run: pnpm app:android:init
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+
+      - name: Build the APK
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          # A release APK is built unsigned, and an unsigned APK will not
+          # install on anything. With a keystore in the repository secrets it
+          # is signed here and is a real, upgradable release build. Without
+          # one the job falls back to the debug-signed APK, which installs but
+          # carries its debug symbols (~170MB) and is signed by a key that is
+          # regenerated every run — so two such builds cannot upgrade each
+          # other in place. See README, "Signing Android releases".
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "signed=true" >> "$GITHUB_ENV"
+            bash scripts/android-build.sh --apk --release --target aarch64
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set — falling back to a debug-signed APK."
+            echo "signed=false" >> "$GITHUB_ENV"
+            bash scripts/android-build.sh --apk --debug --target aarch64
+          fi
+
+      - name: Sign the APK
+        if: env.signed == 'true'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          # Signed with apksigner rather than through Gradle on purpose: the
+          # Gradle project is regenerated by `android init` on every run, so a
+          # signingConfig written into it would have to be re-patched each
+          # time. Signing the finished artifact needs nothing from the build.
+          tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          unsigned="$(find src-tauri/gen/android/app/build/outputs/apk -name '*-unsigned.apk' | head -1)"
+          [ -n "$unsigned" ] || { echo "no unsigned APK was produced"; exit 1; }
+
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > /tmp/release.jks
+          "$tools/zipalign" -p -f 4 "$unsigned" /tmp/aligned.apk
+          "$tools/apksigner" sign \
+            --ks /tmp/release.jks \
+            --ks-pass env:KS_PASS \
+            --ks-key-alias "$KEY_ALIAS" \
+            --key-pass env:KEY_PASS \
+            --out /tmp/signed.apk /tmp/aligned.apk
+          "$tools/apksigner" verify --print-certs /tmp/signed.apk
+          rm -f /tmp/release.jks /tmp/aligned.apk
+
+      - name: Collect the APK
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          if [ -f /tmp/signed.apk ]; then
+            cp /tmp/signed.apk "artifacts/quran-studio-${GITHUB_REF_NAME}-arm64.apk"
+          else
+            apk="$(find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' | head -1)"
+            [ -n "$apk" ] || { echo "no APK was produced"; exit 1; }
+            cp "$apk" "artifacts/quran-studio-${GITHUB_REF_NAME}-arm64-debug.apk"
+          fi
+          ls -lh artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: artifacts/*.apk
+          if-no-files-found: error
+
+  # --- macOS ---------------------------------------------------------------
+
+  macos:
+    # macos-latest is Apple Silicon; the universal target cross-builds x86_64 too.
+    runs-on: macos-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: macos
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          # Baked into the frontend bundle by Vite. The publishable key is
+          # client-safe; access is constrained by Row Level Security.
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          # Ad-hoc signing. Without an identity the bundle has no
+          # _CodeSignature at all, and Gatekeeper answers a quarantined
+          # unsigned app with "damaged" rather than an override prompt. This
+          # is not a Developer ID and does not notarize — it only buys the
+          # normal right-click-Open path instead of a terminal command.
+          APPLE_SIGNING_IDENTITY: "-"
+        with:
+          # --bundles overrides the deb/appimage targets pinned in tauri.conf.json.
+          args: --target universal-apple-darwin --bundles dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+  # --- publish -------------------------------------------------------------
+
+  release:
+    needs: [changelog, android, macos]
+    # A manual run builds and stops here. Only a tag is a release.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - run: ls -lhR artifacts
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ needs.changelog.outputs.notes }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$NOTES" > notes.md
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file notes.md \
+            artifacts/android/* artifacts/macos/*

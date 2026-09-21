@@ -32,7 +32,9 @@
     "test:smoke": "tsx scripts/test/smoke.ts",
     "test:mushaf": "tsx scripts/test/mushaf-check.ts",
     "test:mushaf-fonts": "tsx scripts/test/mushaf-fonts.ts",
-    "test": "tsx scripts/test/streak.ts && tsx scripts/test/smoke.ts"
+    "test": "tsx scripts/test/streak.ts && tsx scripts/test/smoke.ts",
+    "changelog": "bash scripts/changelog.sh",
+    "release": "bash scripts/release.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.0",
