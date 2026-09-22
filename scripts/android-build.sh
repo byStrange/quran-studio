@@ -8,7 +8,7 @@
 # fails with a specific message when one is genuinely missing.
 #
 #   pnpm app:android                      # debug APK, arm64, sideloadable
-#   pnpm app:android --release            # unsigned release APK
+#   pnpm app:android --apk                # unsigned release APK
 #   pnpm app:android --apk --aab --target aarch64 --target x86_64
 #
 # With no arguments it builds the fast path: one architecture, debug-signed,
@@ -112,6 +112,27 @@ if [ "$#" -gt 0 ]; then
 else
   args=(--apk --debug --target aarch64)
 fi
+
+# `tauri android build` has no `--release`: release is what it does unless
+# `--debug` says otherwise, and passing it is an error rather than a no-op.
+# It reads as the obvious opposite of `--debug`, though, and this script's own
+# usage advertised it until recently — so it is accepted and dropped here
+# rather than failing a twenty-minute build over a flag that means what the
+# caller already wanted.
+filtered=()
+for arg in "${args[@]}"; do
+  if [ "$arg" = "--release" ]; then
+    echo "note: ignoring --release; it is the default for 'tauri android build'" >&2
+    continue
+  fi
+  filtered+=("$arg")
+done
+# `--release` on its own was the documented way to ask for one, and dropping
+# it would otherwise leave nothing to build.
+if [ "${#filtered[@]}" -eq 0 ]; then
+  filtered=(--apk --target aarch64)
+fi
+args=("${filtered[@]}")
 
 # Gradle rewrites the APK in place without compacting it, so each rebuild
 # strands the previous copy of the 200MB native library inside the file: the

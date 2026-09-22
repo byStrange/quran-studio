@@ -141,7 +141,8 @@ jobs:
           # other in place. See README, "Signing Android releases".
           if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
             echo "signed=true" >> "$GITHUB_ENV"
-            bash scripts/android-build.sh --apk --release --target aarch64
+            # No --release: it is the default, and the CLI rejects the flag.
+            bash scripts/android-build.sh --apk --target aarch64
           else
             echo "::warning::ANDROID_KEYSTORE_BASE64 is not set — falling back to a debug-signed APK."
             echo "signed=false" >> "$GITHUB_ENV"
