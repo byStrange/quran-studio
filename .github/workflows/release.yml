@@ -48,9 +48,9 @@ jobs:
 
   android:
     runs-on: ubuntu-latest
-    # The Supabase secrets are environment-scoped, not repo-scoped; without
-    # this they resolve to empty strings and the build silently ships an app
-    # that cannot reach its database.
+    # Kept for the Android signing secrets, which are environment-scoped. The
+    # Supabase values are deliberately NOT: they are repository variables, so
+    # they resolve in every job whatever environment it names.
     environment: prod
     steps:
       - uses: actions/checkout@v4
@@ -95,6 +95,26 @@ jobs:
           workspaces: src-tauri -> target
           key: android
 
+      # An empty value here does not fail the build, which is the whole
+      # problem: Vite inlines the empty string, the bundle keeps the throw in
+      # src/lib/supabase.ts, and the app dies on its first module evaluation
+      # with a blank screen — installed, launchable, and inert. The one place
+      # this is cheap to catch is before anything is built.
+      - name: Check the Supabase configuration is present
+        env:
+          URL: ${{ vars.VITE_SUPABASE_URL }}
+          KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -euo pipefail
+          missing=0
+          [ -n "${URL:-}" ] || { echo "::error::VITE_SUPABASE_URL is empty."; missing=1; }
+          [ -n "${KEY:-}" ] || { echo "::error::VITE_SUPABASE_PUBLISHABLE_KEY is empty."; missing=1; }
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Set both as *repository variables* (Settings -> Secrets and variables -> Actions -> Variables), not secrets, and not scoped to an environment."
+            exit 1
+          fi
+          echo "Supabase configuration present (url: ${URL})"
+
       - run: pnpm install --frozen-lockfile
 
       # src-tauri/gen is gitignored, so CI has no Gradle project until this
@@ -102,13 +122,13 @@ jobs:
       # otherwise leaves as the Tauri template logo.
       - run: pnpm app:android:init
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
 
       - name: Build the APK
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           set -euo pipefail
@@ -221,14 +241,34 @@ jobs:
           workspaces: src-tauri -> target
           key: linux
 
+      # An empty value here does not fail the build, which is the whole
+      # problem: Vite inlines the empty string, the bundle keeps the throw in
+      # src/lib/supabase.ts, and the app dies on its first module evaluation
+      # with a blank screen — installed, launchable, and inert. The one place
+      # this is cheap to catch is before anything is built.
+      - name: Check the Supabase configuration is present
+        env:
+          URL: ${{ vars.VITE_SUPABASE_URL }}
+          KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -euo pipefail
+          missing=0
+          [ -n "${URL:-}" ] || { echo "::error::VITE_SUPABASE_URL is empty."; missing=1; }
+          [ -n "${KEY:-}" ] || { echo "::error::VITE_SUPABASE_PUBLISHABLE_KEY is empty."; missing=1; }
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Set both as *repository variables* (Settings -> Secrets and variables -> Actions -> Variables), not secrets, and not scoped to an environment."
+            exit 1
+          fi
+          echo "Supabase configuration present (url: ${URL})"
+
       - run: pnpm install --frozen-lockfile
 
       - uses: tauri-apps/tauri-action@v0
         env:
           # Baked into the frontend bundle by Vite. The publishable key is
           # client-safe; access is constrained by Row Level Security.
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
           # linuxdeploy strips every binary it bundles and fails the build on
           # any it cannot. The release profile already sets `strip = true`, so
           # there is nothing left for it to do but go wrong. This matches what
@@ -284,8 +324,8 @@ jobs:
         env:
           # Baked into the frontend bundle by Vite. The publishable key is
           # client-safe; access is constrained by Row Level Security.
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
           # Ad-hoc signing. Without an identity the bundle has no
           # _CodeSignature at all, and Gatekeeper answers a quarantined
           # unsigned app with "damaged" rather than an override prompt. This
