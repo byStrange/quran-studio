@@ -117,76 +117,100 @@ export function Browse() {
               <div
                 key={surah.number}
                 id={`surah-${surah.number}`}
-                className="scroll-mt-20 overflow-hidden rounded-xl border border-border bg-surface"
+                className={cn(
+                  "scroll-mt-20 overflow-hidden rounded-xl border bg-surface transition-colors",
+                  expanded ? "border-accent/40" : "border-border",
+                )}
               >
-                <div className="flex w-full items-center gap-1 pr-2">
+                {/* One tap target for the whole row rather than two that did
+                    the same thing. The overlay button carries the toggle; the
+                    content sits above it and lets clicks through, so the only
+                    thing that can steal one is the read-surah button. */}
+                <div className="relative flex items-center gap-3 px-3 py-3 md:gap-4 md:px-4">
                   <button
                     onClick={() => setOpenSurah(expanded ? null : surah.number)}
                     aria-expanded={expanded}
-                    className="flex min-w-0 flex-1 items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-surface-2"
-                  >
-                    <span
-                      className={cn(
-                        "grid size-9 shrink-0 place-items-center rounded-lg text-[0.8125rem] font-semibold tabular-nums",
-                        surahDone ? "bg-accent text-accent-fg" : "bg-surface-2 text-fg-muted",
-                      )}
-                    >
-                      {surah.number}
-                    </span>
+                    aria-label={expanded ? t("browse.hideRukus") : t("browse.showRukus")}
+                    className="absolute inset-0 transition-colors hover:bg-surface-2/60"
+                  />
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline gap-2">
-                        <span className="truncate text-sm font-medium text-fg">
-                          {surah.name_english}
-                        </span>
-                        <span className="truncate text-[0.8125rem] text-fg-subtle">
-                          {surah.name_translation}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 text-[0.75rem] text-fg-subtle">
-                        {t("common.ayahCount", { count: surah.ayah_count })} ·{" "}
-                        {t("common.rukuCount", { count: surahRukus.length })} ·{" "}
+                  <SurahNumber
+                    number={surah.number}
+                    done={rukusDone}
+                    total={surahRukus.length}
+                    complete={surahDone}
+                  />
+
+                  <div className="pointer-events-none relative min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2">
+                      <h3 className="truncate text-[0.9375rem] font-medium text-fg">
+                        {surah.name_english}
+                      </h3>
+                      {surahDone ? (
+                        <Sparkles className="size-3.5 shrink-0 text-accent" aria-hidden />
+                      ) : null}
+                    </div>
+
+                    <p className="mt-0.5 truncate text-[0.8125rem] text-fg-subtle">
+                      {surah.name_translation}
+                    </p>
+
+                    {/* The reference facts, one weight down and anchored by a
+                        pill so the eye has something to land on. Everything
+                        here used to be a dot-separated run at the same weight
+                        as the name, which is why none of it could be scanned. */}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.75rem] text-fg-subtle">
+                      <span className="rounded-md bg-surface-2 px-1.5 py-0.5 font-medium text-fg-muted">
                         {surah.revelation_type === "meccan"
                           ? t("browse.revelationMeccan")
                           : t("browse.revelationMedinan")}
-                        {rukusDone > 0 ? (
-                          <span className="text-accent">
-                            {" · "}
-                            {surahDone
-                              ? t("browse.surahMemorized")
-                              : t("browse.rukusMemorized", {
-                                  done: rukusDone,
-                                  total: surahRukus.length,
-                                })}
-                          </span>
-                        ) : null}
-                      </div>
+                      </span>
+                      <span className="tabular-nums">
+                        {t("common.ayahCount", { count: surah.ayah_count })}
+                      </span>
+                      <span aria-hidden>·</span>
+                      <span className="tabular-nums">
+                        {t("common.rukuCount", { count: surahRukus.length })}
+                      </span>
+                      {rukusDone > 0 ? (
+                        <span className="rounded-md bg-accent-soft px-1.5 py-0.5 font-medium tabular-nums text-accent-soft-fg">
+                          {surahDone
+                            ? t("browse.surahMemorized")
+                            : t("browse.rukusMemorized", {
+                                done: rukusDone,
+                                total: surahRukus.length,
+                              })}
+                        </span>
+                      ) : null}
                     </div>
+                  </div>
 
-                    <span className="arabic-sm shrink-0 text-fg-muted">{surah.name_arabic}</span>
-                  </button>
+                  <span className="arabic-sm pointer-events-none relative shrink-0 pl-2 text-fg-muted">
+                    {surah.name_arabic}
+                  </span>
 
-                  <Tooltip content={t("browse.readWholeSurah")}>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={t("browse.readAllOf", { surah: surah.name_english })}
-                      onClick={() => navigate(`/read/surah/${surah.number}`)}
-                    >
-                      <ScrollText className="size-4" aria-hidden />
-                    </Button>
-                  </Tooltip>
+                  <div className="relative flex shrink-0 items-center gap-1">
+                    <Tooltip content={t("browse.readWholeSurah")}>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={t("browse.readAllOf", { surah: surah.name_english })}
+                        onClick={() => navigate(`/read/surah/${surah.number}`)}
+                      >
+                        <ScrollText className="size-4" aria-hidden />
+                      </Button>
+                    </Tooltip>
 
-                  <button
-                    onClick={() => setOpenSurah(expanded ? null : surah.number)}
-                    aria-label={expanded ? t("browse.hideRukus") : t("browse.showRukus")}
-                    className="grid size-8 shrink-0 place-items-center rounded-lg text-fg-subtle transition-colors hover:bg-surface-2"
-                  >
+                    {/* Decoration, not a control: the row itself is the toggle,
+                        and two buttons doing one job is what made this busy. */}
                     <ChevronRight
-                      className={cn("size-4 transition-transform", expanded && "rotate-90")}
+                      className={cn(
+                        "pointer-events-none size-4 text-fg-subtle transition-transform",
+                        expanded && "rotate-90",
+                      )}
                       aria-hidden
                     />
-                  </button>
+                  </div>
                 </div>
 
                 {expanded ? (
@@ -228,6 +252,65 @@ export function Browse() {
         </div>
       )}
     </Page>
+  );
+}
+
+/**
+ * The surah's number, doubling as its progress.
+ *
+ * A ring rather than another line of text. "12/40 rukus memorized" was one
+ * more fragment competing with six others on a row where everything was the
+ * same size; as a ring it is read at a glance and, because every row's ring
+ * sits in the same place, the column can be scanned without reading any of it.
+ * The exact numbers are still spelled out in the row's pill for anyone who
+ * wants them.
+ */
+function SurahNumber({
+  number,
+  done,
+  total,
+  complete,
+}: {
+  number: number;
+  done: number;
+  total: number;
+  complete: boolean;
+}) {
+  // r=16 in a 36-unit box, so the circumference is 2π·16.
+  const CIRCUMFERENCE = 100.53;
+  const fraction = total > 0 ? done / total : 0;
+
+  return (
+    <span className="pointer-events-none relative grid size-10 shrink-0 place-items-center">
+      {done > 0 && !complete ? (
+        <svg className="absolute inset-0 -rotate-90" viewBox="0 0 36 36" aria-hidden>
+          <circle cx="18" cy="18" r="16" fill="none" stroke="var(--border)" strokeWidth="2.5" />
+          <circle
+            cx="18"
+            cy="18"
+            r="16"
+            fill="none"
+            stroke="var(--accent)"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeDasharray={`${fraction * CIRCUMFERENCE} ${CIRCUMFERENCE}`}
+          />
+        </svg>
+      ) : null}
+
+      <span
+        className={cn(
+          "grid size-8 place-items-center rounded-full text-[0.8125rem] font-semibold tabular-nums",
+          complete
+            ? "bg-accent text-accent-fg"
+            : done > 0
+              ? "text-accent-soft-fg"
+              : "bg-surface-2 text-fg-muted",
+        )}
+      >
+        {number}
+      </span>
+    </span>
   );
 }
 
