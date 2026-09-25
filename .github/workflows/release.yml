@@ -1,9 +1,9 @@
 name: Release
 
 # A tag is the whole trigger. `git tag v0.2.0 && git push --tags` builds the
-# Android APK, the Linux AppImage and the Windows installer, writes the notes
-# from the commits since the last tag, and publishes a GitHub Release with all
-# three attached.
+# Android APK, the Linux AppImage, the Windows installer and the macOS DMG,
+# writes the notes from the commits since the last tag, and publishes a GitHub
+# Release with all four attached.
 #
 # Running it by hand builds and publishes nothing — the release job is gated
 # on the ref actually being a tag, so a manual run is a way to find out
@@ -21,7 +21,7 @@ on:
         description: Which platforms to build
         type: choice
         default: all
-        options: [all, android, linux, windows]
+        options: [all, android, linux, windows, macos]
 
 permissions:
   contents: write
@@ -362,15 +362,106 @@ jobs:
           path: src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
 
+  # --- macOS ---------------------------------------------------------------
+
+  macos:
+    if: (inputs.platforms || 'all') == 'all' || inputs.platforms == 'macos'
+    # macos-latest is Apple Silicon; the universal target cross-builds x86_64
+    # too, so the one DMG runs on both kinds of Mac.
+    runs-on: macos-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: macos
+
+      # See the Android job for why this is checked up front.
+      - name: Check the Supabase configuration is present
+        env:
+          URL: ${{ vars.VITE_SUPABASE_URL }}
+          KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -euo pipefail
+          missing=0
+          [ -n "${URL:-}" ] || { echo "::error::VITE_SUPABASE_URL is empty."; missing=1; }
+          [ -n "${KEY:-}" ] || { echo "::error::VITE_SUPABASE_PUBLISHABLE_KEY is empty."; missing=1; }
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Set both as *repository variables* (Settings -> Secrets and variables -> Actions -> Variables), not secrets, and not scoped to an environment."
+            exit 1
+          fi
+          echo "Supabase configuration present (url: ${URL})"
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          # Baked into the frontend bundle by Vite. The publishable key is
+          # client-safe; access is constrained by Row Level Security.
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          # Ad-hoc signing. Without an identity the bundle has no
+          # _CodeSignature at all, and Gatekeeper answers a quarantined
+          # unsigned app with "damaged" rather than an override prompt. This
+          # is not a Developer ID and does not notarize — it only buys the
+          # "Open Anyway" path instead of a terminal command. See README,
+          # "Installing on macOS".
+          APPLE_SIGNING_IDENTITY: "-"
+        with:
+          # --bundles overrides the deb/appimage targets pinned in tauri.conf.json.
+          args: --target universal-apple-darwin --bundles dmg
+
+      # Fails the job on a DMG that would not open, rather than on a user's Mac.
+      - name: Verify the DMG
+        run: |
+          set -euo pipefail
+          dmg="$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)"
+          hdiutil verify "$dmg"
+          mnt="$(mktemp -d)"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$dmg"
+          app="$(ls -d "$mnt"/*.app)"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          lipo -archs "$app"/Contents/MacOS/*
+          hdiutil detach "$mnt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
   # --- publish -------------------------------------------------------------
 
   release:
-    needs: [changelog, android, linux, windows]
+    needs: [changelog, android, linux, windows, macos]
     # A manual run builds and stops here. Only a tag is a release, and a tag
     # always builds every platform.
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
+      # Only for .github/INSTALL.md, which is appended to the notes.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
+          sparse-checkout-cone-mode: false
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -382,7 +473,7 @@ jobs:
           NOTES: ${{ needs.changelog.outputs.notes }}
         run: |
           set -euo pipefail
-          printf '%s\n' "$NOTES" > notes.md
+          { printf '%s\n\n' "$NOTES"; cat .github/INSTALL.md; } > notes.md
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \

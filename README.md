@@ -158,12 +158,18 @@ pnpm release 0.2.0
 
 That writes the version into `package.json`, `src-tauri/tauri.conf.json` and
 `src-tauri/Cargo.toml`, commits it, and pushes the tag. `.github/workflows/release.yml`
-then builds the Android APK, the Linux AppImage and the Windows installer,
-writes the notes from the commits since the previous tag, and publishes a GitHub
-Release with all three attached. Nothing is built locally.
+then builds the Android APK, the Linux AppImage, the Windows installer and the
+universal macOS DMG, writes the notes from the commits since the previous tag,
+and publishes a GitHub Release with all four attached. Nothing is built locally.
 
 To check one platform's build without releasing, run the workflow by hand:
-`gh workflow run release.yml -f platforms=windows` (or `android`, `linux`, `all`).
+`gh workflow run release.yml -f platforms=macos` (or `android`, `linux`,
+`windows`, `all`).
+
+Install instructions for each platform live in
+[`.github/INSTALL.md`](.github/INSTALL.md) and are appended to every release's
+notes. The macOS app is ad-hoc signed but not notarized, so it needs the one-time
+*Open Anyway* step described there.
 
 `pnpm release 0.2.0 --dry` prints the version change and the notes and stops.
 `pnpm changelog` prints the notes alone, at any time.
