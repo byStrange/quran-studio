@@ -12,6 +12,13 @@ name: Release
 # the quick way to check a single build:
 #
 #   gh workflow run release.yml -f platforms=windows
+#
+# A release of fewer than four platforms is a manual run on the tag itself.
+# Pushing the tag still starts the full build, but the run below lands in the
+# same concurrency group and cancels it, then publishes what it built:
+#
+#   git push origin v0.2.4
+#   gh workflow run release.yml --ref v0.2.4 -f platforms=android
 on:
   push:
     tags: ["v*"]
@@ -25,6 +32,12 @@ on:
 
 permissions:
   contents: write
+
+# One run per ref. The newest wins, which is what lets a narrowed run on a tag
+# replace the full build the tag push started.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # --- notes ---------------------------------------------------------------
@@ -451,9 +464,17 @@ jobs:
 
   release:
     needs: [changelog, android, linux, windows, macos]
-    # A manual run builds and stops here. Only a tag is a release, and a tag
-    # always builds every platform.
-    if: startsWith(github.ref, 'refs/tags/v')
+    # A manual run on a branch builds and stops here: only a tag is a release.
+    # On a tag it publishes whichever platforms were asked for. `!cancelled()`
+    # is what lets it run past the skipped ones, so it has to refuse a failed
+    # or cancelled build itself — a release missing a platform that was meant
+    # to be in it is worse than no release.
+    if: >-
+      !cancelled()
+      && startsWith(github.ref, 'refs/tags/v')
+      && needs.changelog.result == 'success'
+      && !contains(needs.*.result, 'failure')
+      && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     steps:
       # Only for .github/INSTALL.md, which is appended to the notes.
