@@ -22,6 +22,7 @@ function Marker({
   tooltip,
   label,
   tone,
+  caption,
   children,
 }: {
   on: boolean;
@@ -29,6 +30,11 @@ function Marker({
   tooltip: string;
   label: string;
   tone: "accent" | "gold" | "green";
+  /**
+   * Printed beside the icon, for the touch row. A finger has no tooltip to
+   * reveal, and three bare icons do not say which is which.
+   */
+  caption?: string;
   children: ReactNode;
 }) {
   return (
@@ -38,17 +44,26 @@ function Marker({
         aria-pressed={on}
         aria-label={label}
         className={cn(
-          "grid size-7 place-items-center rounded-lg transition-colors",
+          "transition-colors",
+          caption
+            ? "inline-flex h-11 min-w-0 flex-auto items-center justify-center gap-1.5 rounded-xl border px-2 text-[0.8125rem] font-medium"
+            : "grid size-7 place-items-center rounded-lg",
           on
             ? tone === "accent"
-              ? "bg-accent-soft text-accent-soft-fg"
+              ? "border-transparent bg-accent-soft text-accent-soft-fg"
               : tone === "gold"
-                ? "bg-gold-soft text-gold-soft-fg"
-                : "bg-green-500/12 text-green-600 dark:text-green-400"
-            : "text-fg-subtle/70 hover:bg-surface-2 hover:text-fg",
+                ? "border-transparent bg-gold-soft text-gold-soft-fg"
+                : "border-transparent bg-green-500/12 text-green-600 dark:text-green-400"
+            : cn(
+                "text-fg-subtle/70 hover:bg-surface-2 hover:text-fg",
+                // Unlit, a captioned marker still has to look like something
+                // to press; the icon-only ones lean on the tooltip instead.
+                caption && "border-border text-fg-muted",
+              ),
         )}
       >
         {children}
+        {caption ? <span className="truncate">{caption}</span> : null}
       </button>
     </Tooltip>
   );
@@ -73,6 +88,7 @@ function Action({
         aria-label={tooltip}
         className={cn(
           "verse-quiet inline-flex h-7 items-center gap-1 rounded-lg px-1.5 transition-colors",
+          "touch:h-11 touch:min-w-11 touch:justify-center touch:rounded-xl",
           active
             ? "text-accent-soft-fg"
             : "text-fg-subtle hover:bg-surface-2 hover:text-fg",
@@ -136,6 +152,48 @@ export function VerseCard({
   const language = useLanguage();
   const reference = verseKey(verse.surah_number, verse.ayah_number);
 
+  // The three markers read as one group — "known by heart", "understood",
+  // "vocabulary learned" is the set that says what is left to do on this
+  // ayah. With a pointer they ride in the header beside the actions; on touch
+  // that row cannot hold seven thumb-sized targets, so they drop to a row of
+  // their own under the translation, captioned since no tooltip will show.
+  const markers = (captioned: boolean) => (
+    <>
+      <Marker
+        on={memorized}
+        onToggle={onToggleMemorized}
+        tooltip={memorized ? t("verse.memorized") : t("verse.markMemorized")}
+        label={t("verse.markMemorizedLabel", { reference })}
+        tone="accent"
+        caption={captioned ? t("verse.markerMemorized") : undefined}
+      >
+        <Check className="size-3.5 shrink-0" aria-hidden />
+      </Marker>
+
+      <Marker
+        on={tafsirRead}
+        onToggle={onToggleTafsirRead}
+        tooltip={tafsirRead ? t("verse.tafsirRead") : t("verse.markTafsirRead")}
+        label={t("verse.markTafsirLabel", { reference })}
+        tone="gold"
+        caption={captioned ? t("verse.markerTafsir") : undefined}
+      >
+        <GraduationCap className="size-3.5 shrink-0" aria-hidden />
+      </Marker>
+
+      <Marker
+        on={wordsLearned}
+        onToggle={onToggleWordsLearned}
+        tooltip={wordsLearned ? t("verse.wordsLearned") : t("verse.markWordsLearned")}
+        label={t("verse.markWordsLabel", { reference })}
+        tone="green"
+        caption={captioned ? t("verse.markerWords") : undefined}
+      >
+        <WholeWord className="size-3.5 shrink-0" aria-hidden />
+      </Marker>
+    </>
+  );
+
   return (
     // No card: the ayah runs the full width of the reading column and is
     // divided from the next by a rule, the way a printed page divides them.
@@ -174,40 +232,10 @@ export function VerseCard({
           {reciting ? <Volume2 className="size-3.5" aria-hidden /> : verse.ayah_number}
         </span>
 
-        <span className="mx-1.5 h-4 w-px bg-border" aria-hidden />
-
-        <Marker
-          on={memorized}
-          onToggle={onToggleMemorized}
-          tooltip={memorized ? t("verse.memorized") : t("verse.markMemorized")}
-          label={t("verse.markMemorizedLabel", { reference })}
-          tone="accent"
-        >
-          <Check className="size-3.5" aria-hidden />
-        </Marker>
-
-        {/* The three markers read as one group — "known by heart",
-            "understood", "vocabulary learned" is the set that says what is
-            left to do on this ayah. */}
-        <Marker
-          on={tafsirRead}
-          onToggle={onToggleTafsirRead}
-          tooltip={tafsirRead ? t("verse.tafsirRead") : t("verse.markTafsirRead")}
-          label={t("verse.markTafsirLabel", { reference })}
-          tone="gold"
-        >
-          <GraduationCap className="size-3.5" aria-hidden />
-        </Marker>
-
-        <Marker
-          on={wordsLearned}
-          onToggle={onToggleWordsLearned}
-          tooltip={wordsLearned ? t("verse.wordsLearned") : t("verse.markWordsLearned")}
-          label={t("verse.markWordsLabel", { reference })}
-          tone="green"
-        >
-          <WholeWord className="size-3.5" aria-hidden />
-        </Marker>
+        <div className="flex items-center gap-1 touch:hidden">
+          <span className="mx-1.5 h-4 w-px bg-border" aria-hidden />
+          {markers(false)}
+        </div>
 
         <span className="flex-1" />
 
@@ -247,6 +275,8 @@ export function VerseCard({
       <p className="mt-4 text-[0.9375rem] leading-relaxed text-fg-muted" data-selectable>
         {verseTranslation(verse, language)}
       </p>
+
+      <div className="mt-5 hidden gap-2 touch:flex">{markers(true)}</div>
 
       {wordsExpanded ? (
         <div className="mt-5 rounded-xl border border-border bg-surface-2/40 p-3.5">
