@@ -8,6 +8,11 @@
    so anything revealed on hover is simply missing there. */
 @custom-variant can-hover (@media (hover: hover) and (pointer: fine));
 
+/* The exact complement of `can-hover`: a finger, not a pointer. Controls grow
+   to a thumb-sized 44px here, and whatever a tooltip would have explained has
+   to be said on the control itself. */
+@custom-variant touch (@media not all and (hover: hover) and (pointer: fine));
+
 /* ---------------------------------------------------------------------------
    Palette
    Light is warm paper rather than pure white; dark is a desaturated green-black
