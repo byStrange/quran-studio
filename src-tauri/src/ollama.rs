@@ -41,6 +41,8 @@ pub enum AiError {
     NoModel,
     #[error("unexpected response shape from Ollama Cloud")]
     BadResponse,
+    #[error("the model's reply was cut off before it finished; try again")]
+    Truncated,
     #[error("could not persist the API key: {0}")]
     Persist(String),
 }
@@ -243,6 +245,10 @@ struct ChatOptions {
 struct ChatResponse {
     #[serde(default)]
     message: Option<ChatResponseMessage>,
+    /// "length" when generation stopped at `num_predict` rather than at the
+    /// end of the answer.
+    #[serde(default)]
+    done_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -273,6 +279,7 @@ async fn chat_with(
 ) -> AiResult<(String, String)> {
     let key = api_key().ok_or(AiError::NotConfigured)?;
     let model = resolve_model(state).await?;
+    let format_requested = format.is_some();
 
     let request = ChatRequest {
         model: &model,
@@ -307,6 +314,12 @@ async fn chat_with(
     }
 
     let parsed: ChatResponse = serde_json::from_str(&body).map_err(|_| AiError::BadResponse)?;
+    // A structured reply that ran out of tokens is half an object, which no
+    // amount of extraction recovers. Saying so is more use to the reader (and
+    // to whoever tunes the budget) than "unexpected response shape".
+    if format_requested && parsed.done_reason.as_deref() == Some("length") {
+        return Err(AiError::Truncated);
+    }
     let content = parsed
         .message
         .map(|m| m.content)
@@ -1070,6 +1083,21 @@ everything of your own in Uzbek LATIN. Only text you copy verbatim out of the ta
 /// evidence is not in it is dropped. What a memorizer gains is the layer the
 /// ayah alone does not carry: who "they" are, what occasioned the ayah, which
 /// hadith the commentator reads it with.
+/// The script rule again, for the end of the user message.
+///
+/// Stated once in the system prompt, it held for short passages and was lost
+/// on 2:1 in Uzbek: after twenty-four thousand characters of Cyrillic the
+/// model answered in Cyrillic. Repeating it as the last thing read fixed it.
+fn tafsir_script_reminder(code: &str) -> &'static str {
+    match code {
+        "uz" => {
+            " Write in Uzbek using the LATIN alphabet (o'zbek lotin yozuvi), not Cyrillic — \
+only text copied verbatim from the tafsir stays in Cyrillic."
+        }
+        _ => "",
+    }
+}
+
 fn tafsir_quiz_system(
     language: &str,
     guidance: &str,
@@ -1219,6 +1247,7 @@ pub async fn ai_generate_tafsir_quiz(
     }
     let guidance = language_guidance(&language);
     let source_note = tafsir_source_note(&language);
+    let reminder = tafsir_script_reminder(&language);
     let language = language_name(&language);
     let tafsir_name = tafsir_name.trim();
 
@@ -1243,11 +1272,13 @@ pub async fn ai_generate_tafsir_quiz(
 
     let prompt = format!(
         "{passage}\n\n\
-         Write exactly {} questions — one per ayah above, in that order.",
+         Write exactly {} questions — one per ayah above, in that order.{reminder}",
         items.len()
     );
 
-    let budget = (items.len() as u32 * 260).clamp(600, 2_000);
+    // Per question: a question, an answer and a copied sentence of evidence,
+    // which in Uzbek runs to several hundred tokens on its own.
+    let budget = (items.len() as u32 * 600).clamp(1_000, 3_000);
     let (content, model_used) = chat_with(
         &state,
         &tafsir_quiz_system(language, guidance, source_note, tafsir_name, items.len()),
@@ -1372,20 +1403,22 @@ RECALL\n\
 Two to four questions that test the key points, each answerable from them, with an answer of \
 one or two sentences. Do not put the answer in the question.\n\n\
 NARRATIONS\n\
-List every narration the tafsir quotes in this passage, in the order they appear:\n\
+List the narrations the tafsir quotes in this passage, in the order they appear — at most \
+eight; if there are more, keep the ones that explain the ayah most directly:\n\
 - kind \"hadith\": a saying, action or approval of the Prophet ﷺ.\n\
 - kind \"athar\": a saying of a Companion or of one of the Tabi'in (for example Ibn Abbas, \
 Ibn Mas'ud, Mujahid, Qatada).\n\
 Leave out the commentator's own words and his summaries of other scholars' views.\n\
 - `text`: the narration itself, translated faithfully into {language}. Leave out the chain of \
-narrators; do not paraphrase or shorten the wording beyond that.\n\
+narrators; do not paraphrase. If a narration runs past about sixty words, give the part of \
+it that bears on the ayah.\n\
 - `narrator`: the Companion (or Successor) it is narrated from or attributed to, if the tafsir \
 names one; otherwise null.\n\
 - `source`: the collection or scholar who recorded it (for example Sahih al-Bukhari, Muslim, \
 Imam Ahmad, Ibn Abi Hatim), only if the tafsir names it; otherwise null.\n\
-- `quote`: a stretch of at least five words copied character for character from the tafsir \
-where this narration appears, in the tafsir's own language and script. Do not translate it and \
-do not shorten it with '…'.\n\
+- `quote`: six to fifteen consecutive words copied character for character from the tafsir \
+where this narration appears, in the tafsir's own language and script — just enough to find the \
+place, not the whole narration. Do not translate it and do not shorten it with '…'.\n\
 If the passage quotes no narrations, return an empty list. Never fill this list from memory.\n\n\
 LANGUAGE\n\
 Write everything except `quote` and quoted Arabic in {language}.{guidance}{source_note}\n\n\
@@ -1562,6 +1595,7 @@ pub async fn ai_generate_tafsir_summary(
     }
     let guidance = language_guidance(&language);
     let source_note = tafsir_source_note(&language);
+    let reminder = tafsir_script_reminder(&language);
     let language = language_name(&language);
     let tafsir_name = tafsir_name.trim();
 
@@ -1573,14 +1607,18 @@ pub async fn ai_generate_tafsir_summary(
     let prompt = format!(
         "Tafsir of {tafsir_name} on Surah {surah_name}, ayahs {range}.\n\n\
          TAFSIR:\n{content}\n\n\
-         Write the study summary for this passage."
+         Write the study summary for this passage, in {language}.{reminder}"
     );
 
     let (reply, model_used) = chat_with(
         &state,
         &tafsir_summary_system(language, guidance, source_note, tafsir_name),
         &prompt,
-        2_500,
+        // Generous on purpose. Uzbek costs far more tokens per word than
+        // English, and an Ibn Kathir passage can quote a dozen narrations,
+        // each carried twice (translated, and quoted in the original). 2,500
+        // was measured running out mid-list on 2:3 in Uzbek.
+        8_000,
         0.3,
         Some(tafsir_summary_schema()),
         Some(SUMMARY_TIMEOUT),

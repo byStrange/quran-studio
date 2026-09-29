@@ -262,7 +262,8 @@ export async function getTafsirSummary(
   options: { force?: boolean } = {},
 ): Promise<TafsirSummary> {
   if (!options.force) {
-    const cached = await fetchCachedTafsirSummary(input, language);
+    // A cache that cannot be read is a reason to generate, not to fail.
+    const cached = await fetchCachedTafsirSummary(input, language).catch(() => null);
     if (cached) return cached;
   }
   if (!isTauri()) throw new AiUnavailableError(NOT_IN_TAURI);
@@ -309,5 +310,9 @@ export function describeAiError(error: unknown, t: TFunction): string {
   if (error instanceof AiUnavailableError) return t("ai.notInTauri");
   if (typeof error === "string") return error;
   if (error instanceof Error) return error.message;
+  // Supabase errors are plain objects with a message, not `Error`s.
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+    return error.message;
+  }
   return t("ai.failed");
 }

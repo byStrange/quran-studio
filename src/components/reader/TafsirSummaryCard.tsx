@@ -118,6 +118,13 @@ export function TafsirSummaryCard({
             <p className="text-[0.875rem] leading-relaxed text-fg-muted">
               {isTauri() ? t("tafsirSummary.none") : t("summary.needsDesktop")}
             </p>
+            {/* Inline as well as the toast: on a phone the panel is a
+                full-screen sheet, and the toast can land underneath it. */}
+            {generate.isError ? (
+              <p className="text-[0.8125rem] leading-relaxed text-danger" role="alert">
+                {describeAiError(generate.error, t)}
+              </p>
+            ) : null}
             {isTauri() ? (
               <Button size="sm" variant="primary" onClick={() => generate.mutate(false)}>
                 <WandSparkles className="size-3.5" aria-hidden />
