@@ -1305,9 +1305,14 @@ pub async fn ai_generate_tafsir_quiz(
 
 const SUMMARY_TIMEOUT: Duration = Duration::from_secs(180);
 
-/// Enough for the longest Ibn Kathir passages seen in the imports; anything
-/// past it is cut at a paragraph boundary rather than mid-sentence.
-const SUMMARY_MAX_CHARS: usize = 40_000;
+/// Enough for every Ibn Kathir passage but the very longest; anything past it
+/// is cut at a paragraph boundary rather than mid-sentence.
+///
+/// Measured on `gemma4:31b-cloud`: the Uzbek 17:1 entry, 190k characters, is
+/// about 84k prompt tokens and summarizes whole in ~15s, the gist reaching the
+/// end of the passage. The old 40k cap sent the first fifth of it. Past ~240k
+/// the prompt nears the model's context window, which is where this stops.
+const SUMMARY_MAX_CHARS: usize = 240_000;
 
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct KeyPoint {
@@ -1506,6 +1511,61 @@ fn prepare_tafsir(content: &str) -> String {
     }
 }
 
+/// Reads a summary reply field by field, taking what it can.
+///
+/// `format` asks Ollama for the schema but does not hold the model to it: on
+/// 2:1 in Uzbek it wrote `"ayah": "1"`, and a strict parse threw away an
+/// otherwise good summary over one quoted digit. So a number may arrive as a
+/// string, a key point as a bare string, a narrator as anything; what is
+/// unusable is skipped rather than failing the whole reply. `validate_summary`
+/// still decides what is kept.
+fn summary_from_value(value: &serde_json::Value) -> TafsirSummaryBody {
+    use serde_json::Value;
+
+    fn text(value: Option<&Value>) -> String {
+        match value {
+            Some(Value::String(s)) => s.clone(),
+            Some(Value::Number(n)) => n.to_string(),
+            _ => String::new(),
+        }
+    }
+    fn number(value: Option<&Value>) -> Option<i32> {
+        match value {
+            Some(Value::Number(n)) => n.as_i64().and_then(|n| i32::try_from(n).ok()),
+            Some(Value::String(s)) => s.trim().parse().ok(),
+            _ => None,
+        }
+    }
+    fn list<'a>(value: &'a Value, key: &str) -> &'a [Value] {
+        value.get(key).and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    TafsirSummaryBody {
+        gist: text(value.get("gist")),
+        key_points: list(value, "key_points")
+            .iter()
+            .map(|p| match p {
+                Value::String(point) => KeyPoint { point: point.clone(), ayah: None },
+                _ => KeyPoint { point: text(p.get("point")), ayah: number(p.get("ayah")) },
+            })
+            .collect(),
+        recall: list(value, "recall")
+            .iter()
+            .map(|r| RecallItem { question: text(r.get("question")), answer: text(r.get("answer")) })
+            .collect(),
+        narrations: list(value, "narrations")
+            .iter()
+            .map(|n| Narration {
+                kind: text(n.get("kind")),
+                text: text(n.get("text")),
+                narrator: Some(text(n.get("narrator"))),
+                source: Some(text(n.get("source"))),
+                quote: text(n.get("quote")),
+            })
+            .collect(),
+    }
+}
+
 fn non_empty(value: Option<String>) -> Option<String> {
     value.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
 }
@@ -1626,8 +1686,8 @@ pub async fn ai_generate_tafsir_summary(
     .await?;
 
     let json = extract_json(&reply).ok_or(AiError::BadResponse)?;
-    let parsed: TafsirSummaryBody =
-        serde_json::from_str(json).map_err(|_| AiError::BadResponse)?;
+    let value: serde_json::Value = serde_json::from_str(json).map_err(|_| AiError::BadResponse)?;
+    let parsed = summary_from_value(&value);
     let summary =
         validate_summary(parsed, &content, ayah_start, ayah_end).ok_or(AiError::BadResponse)?;
 
@@ -1736,6 +1796,22 @@ mod tests {
         assert_eq!(out.narrations.len(), 1);
         assert_eq!(out.narrations[0].narrator.as_deref(), Some("Abu Hurayra"));
         assert_eq!(out.key_points[0].ayah, None);
+    }
+
+    #[test]
+    fn summary_reply_is_read_leniently() {
+        let value = serde_json::json!({
+            "gist": "G",
+            "key_points": [{ "point": "A", "ayah": "1" }, "B", { "point": "C", "ayah": null }],
+            "recall": [{ "question": "Q", "answer": "A" }],
+            "narrations": [{ "kind": "hadith", "text": "T", "narrator": null, "source": 5, "quote": "q" }]
+        });
+        let body = summary_from_value(&value);
+        assert_eq!(body.key_points[0].ayah, Some(1));
+        assert_eq!(body.key_points[1].point, "B");
+        assert_eq!(body.key_points[2].ayah, None);
+        assert_eq!(body.narrations[0].narrator.as_deref(), Some(""));
+        assert_eq!(body.narrations[0].source.as_deref(), Some("5"));
     }
 
     #[test]
