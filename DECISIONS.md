@@ -899,6 +899,19 @@ the wrong register or the wrong alphabet.
 
 ---
 
+## Linux AppImage
+
+**GStreamer plugins are bundled** (`bundle.linux.appimage.bundleMediaFramework`
+in `tauri.conf.json`). The AppImage always ships `libgstreamer` itself, because
+WebKitGTK links it. Without the plugins, a relocatable GStreamer (Arch builds
+one) looks for them next to the bundled library, finds none, and WebKit's web
+process crashes the first time it builds a media pipeline. That happens when the
+reader creates its `Audio` element, so opening a ruku froze the app. Bundling
+costs about 60 MB unpacked. Building the AppImage locally needs `patchelf` on
+`PATH`, just as CI does.
+
+---
+
 ## Deliberately not built (v1)
 
 - **OAuth providers.** Email/password only; adding providers is Supabase

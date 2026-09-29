@@ -42,6 +42,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": true
+      }
+    },
     "category": "Education",
     "shortDescription": "Quran memorization and study",
     "longDescription": "Learn and memorize the Quran ruku by ruku, with word-by-word vocabulary, Ibn Kathir tafsir, AI-generated context, and progress tracking."
