@@ -1,6 +1,6 @@
 [package]
 name = "quran-studio"
-version = "0.2.6"
+version = "0.2.7"
 description = "Ruku-by-ruku Quran memorization and study app"
 authors = ["Rahmatullo"]
 edition = "2021"
