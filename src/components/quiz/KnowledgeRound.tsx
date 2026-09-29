@@ -22,7 +22,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RotateCcw, Settings2, Sparkles, WandSparkles, X } from "lucide-react";
+import { BookOpen, ChevronDown, RotateCcw, Settings2, Sparkles, WandSparkles, X } from "lucide-react";
 import { describeAiError } from "@/lib/ai";
 import { useAuth } from "@/providers/AuthProvider";
 import { useLanguage, useT } from "@/providers/I18nProvider";
@@ -36,7 +36,7 @@ import {
   kindLabelKey,
   type KnowledgeQuestion,
 } from "@/lib/knowledgeQuiz";
-import { verseKey } from "@/lib/utils";
+import { cn, toParagraphs, verseKey } from "@/lib/utils";
 import { Card, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Spinner } from "@/components/ui/feedback";
@@ -90,7 +90,7 @@ export function KnowledgeRound({
       });
       if (verses.length === 0) return { sessionId: "", questions: [] };
 
-      const generated = await generateQuestions(verses, language);
+      const generated = await generateQuestions(verses, language, config.seed);
       if (generated.questions.length === 0) return { sessionId: "", questions: [] };
 
       const sessionId = await startSession({
@@ -310,16 +310,100 @@ export function KnowledgeRound({
                 {verseKey(question!.verse.surah_number, question!.verse.ayah_number)}
               </p>
               <p className="arabic mt-2 text-fg" dir="rtl">
+                {/* A tafsir question's evidence is a sentence of commentary,
+                    not a phrase of the ayah, so there is nothing to mark here. */}
                 <HighlightedArabic
                   text={question!.verse.arabic_text}
-                  mark={question!.evidence}
+                  mark={question!.kind === "tafsir" ? "" : question!.evidence}
                 />
               </p>
               <p className="mt-3 text-[0.9375rem] leading-relaxed text-fg-muted">{translation}</p>
+
+              {question!.kind === "tafsir" && question!.evidence ? (
+                <TafsirSource
+                  key={`${question!.verse_id}-${index}`}
+                  evidence={question!.evidence}
+                  excerpt={question!.tafsirExcerpt ?? ""}
+                  // The Uzbek edition is Cyrillic, unlike the interface around it.
+                  lang={language === "uz" ? "uz-Cyrl" : language}
+                />
+              ) : null}
             </div>
           </SelfAssess>
         </CardBody>
       </Card>
+    </>
+  );
+}
+
+/**
+ * Where a tafsir question's answer came from: the sentence of commentary the
+ * backend matched, and — on request — the whole stretch the question was
+ * written from, with that sentence marked in it. The reader is marking
+ * themselves against the commentary here, as against the ayah above.
+ */
+function TafsirSource({
+  evidence,
+  excerpt,
+  lang,
+}: {
+  evidence: string;
+  excerpt: string;
+  lang: string;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mt-4 border-t border-border pt-4">
+      <p className="flex items-center gap-1.5 text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
+        <BookOpen className="size-3" aria-hidden />
+        {t("quiz.fromTafsir")}
+      </p>
+      <blockquote
+        lang={lang}
+        className="mt-2 border-l-2 border-gold/60 pl-3 text-[0.875rem] leading-relaxed text-fg"
+      >
+        {evidence}
+      </blockquote>
+
+      {excerpt ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setOpen((value) => !value)}
+            className="mt-2 inline-flex items-center gap-1 text-[0.75rem] text-fg-subtle transition-colors hover:text-fg"
+          >
+            <ChevronDown className={cn("size-3 transition-transform", open && "rotate-180")} aria-hidden />
+            {open ? t("quiz.hideTafsirPassage") : t("quiz.showTafsirPassage")}
+          </button>
+          {open ? (
+            <div
+              lang={lang}
+              className="prose-reading mt-2 max-h-72 overflow-y-auto rounded-lg bg-surface/60 p-3 text-[0.8125rem] text-fg-muted"
+              data-selectable
+            >
+              {toParagraphs(excerpt).map((paragraph, i) => (
+                <p key={i}>
+                  <MarkedText text={paragraph} mark={evidence} />
+                </p>
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function MarkedText({ text, mark }: { text: string; mark: string }) {
+  const at = mark ? text.indexOf(mark) : -1;
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark className="rounded bg-gold-soft px-0.5 text-gold-soft-fg">{mark}</mark>
+      {text.slice(at + mark.length)}
     </>
   );
 }

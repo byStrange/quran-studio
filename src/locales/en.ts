@@ -274,6 +274,20 @@ export const en = {
   "tafsir.noEntryDescription": "{edition} doesn't include a separate entry here. Try a nearby ayah.",
   "tafsir.thisTafsir": "This tafsir",
   "tafsir.coversAll": "Covers all {count} ayahs",
+  "tafsirSummary.title": "Study summary",
+  "tafsirSummary.none": "A long passage? Get the key points to remember, a few questions to test yourself with, and the hadith it quotes.",
+  "tafsirSummary.generate": "Summarize with AI",
+  "tafsirSummary.generating": "Reading the tafsir… long passages can take a minute.",
+  "tafsirSummary.regenerateTitle": "Regenerate this summary",
+  "tafsirSummary.gist": "In one line",
+  "tafsirSummary.keyPoints": "Key points to remember",
+  "tafsirSummary.testYourself": "Test yourself",
+  "tafsirSummary.showAnswer": "Show answer",
+  "tafsirSummary.narrations": "Narrations mentioned",
+  "tafsirSummary.hadith": "Hadith",
+  "tafsirSummary.athar": "Companion saying",
+  "tafsirSummary.showInTafsir": "Show in tafsir",
+  "tafsirSummary.disclaimer": "AI summary — check it against the tafsir above.",
 
   // --- tafsir nudge ------------------------------------------------------
   "nudge.title": "A tafsir you haven't read",
@@ -542,6 +556,10 @@ export const en = {
   "quiz.kindMeaning": "What it says",
   "quiz.kindContinuation": "What follows",
   "quiz.kindDetail": "Detail",
+  "quiz.kindTafsir": "From the tafsir",
+  "quiz.fromTafsir": "From Ibn Kathir's tafsir",
+  "quiz.showTafsirPassage": "Show the passage",
+  "quiz.hideTafsirPassage": "Hide the passage",
 
   // --- quiz: the scoreboard ----------------------------------------------
   "quiz.howYoureDoing": "How you're doing",

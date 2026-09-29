@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, GraduationCap } from "lucide-react";
 import { useTafsirEditions, useTafsirForAyah } from "@/hooks/useQuranData";
 import { useUiPrefs, useUpdateProfile } from "@/hooks/useProfile";
@@ -9,6 +9,20 @@ import { DEFAULT_TAFSIR_EDITION } from "@/lib/types";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/feedback";
 import { SelectField } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
+import { SUMMARY_MIN_CHARS, TafsirSummaryCard } from "./TafsirSummaryCard";
+
+/**
+ * Text reduced to its words, for finding a narration's quote among the
+ * paragraphs: case, punctuation and Arabic diacritics dropped, as the backend
+ * does when it checks the quote in the first place.
+ */
+function foldForSearch(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u08D3-\u08FF\u0640]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
 
 export function TafsirPanel({
   surahNumber,
@@ -72,6 +86,31 @@ export function TafsirPanel({
   }, [data]);
 
   const allRead = coveredAyahs.length > 0 && coveredAyahs.every((ayah) => readAyahs.has(ayah));
+
+  const paragraphs = useMemo(() => (data ? toParagraphs(data.content) : []), [data]);
+  const paragraphRefs = useRef<Array<HTMLParagraphElement | null>>([]);
+  const [flashed, setFlashed] = useState<number | null>(null);
+
+  // A highlight belongs to the entry it was found in.
+  useEffect(() => setFlashed(null), [data]);
+  useEffect(() => {
+    if (flashed === null) return;
+    const timer = window.setTimeout(() => setFlashed(null), 2_400);
+    return () => window.clearTimeout(timer);
+  }, [flashed]);
+
+  /** Scrolls to the paragraph a narration card was quoted from. */
+  const showQuote = useCallback(
+    (quote: string) => {
+      const needle = foldForSearch(quote);
+      if (!needle) return;
+      const index = paragraphs.findIndex((paragraph) => foldForSearch(paragraph).includes(needle));
+      if (index < 0) return;
+      paragraphRefs.current[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setFlashed(index);
+    },
+    [paragraphs],
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -146,8 +185,19 @@ export function TafsirPanel({
               lang={active?.language_code}
               data-selectable
             >
-              {toParagraphs(data.content).map((paragraph, index) => (
-                <p key={index}>{paragraph}</p>
+              {paragraphs.map((paragraph, index) => (
+                <p
+                  key={index}
+                  ref={(node) => {
+                    paragraphRefs.current[index] = node;
+                  }}
+                  className={cn(
+                    "rounded transition-colors duration-700",
+                    flashed === index && "bg-gold-soft",
+                  )}
+                >
+                  {paragraph}
+                </p>
               ))}
             </div>
 
@@ -170,6 +220,22 @@ export function TafsirPanel({
                 </span>
               ) : null}
             </div>
+
+            {/* After the commentary, not above it: the summary is for keeping
+                what was read, and it points back into the text rather than
+                standing in for it. */}
+            {data.content.length >= SUMMARY_MIN_CHARS && surahNumber !== null ? (
+              <TafsirSummaryCard
+                edition={edition}
+                tafsirName={active?.name ?? t("tafsir.thisTafsir")}
+                surahName={surahName}
+                surahNumber={surahNumber}
+                ayahStart={data.ayah_start}
+                ayahEnd={data.ayah_end}
+                content={data.content}
+                onShowQuote={showQuote}
+              />
+            ) : null}
           </>
         )}
       </div>

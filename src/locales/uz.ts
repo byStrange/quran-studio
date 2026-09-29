@@ -283,6 +283,20 @@ export const uz: Dictionary = {
     "«{edition}» nashrida bu yerda alohida izoh yo'q. Yaqin oyatni tanlab ko'ring.",
   "tafsir.thisTafsir": "Bu tafsir",
   "tafsir.coversAll": "Barcha {count} oyatni qamrab oladi",
+  "tafsirSummary.title": "Yodlash uchun qisqacha",
+  "tafsirSummary.none": "Parcha uzunmi? Eslab qolish kerak bo'lgan asosiy fikrlar, o'zingizni sinash uchun savollar va unda keltirilgan hadislarni oling.",
+  "tafsirSummary.generate": "AI bilan qisqartirish",
+  "tafsirSummary.generating": "Tafsir o'qilmoqda… uzun parcha bir daqiqagacha vaqt olishi mumkin.",
+  "tafsirSummary.regenerateTitle": "Qisqachani qayta yaratish",
+  "tafsirSummary.gist": "Bir jumlada",
+  "tafsirSummary.keyPoints": "Eslab qolish kerak bo'lgan asosiy fikrlar",
+  "tafsirSummary.testYourself": "O'zingizni sinang",
+  "tafsirSummary.showAnswer": "Javobni ko'rsatish",
+  "tafsirSummary.narrations": "Keltirilgan rivoyatlar",
+  "tafsirSummary.hadith": "Hadis",
+  "tafsirSummary.athar": "Sahoba so'zi",
+  "tafsirSummary.showInTafsir": "Tafsirda ko'rsatish",
+  "tafsirSummary.disclaimer": "AI tomonidan tuzilgan qisqacha — yuqoridagi tafsir bilan solishtiring.",
 
   // --- tafsir nudge ------------------------------------------------------
   "nudge.title": "O'qilmagan tafsir",
@@ -553,6 +567,10 @@ export const uz: Dictionary = {
   "quiz.kindMeaning": "Nima deyilgan",
   "quiz.kindContinuation": "Keyin nima keladi",
   "quiz.kindDetail": "Tafsilot",
+  "quiz.kindTafsir": "Tafsirdan",
+  "quiz.fromTafsir": "Ibn Kasir tafsiridan",
+  "quiz.showTafsirPassage": "Parchani ko'rsatish",
+  "quiz.hideTafsirPassage": "Parchani yashirish",
 
   // --- quiz: natijalar jadvali --------------------------------------------
   "quiz.howYoureDoing": "Natijalaringiz",

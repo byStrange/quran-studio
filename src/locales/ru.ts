@@ -304,6 +304,20 @@ export const ru: Dictionary = {
     "В издании «{edition}» нет отдельной записи здесь. Попробуйте соседний аят.",
   "tafsir.thisTafsir": "Этот тафсир",
   "tafsir.coversAll": "Охватывает все {count} аятов",
+  "tafsirSummary.title": "Конспект для запоминания",
+  "tafsirSummary.none": "Длинный отрывок? Получите главные мысли, несколько вопросов для самопроверки и хадисы, которые в нём приводятся.",
+  "tafsirSummary.generate": "Кратко с помощью ИИ",
+  "tafsirSummary.generating": "Читаем тафсир… длинный отрывок может занять минуту.",
+  "tafsirSummary.regenerateTitle": "Создать конспект заново",
+  "tafsirSummary.gist": "Одной фразой",
+  "tafsirSummary.keyPoints": "Главное запомнить",
+  "tafsirSummary.testYourself": "Проверьте себя",
+  "tafsirSummary.showAnswer": "Показать ответ",
+  "tafsirSummary.narrations": "Приведённые предания",
+  "tafsirSummary.hadith": "Хадис",
+  "tafsirSummary.athar": "Слова сподвижника",
+  "tafsirSummary.showInTafsir": "Показать в тафсире",
+  "tafsirSummary.disclaimer": "Конспект составлен ИИ — сверяйтесь с тафсиром выше.",
 
   // --- tafsir nudge ------------------------------------------------------
   "nudge.title": "Непрочитанный тафсир",
@@ -583,6 +597,10 @@ export const ru: Dictionary = {
   "quiz.kindMeaning": "О чём говорит",
   "quiz.kindContinuation": "Что дальше",
   "quiz.kindDetail": "Деталь",
+  "quiz.kindTafsir": "Из тафсира",
+  "quiz.fromTafsir": "Из тафсира Ибн Касира",
+  "quiz.showTafsirPassage": "Показать отрывок",
+  "quiz.hideTafsirPassage": "Скрыть отрывок",
 
   // --- quiz: сводка результатов ------------------------------------------
   "quiz.howYoureDoing": "Ваши результаты",

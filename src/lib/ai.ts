@@ -11,6 +11,7 @@ import type { Language } from "./i18n";
 import type { TFunction } from "@/providers/I18nProvider";
 import { supabase } from "./supabase";
 import type { VerseContext, Word } from "./types";
+import type { Json } from "./database.types";
 
 export interface AiStatus {
   configured: boolean;
@@ -194,6 +195,106 @@ export async function getRukuSummary(
   if (error) console.warn("could not cache ruku summary:", error.message);
 
   return row;
+}
+
+// --- tafsir summaries -------------------------------------------------------
+
+/**
+ * A study summary of one tafsir entry, as the backend validated it: every
+ * narration in it carries a `quote` the backend found in the entry itself.
+ */
+export interface TafsirSummaryBody {
+  gist: string;
+  key_points: Array<{ point: string; ayah: number | null }>;
+  recall: Array<{ question: string; answer: string }>;
+  narrations: Array<{
+    kind: "hadith" | "athar";
+    text: string;
+    narrator: string | null;
+    source: string | null;
+    /** Where the narration sits in the tafsir, in the tafsir's own spelling. */
+    quote: string;
+  }>;
+}
+
+export interface TafsirSummary {
+  summary: TafsirSummaryBody;
+  model_used: string;
+  generated_at: string | null;
+}
+
+export interface TafsirSummaryKey {
+  edition: string;
+  surahNumber: number;
+  ayahStart: number;
+}
+
+export async function fetchCachedTafsirSummary(
+  key: TafsirSummaryKey,
+  language: Language,
+): Promise<TafsirSummary | null> {
+  const { data, error } = await supabase
+    .from("tafsir_ai_summary")
+    .select("summary, model_used, generated_at")
+    .eq("edition", key.edition)
+    .eq("surah_number", key.surahNumber)
+    .eq("ayah_start", key.ayahStart)
+    .eq("language", language)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? { ...data, summary: data.summary as unknown as TafsirSummaryBody } : null;
+}
+
+/**
+ * The summary is written in the reader's language from the tafsir as it is
+ * written — the model reads the Cyrillic Uzbek or the Russian original rather
+ * than a translation of it, so a narration's `quote` can be checked against
+ * the text the reader has on screen.
+ */
+export async function getTafsirSummary(
+  input: TafsirSummaryKey & {
+    tafsirName: string;
+    surahName: string;
+    ayahEnd: number;
+    content: string;
+  },
+  language: Language,
+  options: { force?: boolean } = {},
+): Promise<TafsirSummary> {
+  if (!options.force) {
+    const cached = await fetchCachedTafsirSummary(input, language);
+    if (cached) return cached;
+  }
+  if (!isTauri()) throw new AiUnavailableError(NOT_IN_TAURI);
+
+  const generated = await invoke<{ summary: TafsirSummaryBody; model_used: string }>(
+    "ai_generate_tafsir_summary",
+    {
+      tafsirName: input.tafsirName,
+      surahName: input.surahName,
+      surahNumber: input.surahNumber,
+      ayahStart: input.ayahStart,
+      ayahEnd: input.ayahEnd,
+      content: input.content,
+      language,
+    },
+  );
+
+  const row = {
+    edition: input.edition,
+    surah_number: input.surahNumber,
+    ayah_start: input.ayahStart,
+    language,
+    summary: generated.summary as unknown as Json,
+    model_used: generated.model_used,
+    generated_at: new Date().toISOString(),
+  };
+  const { error } = await supabase
+    .from("tafsir_ai_summary")
+    .upsert(row, { onConflict: "edition,surah_number,ayah_start,language" });
+  if (error) console.warn("could not cache tafsir summary:", error.message);
+
+  return { summary: generated.summary, model_used: row.model_used, generated_at: row.generated_at };
 }
 
 /**

@@ -706,6 +706,44 @@ export type Database = {
           },
         ]
       }
+      tafsir_ai_summary: {
+        Row: {
+          ayah_start: number
+          edition: string
+          generated_at: string
+          language: string
+          model_used: string
+          summary: Json
+          surah_number: number
+        }
+        Insert: {
+          ayah_start: number
+          edition: string
+          generated_at?: string
+          language: string
+          model_used: string
+          summary: Json
+          surah_number: number
+        }
+        Update: {
+          ayah_start?: number
+          edition?: string
+          generated_at?: string
+          language?: string
+          model_used?: string
+          summary?: Json
+          surah_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tafsir_ai_summary_edition_fkey"
+            columns: ["edition"]
+            isOneToOne: false
+            referencedRelation: "tafsir_editions"
+            referencedColumns: ["slug"]
+          },
+        ]
+      }
       tafsir_editions: {
         Row: {
           author_name: string
@@ -1004,6 +1042,15 @@ export type Database = {
           words_learning: number
         }[]
       }
+      quiz_tafsir_for_verses: {
+        Args: { p_edition: string; p_verse_ids: number[] }
+        Returns: {
+          ayah_end: number
+          ayah_start: number
+          content: string
+          verse_id: number
+        }[]
+      }
       quiz_verse_pool: {
         Args: {
           p_language?: string
@@ -1118,6 +1165,7 @@ export type Database = {
         | "meaning"
         | "continuation"
         | "detail"
+        | "tafsir"
       quiz_scope: "ruku" | "surah" | "global" | "due"
       review_grade: "again" | "hard" | "good" | "easy"
       word_status: "new" | "learning" | "learned"
@@ -1259,6 +1307,7 @@ export const Constants = {
         "meaning",
         "continuation",
         "detail",
+        "tafsir",
       ],
       quiz_scope: ["ruku", "surah", "global"],
       word_status: ["new", "learning", "learned"],

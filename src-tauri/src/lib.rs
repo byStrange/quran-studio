@@ -33,6 +33,8 @@ pub fn run() {
             ollama::ai_generate_word_context,
             ollama::ai_generate_ruku_summary,
             ollama::ai_generate_knowledge_quiz,
+            ollama::ai_generate_tafsir_quiz,
+            ollama::ai_generate_tafsir_summary,
             audio::recitation_local_file,
             audio::recitation_downloads,
             audio::recitation_download,

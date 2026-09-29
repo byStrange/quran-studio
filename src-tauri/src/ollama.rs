@@ -2,8 +2,9 @@
 //!
 //! Every AI call in the app funnels through here so that `OLLAMA_API_KEY`
 //! stays in the Rust process and never reaches the webview or the frontend
-//! bundle. The frontend can only ask for two specific, prompt-shaped things:
-//! a word context explanation and a ruku summary. It cannot pass arbitrary
+//! bundle. The frontend can only ask for specific, prompt-shaped things — a
+//! word context explanation, a ruku summary, a knowledge quiz (from the ayahs
+//! or from their tafsir) and a tafsir study summary. It cannot pass arbitrary
 //! prompts through to the provider.
 
 use serde::{Deserialize, Serialize};
@@ -256,7 +257,7 @@ async fn chat(
     user: &str,
     max_tokens: u32,
 ) -> AiResult<(String, String)> {
-    chat_with(state, system, user, max_tokens, 0.3, None).await
+    chat_with(state, system, user, max_tokens, 0.3, None, None).await
 }
 
 async fn chat_with(
@@ -266,6 +267,9 @@ async fn chat_with(
     max_tokens: u32,
     temperature: f32,
     format: Option<serde_json::Value>,
+    // Overrides `REQUEST_TIMEOUT` for a call known to take longer — a
+    // summary of a twenty-paragraph tafsir passage is slow to read and write.
+    timeout: Option<Duration>,
 ) -> AiResult<(String, String)> {
     let key = api_key().ok_or(AiError::NotConfigured)?;
     let model = resolve_model(state).await?;
@@ -281,10 +285,14 @@ async fn chat_with(
         format,
     };
 
-    let resp = client()?
+    let mut builder = client()?
         .post(format!("{}/api/chat", base_url()))
         .bearer_auth(&key)
-        .json(&request)
+        .json(&request);
+    if let Some(timeout) = timeout {
+        builder = builder.timeout(timeout);
+    }
+    let resp = builder
         .send()
         .await
         .map_err(|e| AiError::Network(e.to_string()))?;
@@ -812,8 +820,70 @@ fn find_subslice(hay: &[char], needle: &[char]) -> Option<usize> {
 /// caller acts on: a question whose evidence is not in the ayah did not come
 /// from the ayah.
 fn locate_quote(text: &str, quote: &str) -> Option<String> {
-    let hay = fold_arabic(text);
-    let needle = fold_arabic(quote);
+    locate_folded(text, &fold_arabic(text), &fold_arabic(quote))
+}
+
+/// Prose reduced to its words: lowercased, with punctuation and quotation
+/// marks read as spaces, and Arabic folded as in `fold_arabic`.
+///
+/// Tafsir quotations fail differently from ayah quotations. The model keeps
+/// the words but drifts on the punctuation around them — «» against "",
+/// a dropped comma, an em dash for a hyphen — and on capitals at the start
+/// of a quoted clause. None of that changes whether the sentence is in the
+/// passage, so none of it is compared.
+fn fold_prose(text: &str) -> Folded {
+    let mut chars = Vec::new();
+    let mut starts = Vec::new();
+    let mut in_space = false;
+
+    for (offset, ch) in text.char_indices() {
+        if is_arabic_mark(ch) {
+            continue;
+        }
+        if !ch.is_alphanumeric() {
+            if in_space {
+                continue;
+            }
+            in_space = true;
+            chars.push(' ');
+            starts.push(offset);
+            continue;
+        }
+        in_space = false;
+        chars.push(fold_letter(ch.to_lowercase().next().unwrap_or(ch)));
+        starts.push(offset);
+    }
+
+    // Not trimmed: a trailing separator in the passage is what marks where a
+    // match that runs to its last word ends, so the closing punctuation is
+    // not swept into the quotation. The needle is trimmed by the caller.
+    Folded { chars, starts }
+}
+
+/// A tafsir quotation shorter than this proves nothing: a single name or a
+/// common word is in every passage, whether or not the claim came from it.
+const MIN_PROSE_QUOTE: usize = 12;
+
+/// The stretch of a tafsir passage that `quote` refers to, as the passage
+/// spells it. None when the quote is too short to mean anything or is not
+/// there.
+fn locate_prose(text: &str, quote: &str) -> Option<String> {
+    let mut needle = fold_prose(quote);
+    while needle.chars.first() == Some(&' ') {
+        needle.chars.remove(0);
+        needle.starts.remove(0);
+    }
+    while needle.chars.last() == Some(&' ') {
+        needle.chars.pop();
+        needle.starts.pop();
+    }
+    if needle.chars.len() < MIN_PROSE_QUOTE {
+        return None;
+    }
+    locate_folded(text, &fold_prose(text), &needle)
+}
+
+fn locate_folded(text: &str, hay: &Folded, needle: &Folded) -> Option<String> {
     let at = find_subslice(&hay.chars, &needle.chars)?;
 
     let start = hay.starts[at];
@@ -942,6 +1012,7 @@ pub async fn ai_generate_knowledge_quiz(
         budget,
         0.6,
         Some(knowledge_schema()),
+        None,
     )
     .await?;
 
@@ -954,4 +1025,683 @@ pub async fn ai_generate_knowledge_quiz(
     }
 
     Ok(KnowledgeQuiz { questions, model_used })
+}
+
+// --- tafsir questions ------------------------------------------------------
+
+/// One ayah with the stretch of tafsir its question is to be written from.
+///
+/// The excerpt is chosen by the app, not the model: a window of the passage
+/// rather than all of it, so a twenty-paragraph commentary does not crowd the
+/// other ayahs of the batch out of the context, and so two rounds on the same
+/// ayah can land on different parts of it.
+#[derive(Deserialize)]
+pub struct TafsirQuizItem {
+    pub verse_id: i32,
+    pub surah_number: i32,
+    pub ayah_number: i32,
+    pub surah_name: String,
+    pub arabic: String,
+    pub translation: String,
+    pub excerpt: String,
+}
+
+/// Uzbek tafsir is imported in Cyrillic while everything the app writes for
+/// an Uzbek reader is Latin. Said out loud, because the easy mistake in either
+/// direction is plausible: answering in the script of the source, or
+/// "helpfully" transliterating the one field that must be copied verbatim.
+fn tafsir_source_note(code: &str) -> &'static str {
+    match code {
+        "uz" => {
+            "\n- The tafsir text you are given is in Uzbek CYRILLIC. Read it, but write \
+everything of your own in Uzbek LATIN. Only text you copy verbatim out of the tafsir \
+(the `evidence` or `quote` field) stays in Cyrillic, exactly as it is written there."
+        }
+        _ => "",
+    }
+}
+
+/// The instructions for tafsir-grounded questions.
+///
+/// This is `knowledge_system` with its first rule turned around: there the
+/// model is forbidden tafsir because nothing it remembers can be checked; here
+/// it is handed a specific stretch of one, and held to that stretch the same
+/// way — `evidence` must be a sentence of the excerpt, and a question whose
+/// evidence is not in it is dropped. What a memorizer gains is the layer the
+/// ayah alone does not carry: who "they" are, what occasioned the ayah, which
+/// hadith the commentator reads it with.
+fn tafsir_quiz_system(
+    language: &str,
+    guidance: &str,
+    source_note: &str,
+    tafsir_name: &str,
+    count: usize,
+) -> String {
+    format!(
+        "ROLE\n\
+You write examination questions for a student who is memorizing the Quran and studying \
+it with the tafsir of {tafsir_name}. They are tested from memory: they do not have the \
+text in front of them while answering. They mark their own answer afterwards, so your \
+answer text has to settle the matter on its own.\n\n\
+INPUT\n\
+You are given exactly {count} ayahs, each labelled:\n\
+  [n] verse_id=<id>  <Surah> <surah>:<ayah>\n\
+  ARABIC: ...\n\
+  TRANSLATION: ...\n\
+  TAFSIR: an excerpt from {tafsir_name}'s commentary on that ayah\n\n\
+TASK\n\
+Write exactly one question per ayah, in the order given — {count} questions in total. \
+Copy each question's verse_id from the ayah you wrote it from. Each question tests \
+something that ayah's TAFSIR excerpt explains.\n\n\
+GROUNDING — these rules come before everything else\n\
+1. Every question must be answerable from that ayah's TAFSIR excerpt (read together with \
+the ayah). You have no other source. Do not add anything you remember of this or any \
+other tafsir, hadith, or history, even if you are sure of it.\n\
+2. The answer must be stated in the excerpt. If you cannot point to the sentence that \
+says it, the question is wrong — write one about something the excerpt does say.\n\
+3. Never invent a number, a name, a place, a narrator or a hadith collection.\n\
+4. Good things to ask: what a word or phrase of the ayah means according to the tafsir; \
+who or what the ayah refers to; the occasion of revelation, if the excerpt gives one; \
+a hadith or a Companion's saying the tafsir brings to explain the ayah, and what it says; \
+a lesson or distinction the commentator draws.\n\
+5. Do not ask about chains of narration (isnad), which narrator reported from whom, the \
+grading of a hadith, or page-level trivia. Do not ask for a legal ruling or for the \
+student's opinion.\n\
+6. Do not put the answer inside the question.\n\n\
+WRITING THE QUESTION\n\
+- One sentence, under 35 words, ending in '?'.\n\
+- Name the ayah it is about as <surah>:<ayah>.\n\
+- Written in {language}. Arabic quoted inside it stays in Arabic script.\n\
+- Specific enough to have one right answer. \"What does the tafsir say about 2:3?\" is \
+not a question; \"According to {tafsir_name}, what does 'the unseen' in 2:3 include?\" is.\n\n\
+WRITING THE ANSWER\n\
+- One or two sentences in {language}, complete enough that a student can tell whether \
+what they recalled was right.\n\
+- Attribute it: begin with \"According to {tafsir_name}\" or its natural equivalent in \
+{language}.\n\
+- An Arabic word in the answer is written in Arabic script, followed by its \
+transliteration and meaning in parentheses.\n\n\
+EVIDENCE\n\
+For each question, copy the sentence (or the part of a sentence, at least five words) \
+of that ayah's TAFSIR excerpt that carries the answer — character for character, in the \
+excerpt's own language and script. Do not translate it, do not shorten it with '…', \
+do not join two separate sentences.\n\n\
+OUTPUT\n\
+Return JSON only — no explanation, no markdown fence:\n\
+{{\"questions\":[{{\"verse_id\":0,\"kind\":\"tafsir\",\"question\":\"…\",\"answer\":\"…\",\"evidence\":\"…\"}}]}}\n\
+`kind` is always \"tafsir\".\n\n\
+BEFORE YOU ANSWER, check every question against this list and rewrite any that fails:\n\
+- Is its verse_id one of the ids given above?\n\
+- Is the answer stated in that ayah's TAFSIR excerpt, and nowhere only in your memory?\n\
+- Is the evidence copied verbatim from that excerpt?\n\
+- Is the answer kept out of the question?\n\
+- Are the question and answer in {language}, apart from quoted Arabic?{guidance}{source_note}"
+    )
+}
+
+fn tafsir_quiz_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "questions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "verse_id": { "type": "integer" },
+                        "kind": { "type": "string", "enum": ["tafsir"] },
+                        "question": { "type": "string" },
+                        "answer": { "type": "string" },
+                        "evidence": { "type": "string" }
+                    },
+                    "required": ["verse_id", "kind", "question", "answer", "evidence"]
+                }
+            }
+        },
+        "required": ["questions"]
+    })
+}
+
+/// `validate_questions` for tafsir questions: the same four rules, with the
+/// evidence located in the item's excerpt rather than its Arabic.
+fn validate_tafsir_questions(
+    raw: Vec<GeneratedQuestion>,
+    items: &[TafsirQuizItem],
+) -> Vec<GeneratedQuestion> {
+    let mut out: Vec<GeneratedQuestion> = Vec::new();
+
+    for mut q in raw {
+        let Some(item) = items.iter().find(|i| i.verse_id == q.verse_id) else {
+            continue;
+        };
+        if out.iter().any(|kept| kept.verse_id == q.verse_id) {
+            continue;
+        }
+
+        q.question = q.question.trim().to_string();
+        q.answer = q.answer.trim().to_string();
+        if q.question.is_empty() || q.answer.is_empty() {
+            continue;
+        }
+        q.kind = "tafsir".to_string();
+
+        // The one check that matters: an answer the model cannot quote from
+        // the excerpt came from somewhere else.
+        let Some(evidence) = locate_prose(&item.excerpt, &q.evidence) else {
+            continue;
+        };
+        q.evidence = evidence;
+
+        out.push(q);
+    }
+
+    out.sort_by_key(|q| {
+        items.iter().position(|i| i.verse_id == q.verse_id).unwrap_or(usize::MAX)
+    });
+    out
+}
+
+/// Tafsir-grounded questions for a small batch of ayahs.
+///
+/// The app sends a round's tafsir questions a few ayahs at a time, in
+/// parallel, rather than in one call: each ayah carries up to a few thousand
+/// characters of commentary, and one call carrying twenty of them would be
+/// slow to read and slower to fail.
+#[tauri::command]
+pub async fn ai_generate_tafsir_quiz(
+    state: tauri::State<'_, AiState>,
+    items: Vec<TafsirQuizItem>,
+    tafsir_name: String,
+    language: String,
+) -> Result<KnowledgeQuiz, AiError> {
+    if items.is_empty() {
+        return Err(AiError::BadResponse);
+    }
+    let guidance = language_guidance(&language);
+    let source_note = tafsir_source_note(&language);
+    let language = language_name(&language);
+    let tafsir_name = tafsir_name.trim();
+
+    let passage = items
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            format!(
+                "[{}] verse_id={}  {} {}:{}\nARABIC: {}\nTRANSLATION: {}\nTAFSIR:\n{}",
+                i + 1,
+                v.verse_id,
+                v.surah_name,
+                v.surah_number,
+                v.ayah_number,
+                v.arabic,
+                v.translation,
+                v.excerpt.trim()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    let prompt = format!(
+        "{passage}\n\n\
+         Write exactly {} questions — one per ayah above, in that order.",
+        items.len()
+    );
+
+    let budget = (items.len() as u32 * 260).clamp(600, 2_000);
+    let (content, model_used) = chat_with(
+        &state,
+        &tafsir_quiz_system(language, guidance, source_note, tafsir_name, items.len()),
+        &prompt,
+        budget,
+        0.6,
+        Some(tafsir_quiz_schema()),
+        None,
+    )
+    .await?;
+
+    let json = extract_json(&content).ok_or(AiError::BadResponse)?;
+    let parsed: GeneratedQuiz = serde_json::from_str(json).map_err(|_| AiError::BadResponse)?;
+
+    let questions = validate_tafsir_questions(parsed.questions, &items);
+    if questions.is_empty() {
+        return Err(AiError::BadResponse);
+    }
+
+    Ok(KnowledgeQuiz { questions, model_used })
+}
+
+// --- tafsir summaries ------------------------------------------------------
+
+const SUMMARY_TIMEOUT: Duration = Duration::from_secs(180);
+
+/// Enough for the longest Ibn Kathir passages seen in the imports; anything
+/// past it is cut at a paragraph boundary rather than mid-sentence.
+const SUMMARY_MAX_CHARS: usize = 40_000;
+
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct KeyPoint {
+    pub point: String,
+    /// The ayah the point is about, when it is about one; always inside the
+    /// passage's range or dropped.
+    #[serde(default)]
+    pub ayah: Option<i32>,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct RecallItem {
+    pub question: String,
+    pub answer: String,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct Narration {
+    /// "hadith" (the Prophet ﷺ) or "athar" (a Companion or Successor).
+    pub kind: String,
+    pub text: String,
+    #[serde(default)]
+    pub narrator: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+    /// Where the narration sits in the tafsir, in the tafsir's own spelling.
+    pub quote: String,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct TafsirSummaryBody {
+    #[serde(default)]
+    pub gist: String,
+    #[serde(default)]
+    pub key_points: Vec<KeyPoint>,
+    #[serde(default)]
+    pub recall: Vec<RecallItem>,
+    #[serde(default)]
+    pub narrations: Vec<Narration>,
+}
+
+#[derive(Serialize)]
+pub struct TafsirSummary {
+    pub summary: TafsirSummaryBody,
+    pub model_used: String,
+}
+
+/// The instructions for a memorization summary of one tafsir passage.
+///
+/// Not a retelling. A reader who has just gone through twenty paragraphs of
+/// Ibn Kathir wants to leave with the handful of things worth keeping, in a
+/// form that sticks: one sentence to hang the passage on, a few concrete
+/// points, and questions to test themselves with — retrieval is what makes a
+/// thing stay, and rereading is not.
+///
+/// The narrations are pulled out because they are what a tafsir reader most
+/// often wants to find again, and because they are the part a model is most
+/// likely to embellish from memory. So each one must carry a verbatim `quote`
+/// from the passage, and one that cannot be located is dropped — the same
+/// rule the quiz lives by.
+fn tafsir_summary_system(
+    language: &str,
+    guidance: &str,
+    source_note: &str,
+    tafsir_name: &str,
+) -> String {
+    format!(
+        "ROLE\n\
+You are a study companion for someone memorizing the Quran. They have just read a passage \
+of the tafsir of {tafsir_name}, and you help them keep what matters from it: the few points \
+worth remembering, phrased so they stick, and questions to test themselves with. You are \
+not retelling the passage.\n\n\
+GROUNDING — these rules come before everything else\n\
+1. Use only the tafsir text supplied. If the tafsir says it, you may say it; if it does not, \
+leave it out — even if you know it to be true.\n\
+2. Add no hadith, ruling, story or explanation that is not in the text.\n\
+3. Never invent or complete a narrator's name, a hadith collection, or a grading.\n\n\
+GIST\n\
+One sentence a reader could repeat from memory: what these ayahs are about, as this tafsir \
+explains them.\n\n\
+KEY POINTS\n\
+- Three to seven points, the most important first.\n\
+- Each is one concrete, memorable claim from the tafsir: what a word or phrase means, who is \
+meant, what occasioned the ayah, a distinction the commentator draws, a lesson. At most two \
+short sentences.\n\
+- Be specific. \"The tafsir discusses belief\" is not a point; \"'Belief in the unseen' covers \
+Allah, the angels, the Books, the Messengers, the Last Day and the decree\" is.\n\
+- Set `ayah` to the ayah number the point is about when it is about one ayah of the passage; \
+otherwise null.\n\
+- An Arabic key term stays in Arabic script, followed by its transliteration and meaning in \
+parentheses.\n\n\
+RECALL\n\
+Two to four questions that test the key points, each answerable from them, with an answer of \
+one or two sentences. Do not put the answer in the question.\n\n\
+NARRATIONS\n\
+List every narration the tafsir quotes in this passage, in the order they appear:\n\
+- kind \"hadith\": a saying, action or approval of the Prophet ﷺ.\n\
+- kind \"athar\": a saying of a Companion or of one of the Tabi'in (for example Ibn Abbas, \
+Ibn Mas'ud, Mujahid, Qatada).\n\
+Leave out the commentator's own words and his summaries of other scholars' views.\n\
+- `text`: the narration itself, translated faithfully into {language}. Leave out the chain of \
+narrators; do not paraphrase or shorten the wording beyond that.\n\
+- `narrator`: the Companion (or Successor) it is narrated from or attributed to, if the tafsir \
+names one; otherwise null.\n\
+- `source`: the collection or scholar who recorded it (for example Sahih al-Bukhari, Muslim, \
+Imam Ahmad, Ibn Abi Hatim), only if the tafsir names it; otherwise null.\n\
+- `quote`: a stretch of at least five words copied character for character from the tafsir \
+where this narration appears, in the tafsir's own language and script. Do not translate it and \
+do not shorten it with '…'.\n\
+If the passage quotes no narrations, return an empty list. Never fill this list from memory.\n\n\
+LANGUAGE\n\
+Write everything except `quote` and quoted Arabic in {language}.{guidance}{source_note}\n\n\
+OUTPUT\n\
+Return JSON only — no explanation, no markdown fence:\n\
+{{\"gist\":\"…\",\"key_points\":[{{\"point\":\"…\",\"ayah\":null}}],\
+\"recall\":[{{\"question\":\"…\",\"answer\":\"…\"}}],\
+\"narrations\":[{{\"kind\":\"hadith\",\"text\":\"…\",\"narrator\":null,\"source\":null,\"quote\":\"…\"}}]}}\n\n\
+BEFORE YOU ANSWER, check:\n\
+- Is every point, answer and narration actually in the supplied tafsir?\n\
+- Is every `quote` copied verbatim from it?\n\
+- Is every narrator and source named in the tafsir itself?\n\
+- Is everything but the quotes and Arabic in {language}?"
+    )
+}
+
+fn tafsir_summary_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "gist": { "type": "string" },
+            "key_points": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "point": { "type": "string" },
+                        "ayah": { "type": ["integer", "null"] }
+                    },
+                    "required": ["point", "ayah"]
+                }
+            },
+            "recall": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "question": { "type": "string" },
+                        "answer": { "type": "string" }
+                    },
+                    "required": ["question", "answer"]
+                }
+            },
+            "narrations": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "kind": { "type": "string", "enum": ["hadith", "athar"] },
+                        "text": { "type": "string" },
+                        "narrator": { "type": ["string", "null"] },
+                        "source": { "type": ["string", "null"] },
+                        "quote": { "type": "string" }
+                    },
+                    "required": ["kind", "text", "narrator", "source", "quote"]
+                }
+            }
+        },
+        "required": ["gist", "key_points", "recall", "narrations"]
+    })
+}
+
+/// The passage as the model should read it: the Uzbek import's `### ` heading
+/// markers dropped (the heading text stays), and anything past
+/// `SUMMARY_MAX_CHARS` cut at the last paragraph break before it.
+fn prepare_tafsir(content: &str) -> String {
+    let text = content
+        .lines()
+        .map(|line| line.trim_start().strip_prefix("### ").unwrap_or(line))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if text.chars().count() <= SUMMARY_MAX_CHARS {
+        return text;
+    }
+    let cut = text
+        .char_indices()
+        .nth(SUMMARY_MAX_CHARS)
+        .map(|(i, _)| i)
+        .unwrap_or(text.len());
+    let head = &text[..cut];
+    match head.rfind("\n\n") {
+        Some(at) if at > 0 => head[..at].to_string(),
+        _ => head.to_string(),
+    }
+}
+
+fn non_empty(value: Option<String>) -> Option<String> {
+    value.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+}
+
+/// Tidies a generated summary and drops what cannot be trusted.
+///
+/// Lists are capped at what the prompt asked for, a key point's ayah outside
+/// the passage is cleared, and — the rule that matters — a narration whose
+/// `quote` is not in the tafsir is dropped: the model did not find it there.
+fn validate_summary(
+    mut body: TafsirSummaryBody,
+    content: &str,
+    ayah_start: i32,
+    ayah_end: i32,
+) -> Option<TafsirSummaryBody> {
+    body.gist = body.gist.trim().to_string();
+
+    body.key_points = body
+        .key_points
+        .into_iter()
+        .filter_map(|mut p| {
+            p.point = p.point.trim().to_string();
+            if p.point.is_empty() {
+                return None;
+            }
+            p.ayah = p.ayah.filter(|a| (ayah_start..=ayah_end).contains(a));
+            Some(p)
+        })
+        .take(7)
+        .collect();
+
+    body.recall = body
+        .recall
+        .into_iter()
+        .filter_map(|mut r| {
+            r.question = r.question.trim().to_string();
+            r.answer = r.answer.trim().to_string();
+            (!r.question.is_empty() && !r.answer.is_empty()).then_some(r)
+        })
+        .take(4)
+        .collect();
+
+    let mut narrations: Vec<Narration> = Vec::new();
+    for mut n in body.narrations {
+        n.text = n.text.trim().to_string();
+        if n.text.is_empty() {
+            continue;
+        }
+        let Some(quote) = locate_prose(content, &n.quote) else {
+            continue;
+        };
+        if narrations.iter().any(|kept| kept.quote == quote) {
+            continue;
+        }
+        n.quote = quote;
+        n.kind = if n.kind.trim().eq_ignore_ascii_case("hadith") { "hadith" } else { "athar" }
+            .to_string();
+        n.narrator = non_empty(n.narrator);
+        n.source = non_empty(n.source);
+        narrations.push(n);
+        if narrations.len() >= 12 {
+            break;
+        }
+    }
+    body.narrations = narrations;
+
+    if body.gist.is_empty() && body.key_points.is_empty() {
+        return None;
+    }
+    Some(body)
+}
+
+#[tauri::command]
+pub async fn ai_generate_tafsir_summary(
+    state: tauri::State<'_, AiState>,
+    tafsir_name: String,
+    surah_name: String,
+    surah_number: i32,
+    ayah_start: i32,
+    ayah_end: i32,
+    content: String,
+    language: String,
+) -> Result<TafsirSummary, AiError> {
+    let content = prepare_tafsir(&content);
+    if content.trim().is_empty() {
+        return Err(AiError::BadResponse);
+    }
+    let guidance = language_guidance(&language);
+    let source_note = tafsir_source_note(&language);
+    let language = language_name(&language);
+    let tafsir_name = tafsir_name.trim();
+
+    let range = if ayah_start == ayah_end {
+        format!("{surah_number}:{ayah_start}")
+    } else {
+        format!("{surah_number}:{ayah_start}-{ayah_end}")
+    };
+    let prompt = format!(
+        "Tafsir of {tafsir_name} on Surah {surah_name}, ayahs {range}.\n\n\
+         TAFSIR:\n{content}\n\n\
+         Write the study summary for this passage."
+    );
+
+    let (reply, model_used) = chat_with(
+        &state,
+        &tafsir_summary_system(language, guidance, source_note, tafsir_name),
+        &prompt,
+        2_500,
+        0.3,
+        Some(tafsir_summary_schema()),
+        Some(SUMMARY_TIMEOUT),
+    )
+    .await?;
+
+    let json = extract_json(&reply).ok_or(AiError::BadResponse)?;
+    let parsed: TafsirSummaryBody =
+        serde_json::from_str(json).map_err(|_| AiError::BadResponse)?;
+    let summary =
+        validate_summary(parsed, &content, ayah_start, ayah_end).ok_or(AiError::BadResponse)?;
+
+    Ok(TafsirSummary { summary, model_used })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(verse_id: i32, excerpt: &str) -> TafsirQuizItem {
+        TafsirQuizItem {
+            verse_id,
+            surah_number: 2,
+            ayah_number: 3,
+            surah_name: "Al-Baqara".into(),
+            arabic: "ٱلَّذِينَ يُؤْمِنُونَ بِٱلْغَيْبِ".into(),
+            translation: "Who believe in the unseen".into(),
+            excerpt: excerpt.into(),
+        }
+    }
+
+    fn question(verse_id: i32, evidence: &str) -> GeneratedQuestion {
+        GeneratedQuestion {
+            verse_id,
+            kind: "meaning".into(),
+            question: "What is the unseen?".into(),
+            answer: "According to Ibn Kathir, …".into(),
+            evidence: evidence.into(),
+        }
+    }
+
+    #[test]
+    fn prose_quote_ignores_punctuation_and_case() {
+        let text = "Ibn Abbas said: «Belief in the unseen means belief in Allah, His angels.»";
+        let found = locate_prose(text, "belief in the unseen means belief in Allah His angels");
+        assert_eq!(
+            found.as_deref(),
+            Some("Belief in the unseen means belief in Allah, His angels")
+        );
+    }
+
+    #[test]
+    fn prose_quote_too_short_is_rejected() {
+        assert!(locate_prose("Allah knows best.", "Allah").is_none());
+    }
+
+    #[test]
+    fn tafsir_question_without_evidence_is_dropped() {
+        let items = vec![item(10, "The unseen includes the Resurrection and Paradise.")];
+        let kept = validate_tafsir_questions(
+            vec![question(10, "the unseen is the heart of faith")],
+            &items,
+        );
+        assert!(kept.is_empty());
+    }
+
+    #[test]
+    fn tafsir_question_with_evidence_is_kept_and_retyped() {
+        let items = vec![item(10, "The unseen includes the Resurrection and Paradise.")];
+        let kept = validate_tafsir_questions(
+            vec![question(10, "the unseen includes the resurrection and paradise")],
+            &items,
+        );
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].kind, "tafsir");
+        assert_eq!(kept[0].evidence, "The unseen includes the Resurrection and Paradise");
+    }
+
+    #[test]
+    fn cyrillic_evidence_matches_under_a_latin_answer() {
+        let excerpt = "Ибн Аббос айтади: «Ғайбга иймон – Аллоҳга иймон келтиришдир».";
+        let items = vec![item(10, excerpt)];
+        let mut q = question(10, "Ғайбга иймон – Аллоҳга иймон келтиришдир");
+        q.answer = "Ibn Kasirga ko'ra, g'aybga iymon Allohga iymondir.".into();
+        let kept = validate_tafsir_questions(vec![q], &items);
+        assert_eq!(kept.len(), 1);
+    }
+
+    #[test]
+    fn invented_narration_is_dropped() {
+        let content = "Abu Hurayra narrated that the Messenger of Allah said: \
+                       \"The strong believer is better.\" Recorded by Muslim.";
+        let body = TafsirSummaryBody {
+            gist: "Gist".into(),
+            key_points: vec![KeyPoint { point: "Point".into(), ayah: Some(99) }],
+            recall: vec![],
+            narrations: vec![
+                Narration {
+                    kind: "hadith".into(),
+                    text: "The strong believer is better.".into(),
+                    narrator: Some("Abu Hurayra".into()),
+                    source: Some("Muslim".into()),
+                    quote: "the Messenger of Allah said: The strong believer is better".into(),
+                },
+                Narration {
+                    kind: "hadith".into(),
+                    text: "Made up".into(),
+                    narrator: Some(" ".into()),
+                    source: None,
+                    quote: "whoever reads this ayah at night will be protected".into(),
+                },
+            ],
+        };
+        let out = validate_summary(body, content, 1, 5).expect("summary survives");
+        assert_eq!(out.narrations.len(), 1);
+        assert_eq!(out.narrations[0].narrator.as_deref(), Some("Abu Hurayra"));
+        assert_eq!(out.key_points[0].ayah, None);
+    }
+
+    #[test]
+    fn heading_markers_are_stripped() {
+        assert_eq!(prepare_tafsir("### Heading\n\nBody"), "Heading\n\nBody");
+    }
 }
