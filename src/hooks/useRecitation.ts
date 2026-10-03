@@ -8,22 +8,26 @@ import type {
   WordSegment,
 } from "@/lib/types";
 
-/** Recitation metadata never changes after seeding, like the rest of the content. */
-const CONTENT_QUERY = { staleTime: Infinity, gcTime: 60 * 60 * 1000 } as const;
+import { local, offlineFirst } from "@/lib/offline/packs";
+import { CONTENT_QUERY } from "@/hooks/useQuranData";
 
 export function useReciters() {
   return useQuery({
     ...CONTENT_QUERY,
     queryKey: ["reciters"],
-    queryFn: async (): Promise<Reciter[]> => {
-      const { data, error } = await supabase
-        .from("reciters")
-        .select("*")
-        .order("sort_order")
-        .order("name");
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async (): Promise<Reciter[]> =>
+      offlineFirst(
+        () => local.reciters(),
+        async () => {
+          const { data, error } = await supabase
+            .from("reciters")
+            .select("*")
+            .order("sort_order")
+            .order("name");
+          if (error) throw error;
+          return data ?? [];
+        },
+      ),
   });
 }
 
@@ -48,16 +52,20 @@ export function useRecitationFile(reciterId: number | null, surahNumber: number 
     ...CONTENT_QUERY,
     queryKey: ["recitation-file", reciterId, surahNumber],
     enabled: reciterId !== null && surahNumber !== null,
-    queryFn: async (): Promise<RecitationFile | null> => {
-      const { data, error } = await supabase
-        .from("recitation_files")
-        .select("*")
-        .eq("reciter_id", reciterId!)
-        .eq("surah_number", surahNumber!)
-        .maybeSingle();
-      if (error) throw error;
-      return data ?? null;
-    },
+    queryFn: async (): Promise<RecitationFile | null> =>
+      offlineFirst(
+        () => local.recitationFile(reciterId!, surahNumber!),
+        async () => {
+          const { data, error } = await supabase
+            .from("recitation_files")
+            .select("*")
+            .eq("reciter_id", reciterId!)
+            .eq("surah_number", surahNumber!)
+            .maybeSingle();
+          if (error) throw error;
+          return data ?? null;
+        },
+      ),
   });
 }
 
@@ -75,12 +83,21 @@ export function useRecitationTimings(reciterId: number | null, verseIds: number[
     queryKey: ["recitation-timings", reciterId, key],
     enabled: reciterId !== null && verseIds.length > 0,
     queryFn: async (): Promise<Map<number, RecitationTiming>> => {
-      const { data, error } = await supabase
-        .from("recitation_timings")
-        .select("verse_id, start_ms, end_ms, segments")
-        .eq("reciter_id", reciterId!)
-        .in("verse_id", verseIds);
-      if (error) throw error;
+      // A downloaded surah carries its timings, so it follows along offline.
+      const data = await offlineFirst<
+        Array<{ verse_id: number; start_ms: number; end_ms: number; segments: unknown }>
+      >(
+        () => local.timings(reciterId!, verseIds),
+        async () => {
+          const { data, error } = await supabase
+            .from("recitation_timings")
+            .select("verse_id, start_ms, end_ms, segments")
+            .eq("reciter_id", reciterId!)
+            .in("verse_id", verseIds);
+          if (error) throw error;
+          return data;
+        },
+      );
 
       const timings = new Map<number, RecitationTiming>();
       for (const row of data ?? []) {

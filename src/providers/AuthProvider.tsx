@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { onlineManager, useQueryClient } from "@tanstack/react-query";
+import { isAuthRetryableFetchError, type Session, type User } from "@supabase/supabase-js";
+import { readStoredSession, supabase } from "@/lib/supabase";
 import { detectTimezone } from "@/lib/utils";
 
 interface AuthContextValue {
@@ -18,17 +19,45 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     let active = true;
 
-    supabase.auth.getSession().then(({ data }) => {
+    // Offline at launch, the stored session is used straight away. Waiting
+    // for getSession would mean sitting through supabase-js retrying a token
+    // refresh with backoff — half a minute of spinner in front of content
+    // that is already on disk. getSession still runs, and replaces this with
+    // a refreshed session if the network turns out to be there after all.
+    if (!onlineManager.isOnline()) {
+      const stored = readStoredSession();
+      if (stored) {
+        setSession(stored);
+        setLoading(false);
+      }
+    }
+
+    supabase.auth.getSession().then(({ data, error }) => {
       if (!active) return;
+      if (!data.session && error && isAuthRetryableFetchError(error)) {
+        const stored = readStoredSession();
+        // Couldn't refresh for want of a network: the stored session stands
+        // in until the client refreshes it for real and says so.
+        if (stored) {
+          setSession(stored);
+          setLoading(false);
+          return;
+        }
+      }
       setSession(data.session);
       setLoading(false);
     });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, next) => {
+      // An empty initial event is getSession's answer arriving twice, and
+      // getSession above is the one that knows whether it was only offline.
+      // A real sign-out arrives as SIGNED_OUT and still goes through.
+      if (!next && event === "INITIAL_SESSION") return;
       setSession(next);
       setLoading(false);
     });
@@ -66,9 +95,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOut: async () => {
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
+        // The cache is persisted to disk now, so one account's progress must
+        // not be left there for whoever signs in next.
+        queryClient.clear();
       },
     }),
-    [session, loading],
+    [session, loading, queryClient],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -7,7 +7,8 @@
  * undecorated window resizable.
  */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { BookOpen, Copy, Minus, Square, X } from "lucide-react";
+import { BookOpen, Copy, Minus, Square, WifiOff, X } from "lucide-react";
+import { useOnline } from "@/hooks/useOnline";
 import { cn } from "@/lib/utils";
 import { appWindow, HAS_WINDOW_CHROME, IS_MOBILE_PLATFORM } from "@/lib/window";
 import { useT } from "@/providers/I18nProvider";
@@ -135,6 +136,7 @@ function ResizeHandles() {
 
 function TitleBar({ maximized }: { maximized: boolean }) {
   const t = useT();
+  const online = useOnline();
   return (
     // Hidden below `md`, where the viewport is a phone rather than a window
     // and AppShell supplies its own compact header instead.
@@ -153,6 +155,16 @@ function TitleBar({ maximized }: { maximized: boolean }) {
         <span className="text-[0.75rem] text-fg-subtle">{t("app.tagline")}</span>
 
         <div className="flex-1" />
+
+        {!online ? (
+          <span
+            className="flex items-center gap-1.5 rounded-md border border-border bg-surface-2 px-2 py-0.5 text-[0.6875rem] text-fg-muted"
+            title={t("offline.offlineHint")}
+          >
+            <WifiOff className="size-3" aria-hidden />
+            {t("offline.offline")}
+          </span>
+        ) : null}
 
         {HAS_WINDOW_CHROME ? <WindowControls maximized={maximized} /> : null}
       </div>

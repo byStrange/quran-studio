@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { HashRouter } from "react-router-dom";
 import App from "./App";
 import { AuthProvider } from "./providers/AuthProvider";
@@ -9,21 +9,21 @@ import { I18nProvider } from "./providers/I18nProvider";
 import { ToastProvider } from "./components/ui/toast";
 import "./index.css";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // Quran content is immutable once seeded, so refetching it is pure waste.
-      staleTime: 5 * 60 * 1000,
-      gcTime: 30 * 60 * 1000,
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
+import { persistOptions, queryClient } from "./lib/queryClient";
+import { loadManifest } from "./lib/offline/packs";
+
+// Which offline packs are installed, read before the first content query asks.
+void loadManifest();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={persistOptions}
+      // Marks made offline in an earlier session go out once the cache (and
+      // the queue inside it) is back.
+      onSuccess={() => void queryClient.resumePausedMutations()}
+    >
       <AuthProvider>
         <ThemeProvider>
           {/* Inside AuthProvider and the query client, because the chosen
@@ -39,6 +39,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           </I18nProvider>
         </ThemeProvider>
       </AuthProvider>
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   </React.StrictMode>,
 );

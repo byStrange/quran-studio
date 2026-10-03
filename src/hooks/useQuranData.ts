@@ -1,18 +1,37 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { local, offlineFirst } from "@/lib/offline/packs";
 import type { Ruku, Surah, TafsirEdition, TafsirEntry, VerseWithWords } from "@/lib/types";
 
-/** Quran content never changes after seeding, so it is cached aggressively. */
-const CONTENT_QUERY = { staleTime: Infinity, gcTime: 60 * 60 * 1000 } as const;
+/**
+ * Quran content never changes after seeding, so it is cached aggressively.
+ *
+ * `networkMode: "always"` because these read the offline packs before the
+ * network: left at the default, the query would pause while offline instead
+ * of running and finding the downloaded copy. Not persisted with the query
+ * cache either — the packs are the offline copy, and duplicating megabytes of
+ * scripture into the cache snapshot would only slow every save of it.
+ */
+export const CONTENT_QUERY = {
+  staleTime: Infinity,
+  gcTime: 60 * 60 * 1000,
+  networkMode: "always",
+  meta: { persist: false },
+} as const;
 
 export function useSurahs() {
   return useQuery({
     ...CONTENT_QUERY,
     queryKey: ["surahs"],
     queryFn: async (): Promise<Surah[]> => {
-      const { data, error } = await supabase.from("quran_surahs").select("*").order("number");
-      if (error) throw error;
-      return data;
+      return offlineFirst(
+        () => local.surahs(),
+        async () => {
+          const { data, error } = await supabase.from("quran_surahs").select("*").order("number");
+          if (error) throw error;
+          return data;
+        },
+      );
     },
   });
 }
@@ -22,10 +41,15 @@ export function useRukus() {
     ...CONTENT_QUERY,
     queryKey: ["rukus"],
     queryFn: async (): Promise<Ruku[]> => {
-      // 558 rows — under the 1000-row cap, so a single request is safe here.
-      const { data, error } = await supabase.from("quran_rukus").select("*").order("ruku_number");
-      if (error) throw error;
-      return data;
+      return offlineFirst(
+        () => local.rukus(),
+        async () => {
+          // 558 rows — under the 1000-row cap, so a single request is safe here.
+          const { data, error } = await supabase.from("quran_rukus").select("*").order("ruku_number");
+          if (error) throw error;
+          return data;
+        },
+      );
     },
   });
 }
@@ -36,13 +60,18 @@ export function useRuku(rukuNumber: number | null) {
     queryKey: ["ruku", rukuNumber],
     enabled: rukuNumber !== null,
     queryFn: async (): Promise<Ruku> => {
-      const { data, error } = await supabase
-        .from("quran_rukus")
-        .select("*")
-        .eq("ruku_number", rukuNumber!)
-        .single();
-      if (error) throw error;
-      return data;
+      return offlineFirst(
+        () => local.ruku(rukuNumber!),
+        async () => {
+          const { data, error } = await supabase
+            .from("quran_rukus")
+            .select("*")
+            .eq("ruku_number", rukuNumber!)
+            .single();
+          if (error) throw error;
+          return data;
+        },
+      );
     },
   });
 }
@@ -54,16 +83,21 @@ export function useRukuVerses(rukuNumber: number | null) {
     queryKey: ["ruku-verses", rukuNumber],
     enabled: rukuNumber !== null,
     queryFn: async (): Promise<VerseWithWords[]> => {
-      const { data, error } = await supabase
-        .from("quran_verses")
-        .select("*, words:quran_words(*)")
-        .eq("ruku_number", rukuNumber!)
-        .order("ayah_number");
-      if (error) throw error;
-      return (data ?? []).map((verse) => ({
-        ...verse,
-        words: [...(verse.words ?? [])].sort((a, b) => a.position - b.position),
-      })) as VerseWithWords[];
+      return offlineFirst(
+        () => local.rukuVerses(rukuNumber!),
+        async () => {
+          const { data, error } = await supabase
+            .from("quran_verses")
+            .select("*, words:quran_words(*)")
+            .eq("ruku_number", rukuNumber!)
+            .order("ayah_number");
+          if (error) throw error;
+          return (data ?? []).map((verse) => ({
+            ...verse,
+            words: [...(verse.words ?? [])].sort((a, b) => a.position - b.position),
+          })) as VerseWithWords[];
+        },
+      );
     },
   });
 }
@@ -87,19 +121,24 @@ export function useSurahVerses(surahNumber: number | null) {
     enabled: surahNumber !== null,
     initialPageParam: null as number | null,
     queryFn: async ({ pageParam }): Promise<VerseWithWords[]> => {
-      let query = supabase
-        .from("quran_verses")
-        .select("*, words:quran_words(*)")
-        .eq("surah_number", surahNumber!)
-        .order("ayah_number")
-        .limit(SURAH_PAGE_SIZE);
-      if (pageParam !== null) query = query.gt("ayah_number", pageParam);
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data ?? []).map((verse) => ({
-        ...verse,
-        words: [...(verse.words ?? [])].sort((a, b) => a.position - b.position),
-      })) as VerseWithWords[];
+      return offlineFirst(
+        () => local.surahVerses(surahNumber!, pageParam, SURAH_PAGE_SIZE),
+        async () => {
+          let query = supabase
+            .from("quran_verses")
+            .select("*, words:quran_words(*)")
+            .eq("surah_number", surahNumber!)
+            .order("ayah_number")
+            .limit(SURAH_PAGE_SIZE);
+          if (pageParam !== null) query = query.gt("ayah_number", pageParam);
+          const { data, error } = await query;
+          if (error) throw error;
+          return (data ?? []).map((verse) => ({
+            ...verse,
+            words: [...(verse.words ?? [])].sort((a, b) => a.position - b.position),
+          })) as VerseWithWords[];
+        },
+      );
     },
     getNextPageParam: (lastPage) =>
       lastPage.length < SURAH_PAGE_SIZE ? undefined : lastPage[lastPage.length - 1]!.ayah_number,
@@ -121,13 +160,18 @@ export function useSurahVerseIds(surahNumber: number | null) {
     queryKey: ["surah-verse-ids", surahNumber],
     enabled: surahNumber !== null,
     queryFn: async (): Promise<Map<number, number>> => {
-      const { data, error } = await supabase
-        .from("quran_verses")
-        .select("id, ayah_number")
-        .eq("surah_number", surahNumber!)
-        .order("ayah_number");
-      if (error) throw error;
-      return new Map((data ?? []).map((row) => [row.ayah_number, row.id]));
+      return offlineFirst(
+        () => local.surahVerseIds(surahNumber!),
+        async () => {
+          const { data, error } = await supabase
+            .from("quran_verses")
+            .select("id, ayah_number")
+            .eq("surah_number", surahNumber!)
+            .order("ayah_number");
+          if (error) throw error;
+          return new Map((data ?? []).map((row) => [row.ayah_number, row.id]));
+        },
+      );
     },
   });
 }
@@ -138,13 +182,18 @@ export function useTafsirEditions() {
     ...CONTENT_QUERY,
     queryKey: ["tafsir-editions"],
     queryFn: async (): Promise<TafsirEdition[]> => {
-      const { data, error } = await supabase
-        .from("tafsir_editions")
-        .select("*")
-        .order("sort_order")
-        .order("name");
-      if (error) throw error;
-      return data;
+      return offlineFirst(
+        () => local.tafsirEditions(),
+        async () => {
+          const { data, error } = await supabase
+            .from("tafsir_editions")
+            .select("*")
+            .order("sort_order")
+            .order("name");
+          if (error) throw error;
+          return data;
+        },
+      );
     },
   });
 }
@@ -163,16 +212,21 @@ export function useTafsirForAyah(
     queryKey: ["tafsir", edition, surahNumber, ayahNumber],
     enabled: surahNumber !== null && ayahNumber !== null,
     queryFn: async (): Promise<TafsirEntry | null> => {
-      const { data, error } = await supabase
-        .from("tafsir")
-        .select("*")
-        .eq("edition", edition)
-        .eq("surah_number", surahNumber!)
-        .lte("ayah_start", ayahNumber!)
-        .gte("ayah_end", ayahNumber!)
-        .maybeSingle();
-      if (error) throw error;
-      return data ?? null;
+      return offlineFirst(
+        () => local.tafsir(edition, surahNumber!, ayahNumber!),
+        async () => {
+          const { data, error } = await supabase
+            .from("tafsir")
+            .select("*")
+            .eq("edition", edition)
+            .eq("surah_number", surahNumber!)
+            .lte("ayah_start", ayahNumber!)
+            .gte("ayah_end", ayahNumber!)
+            .maybeSingle();
+          if (error) throw error;
+          return data ?? null;
+        },
+      );
     },
   });
 }

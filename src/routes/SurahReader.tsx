@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   BookMarked,
@@ -38,12 +38,14 @@ import { useSurahDownload } from "@/hooks/useAudioDownloads";
 import { useUiPrefs, useUpdateProfile } from "@/hooks/useProfile";
 import { useReadingTimer } from "@/hooks/useReadingTimer";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
+import { useTafsirLayout } from "@/hooks/useTafsirLayout";
 import type { RepeatMode } from "@/lib/types";
 import { ayahRangeLabel, cn, formatClock } from "@/lib/utils";
 import { useT, type TFunction } from "@/providers/I18nProvider";
 import { AudioBar } from "@/components/reader/AudioBar";
 import { VerseCard } from "@/components/reader/VerseCard";
-import { SplitPane } from "@/components/reader/SplitPane";
+import { SplitPane, TafsirToggleButton } from "@/components/reader/SplitPane";
+import { PagerFooter } from "@/components/reader/PagerFooter";
 import { TafsirPanel } from "@/components/reader/TafsirPanel";
 import { TajweedLegend } from "@/components/reader/TajweedLegend";
 import { Button } from "@/components/ui/button";
@@ -76,6 +78,7 @@ export function SurahReader() {
   const prefs = useUiPrefs();
   const updateProfile = useUpdateProfile();
   const isDesktop = useIsDesktop();
+  const tafsirLayout = useTafsirLayout();
   const { data: surahs } = useSurahs();
   const { data: rukus } = useRukus();
 
@@ -165,7 +168,13 @@ export function SurahReader() {
   );
 
   const player = useRecitationPlayer({
-    src: download.localSrc ?? recitation?.audio_url ?? null,
+    // A downloaded copy wins over the CDN whenever there is one — and until
+    // the disk has been checked, nothing plays, so a saved surah never starts
+    // a stream (or fails one, offline) only to be swapped out a moment later.
+    src: download.ready ? (download.localSrc ?? recitation?.audio_url ?? null) : null,
+    // The same recording either way, so finishing a download mid-recitation
+    // swaps the file without losing the place.
+    sourceKey: `${reciter?.id}:${surahNumber}`,
     verseIds: surahVerseIdList,
     timings,
     rate: prefs.playbackRate,
@@ -303,8 +312,11 @@ export function SurahReader() {
     (ayahNumber: number) => {
       setSelectedAyah(ayahNumber);
       if (!isDesktop) setTafsirOpen(true);
+      // Asking for an ayah's tafsir with the column folded away means "show
+      // it", not "remember it for later".
+      else if (tafsirLayout.layout === "hidden") tafsirLayout.setLayout("split");
     },
-    [isDesktop],
+    [isDesktop, tafsirLayout],
   );
 
   const setTafsirReadRange = useCallback(
@@ -567,6 +579,8 @@ export function SurahReader() {
               </div>
             </Tooltip>
 
+            <TafsirToggleButton tafsirFirst={tafsirFirst} />
+
             <Tooltip content={t("reader.swapPanel")}>
               <Button
                 size="icon"
@@ -713,27 +727,23 @@ export function SurahReader() {
                     </div>
                   )}
 
-                  <div className="flex w-full items-center justify-between gap-3 pt-5 pb-10">
-                    <Button
-                      variant="outline"
-                      disabled={surahNumber <= 1}
-                      onClick={() => navigate(`/read/surah/${surahNumber - 1}`)}
-                    >
-                      <ChevronLeft className="size-4" aria-hidden />
-                      {t("reader.previousSurah")}
-                    </Button>
-                    <Button asChild variant="ghost">
-                      <Link to={`/browse?surah=${surahNumber}`}>{t("common.allRukus")}</Link>
-                    </Button>
-                    <Button
-                      variant="primary"
-                      disabled={surahNumber >= TOTAL_SURAHS}
-                      onClick={() => navigate(`/read/surah/${surahNumber + 1}`)}
-                    >
-                      {t("reader.nextSurah")}
-                      <ChevronRight className="size-4" aria-hidden />
-                    </Button>
-                  </div>
+                  <PagerFooter
+                    className="pt-5 pb-10"
+                    previous={{
+                      label: t("reader.previousSurah"),
+                      icon: <ChevronLeft className="size-4 shrink-0" aria-hidden />,
+                      disabled: surahNumber <= 1,
+                      onClick: () => navigate(`/read/surah/${surahNumber - 1}`),
+                    }}
+                    next={{
+                      label: t("reader.nextSurah"),
+                      icon: <ChevronRight className="size-4 shrink-0" aria-hidden />,
+                      disabled: surahNumber >= TOTAL_SURAHS,
+                      onClick: () => navigate(`/read/surah/${surahNumber + 1}`),
+                    }}
+                    allLabel={t("common.allRukus")}
+                    allTo={`/browse?surah=${surahNumber}`}
+                  />
                 </div>
               </div>
             </div>

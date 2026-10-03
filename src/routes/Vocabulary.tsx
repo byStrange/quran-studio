@@ -5,7 +5,7 @@ import { AlarmClock, GraduationCap, Library } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSurahs } from "@/hooks/useQuranData";
-import { useSetWordsStatus, useVocabularyOverview } from "@/hooks/useProgress";
+import { usePendingMarks, useSetWordsStatus, useVocabularyOverview } from "@/hooks/useProgress";
 import { useIntervalUnits, useLanguage, useT } from "@/providers/I18nProvider";
 import { wordGloss } from "@/lib/language";
 import { formatInterval, isDue, minutesUntil } from "@/lib/vocabulary";
@@ -39,6 +39,7 @@ export function Vocabulary() {
   const language = useLanguage();
   const { data: surahs } = useSurahs();
   const setStatus = useSetWordsStatus();
+  const pendingMarks = usePendingMarks();
   const units = useIntervalUnits();
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -231,6 +232,7 @@ export function Vocabulary() {
                   </div>
 
                   <button
+                    disabled={pendingMarks.words.has(row.word.id)}
                     onClick={() =>
                       setStatus.mutate({
                         wordIds: [row.word.id],
@@ -239,6 +241,7 @@ export function Vocabulary() {
                     }
                     className={cn(
                       "shrink-0 rounded-full border px-2.5 py-1 text-[0.6875rem] font-medium transition-colors",
+                      "disabled:cursor-wait disabled:opacity-60",
                       row.status === "learned"
                         ? "border-accent/40 bg-accent-soft text-accent-soft-fg"
                         : "border-gold/40 bg-gold-soft/60 text-fg-muted hover:border-gold",
