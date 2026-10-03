@@ -5,9 +5,11 @@ import { useProfile, useUiPrefs } from "@/hooks/useProfile";
 import { useLanguage, useT } from "@/providers/I18nProvider";
 import { useMarkTafsirEntryRead, usePendingTafsir } from "@/hooks/useProgress";
 import { verseTranslation } from "@/lib/language";
-import { toParagraphs, verseKey } from "@/lib/utils";
+import { verseKey } from "@/lib/utils";
+import { parseBlocks } from "@/lib/markdown";
 import { Modal } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
+import { MarkdownBlockView } from "@/components/ui/markdown";
 
 /**
  * Guards the prompt to one raising per launch.
@@ -122,8 +124,8 @@ export function TafsirNudge() {
 
       <div className="mt-4 max-h-[40vh] overflow-y-auto pr-1">
         <div className="prose-reading text-[0.9375rem] text-fg-muted" data-selectable>
-          {toParagraphs(row.content).map((paragraph, i) => (
-            <p key={i}>{paragraph}</p>
+          {parseBlocks(row.content).map((block, i) => (
+            <MarkdownBlockView key={i} block={block} />
           ))}
         </div>
       </div>
