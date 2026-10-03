@@ -395,6 +395,34 @@
   .prose-reading p + p {
     margin-top: 0.85rem;
   }
+  /* Tafsir that carries its own structure (see lib/markdown.ts): headings,
+     bullets and rules mixed in with the paragraphs, in any order. */
+  .prose-reading > * + * {
+    margin-top: 0.85rem;
+  }
+  .prose-reading h3 {
+    color: var(--fg);
+    font-weight: 600;
+    line-height: 1.45;
+  }
+  .prose-reading > * + h3 {
+    margin-top: 1.5rem;
+  }
+  .prose-reading strong {
+    color: var(--fg);
+    font-weight: 600;
+  }
+  .prose-reading ul {
+    list-style: disc;
+    padding-left: 1.25rem;
+  }
+  .prose-reading li::marker {
+    color: var(--fg-subtle);
+  }
+  .prose-reading hr {
+    border-color: var(--border);
+    margin-block: 1.5rem;
+  }
 
   /* --- Madani mushaf page -------------------------------------------------
 

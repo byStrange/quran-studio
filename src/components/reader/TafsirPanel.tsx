@@ -14,11 +14,13 @@ import { usePendingMarks } from "@/hooks/useProgress";
 import { useTafsirLayout } from "@/hooks/useTafsirLayout";
 import { useLanguage, useT } from "@/providers/I18nProvider";
 import { editionMatchesLanguage } from "@/lib/language";
-import { ayahRangeLabel, cn, toParagraphs } from "@/lib/utils";
+import { ayahRangeLabel, cn } from "@/lib/utils";
+import { blockText, parseBlocks } from "@/lib/markdown";
 import { DEFAULT_TAFSIR_EDITION } from "@/lib/types";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/feedback";
 import { SelectField, Tooltip } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
+import { MarkdownBlockView } from "@/components/ui/markdown";
 import { SUMMARY_MIN_CHARS, TafsirSummaryCard } from "./TafsirSummaryCard";
 
 /**
@@ -103,8 +105,10 @@ export function TafsirPanel({
 
   const allRead = coveredAyahs.length > 0 && coveredAyahs.every((ayah) => readAyahs.has(ayah));
 
-  const paragraphs = useMemo(() => (data ? toParagraphs(data.content) : []), [data]);
-  const paragraphRefs = useRef<Array<HTMLParagraphElement | null>>([]);
+  const blocks = useMemo(() => (data ? parseBlocks(data.content) : []), [data]);
+  /** Each block's words, markup aside, folded the way a quote is. */
+  const searchable = useMemo(() => blocks.map((block) => foldForSearch(blockText(block))), [blocks]);
+  const blockRefs = useRef<Array<HTMLElement | null>>([]);
   const [flashed, setFlashed] = useState<number | null>(null);
 
   // A highlight belongs to the entry it was found in.
@@ -120,12 +124,12 @@ export function TafsirPanel({
     (quote: string) => {
       const needle = foldForSearch(quote);
       if (!needle) return;
-      const index = paragraphs.findIndex((paragraph) => foldForSearch(paragraph).includes(needle));
+      const index = searchable.findIndex((text) => text.includes(needle));
       if (index < 0) return;
-      paragraphRefs.current[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
+      blockRefs.current[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
       setFlashed(index);
     },
-    [paragraphs],
+    [searchable],
   );
 
   return (
@@ -246,19 +250,18 @@ export function TafsirPanel({
               lang={active?.language_code}
               data-selectable
             >
-              {paragraphs.map((paragraph, index) => (
-                <p
+              {blocks.map((block, index) => (
+                <MarkdownBlockView
                   key={index}
+                  block={block}
                   ref={(node) => {
-                    paragraphRefs.current[index] = node;
+                    blockRefs.current[index] = node;
                   }}
                   className={cn(
                     "rounded transition-colors duration-700",
                     flashed === index && "bg-gold-soft",
                   )}
-                >
-                  {paragraph}
-                </p>
+                />
               ))}
             </div>
 

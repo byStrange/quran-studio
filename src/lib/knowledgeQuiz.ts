@@ -21,6 +21,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { AiUnavailableError, isTauri } from "./ai";
 import { verseTranslation } from "./language";
+import { stripMarkdown } from "./markdown";
 import { toParagraphs } from "./utils";
 import type { Language } from "./i18n";
 import { supabase } from "./supabase";
@@ -179,7 +180,9 @@ async function fetchTafsir(
  * of passage before it runs out of room.
  */
 function excerptOf(content: string, random: () => number): string {
-  const paragraphs = toParagraphs(content.replace(/^\s*### /gm, ""));
+  // Plain prose: the model quotes the excerpt back as evidence, and the round
+  // finds that quote in the text by exact match, which `**` would break.
+  const paragraphs = toParagraphs(stripMarkdown(content));
   const whole = paragraphs.join("\n\n");
   if (whole.length <= EXCERPT_MAX_CHARS) return whole;
 
