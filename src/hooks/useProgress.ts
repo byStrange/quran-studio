@@ -1,6 +1,15 @@
-import { useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { useCallback, useMemo } from "react";
+import {
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
+import { readStoredSession, supabase } from "@/lib/supabase";
+import { useToast } from "@/components/ui/toast";
+import { useT } from "@/providers/I18nProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import { useProfile } from "@/hooks/useProfile";
 import type { Database } from "@/lib/database.types";
@@ -127,34 +136,9 @@ export function useMemorizedVerses(verseIds?: number[]) {
   });
 }
 
+/** Marks or unmarks one ayah as memorized. Optimistic; see `registerProgressMutations`. */
 export function useToggleMemorized() {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ verseId, memorized }: { verseId: number; memorized: boolean }) => {
-      if (memorized) {
-        const { error } = await supabase
-          .from("memorized_verses")
-          .insert({ user_id: user!.id, verse_id: verseId });
-        // A double-click can race; an existing row is the desired end state.
-        if (error && error.code !== "23505") throw error;
-      } else {
-        const { error } = await supabase
-          .from("memorized_verses")
-          .delete()
-          .eq("user_id", user!.id)
-          .eq("verse_id", verseId);
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["memorized"] });
-      queryClient.invalidateQueries({ queryKey: ["memorization-overview"] });
-      queryClient.invalidateQueries({ queryKey: ["memorized-by-surah"] });
-      queryClient.invalidateQueries({ queryKey: ["ruku-progress"] });
-    },
-  });
+  return useMarkMutation<MemorizedVars>(MARK_KEYS.memorized);
 }
 
 // --- tafsir read -----------------------------------------------------------
@@ -184,34 +168,7 @@ export function useTafsirReadVerses(verseIds?: number[]) {
  * would be five clicks for one act of reading.
  */
 export function useToggleTafsirRead() {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ verseIds, read }: { verseIds: number[]; read: boolean }) => {
-      if (verseIds.length === 0) return;
-      if (read) {
-        const { error } = await supabase
-          .from("tafsir_read_verses")
-          .upsert(
-            verseIds.map((verseId) => ({ user_id: user!.id, verse_id: verseId })),
-            { onConflict: "user_id,verse_id" },
-          );
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("tafsir_read_verses")
-          .delete()
-          .eq("user_id", user!.id)
-          .in("verse_id", verseIds);
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tafsir-read"] });
-      queryClient.invalidateQueries({ queryKey: ["ruku-progress"] });
-    },
-  });
+  return useMarkMutation<TafsirReadVars>(MARK_KEYS.tafsirRead);
 }
 
 /** Word totals for every ruku, keyed by ruku number — for the quiz buttons. */
@@ -272,28 +229,19 @@ export function usePendingTafsir(edition: string) {
  *
  * The nudge works in entries rather than ayahs, so it needs to mark 2:1-5 in
  * one write; without this it would either mark one ayah and be offered the
- * same passage again, or loop five requests.
+ * same passage again, or loop five requests. It is the tafsir toggle with
+ * `read` fixed, so it shares its optimistic update and offline queue.
  */
 export function useMarkTafsirEntryRead() {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ verseIds }: { verseIds: number[] }) => {
-      if (verseIds.length === 0) return;
-      const { error } = await supabase
-        .from("tafsir_read_verses")
-        .upsert(
-          verseIds.map((verseId) => ({ user_id: user!.id, verse_id: verseId })),
-          { onConflict: "user_id,verse_id" },
-        );
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tafsir-read"] });
-      queryClient.invalidateQueries({ queryKey: ["ruku-progress"] });
-    },
-  });
+  const toggle = useToggleTafsirRead();
+  const { mutate } = toggle;
+  return {
+    ...toggle,
+    mutate: useCallback(
+      ({ verseIds }: { verseIds: number[] }) => mutate({ verseIds, read: true }),
+      [mutate],
+    ),
+  };
 }
 
 // --- per-ruku progress -----------------------------------------------------
@@ -389,19 +337,273 @@ export function useAllWordProgress() {
  * so a declaration and a round of answers leave the deck in the same shape.
  */
 export function useSetWordsStatus() {
-  const queryClient = useQueryClient();
+  return useMarkMutation<WordsStatusVars>(MARK_KEYS.wordsStatus);
+}
 
-  return useMutation({
-    mutationFn: async ({ wordIds, status }: { wordIds: number[]; status: WordStatus }) => {
-      if (wordIds.length === 0) return;
-      const { error } = await supabase.rpc("set_words_status", {
-        p_word_ids: wordIds,
-        p_status: status,
-      });
-      if (error) throw error;
+// --- progress marks: optimistic, single-flight, offline-queued -------------
+
+/**
+ * The three marks a reader sets by hand — memorized, tafsir read, words
+ * learned — share one way of being written.
+ *
+ * - The screen changes on the tap, not on the server's reply: `onMutate`
+ *   writes the new state into every cached query that shows it, and a failure
+ *   puts the old one back (with a toast saying so).
+ * - A mark whose write is in flight cannot be pressed again —
+ *   `usePendingMarks` tells the buttons — so a burst of taps is one write, not
+ *   a race of inserts and deletes landing in any order.
+ * - Offline, the write is queued rather than lost. TanStack Query pauses it
+ *   until the network returns, the paused mutation is persisted with the
+ *   query cache, and these defaults are what let it resume after a restart:
+ *   a resumed mutation has no component and no hook, only its key.
+ *
+ * All three run in one scope, so queued writes replay in the order they were
+ * made — marking an ayah and unmarking it offline must not land reversed.
+ */
+export const MARK_KEYS = {
+  memorized: ["mark", "memorized"],
+  tafsirRead: ["mark", "tafsir-read"],
+  wordsStatus: ["mark", "words-status"],
+} as const satisfies Record<string, QueryKey>;
+
+export interface MemorizedVars {
+  verseId: number;
+  memorized: boolean;
+}
+export interface TafsirReadVars {
+  verseIds: number[];
+  read: boolean;
+}
+export interface WordsStatusVars {
+  wordIds: number[];
+  status: WordStatus;
+}
+
+/**
+ * Who made the mark, captured on the tap. A queued write can replay after a
+ * restart, possibly with someone else signed in by then; it must land under
+ * the account that made it or not at all.
+ */
+type Owned<T> = T & { userId?: string };
+
+type Snapshot = Array<[QueryKey, unknown]>;
+
+async function currentUserId(): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  const id = data.session?.user.id ?? readStoredSession()?.user.id;
+  if (!id) throw new Error("Not signed in");
+  return id;
+}
+
+/**
+ * The account to write under, or null when the mark belongs to a different
+ * one than is signed in now — a write queued by someone else, which is
+ * dropped rather than applied to this account's progress.
+ */
+async function ownerFor(vars: { userId?: string }): Promise<string | null> {
+  const current = await currentUserId();
+  return vars.userId && vars.userId !== current ? null : current;
+}
+
+async function writeMemorized(vars: Owned<MemorizedVars>) {
+  const { verseId, memorized } = vars;
+  const userId = await ownerFor(vars);
+  if (!userId) return;
+  if (memorized) {
+    const { error } = await supabase
+      .from("memorized_verses")
+      .insert({ user_id: userId, verse_id: verseId });
+    // A replayed queue can repeat a write; an existing row is the desired end state.
+    if (error && error.code !== "23505") throw error;
+  } else {
+    const { error } = await supabase
+      .from("memorized_verses")
+      .delete()
+      .eq("user_id", userId)
+      .eq("verse_id", verseId);
+    if (error) throw error;
+  }
+}
+
+async function writeTafsirRead(vars: Owned<TafsirReadVars>) {
+  const { verseIds, read } = vars;
+  if (verseIds.length === 0) return;
+  const userId = await ownerFor(vars);
+  if (!userId) return;
+  if (read) {
+    const { error } = await supabase
+      .from("tafsir_read_verses")
+      .upsert(
+        verseIds.map((verseId) => ({ user_id: userId, verse_id: verseId })),
+        { onConflict: "user_id,verse_id" },
+      );
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from("tafsir_read_verses")
+      .delete()
+      .eq("user_id", userId)
+      .in("verse_id", verseIds);
+    if (error) throw error;
+  }
+}
+
+/**
+ * Goes through `set_words_status` rather than writing the column, because
+ * the column is a cache of the word's schedule and a review would recompute it
+ * straight back. The RPC expresses the claim as a schedule instead — learned
+ * puts the word out at the maturity line, learning brings it back to due now —
+ * so a declaration and a round of answers leave the deck in the same shape.
+ */
+async function writeWordsStatus(vars: Owned<WordsStatusVars>) {
+  const { wordIds, status } = vars;
+  if (wordIds.length === 0) return;
+  // The RPC writes as auth.uid(), so a foreign mark is dropped here too.
+  if (!(await ownerFor(vars))) return;
+  const { error } = await supabase.rpc("set_words_status", {
+    p_word_ids: wordIds,
+    p_status: status,
+  });
+  if (error) throw error;
+}
+
+/** Applies `update` to every cached query under `prefix`, returning what was there. */
+async function patchQueries<T>(
+  queryClient: QueryClient,
+  prefix: QueryKey,
+  update: (old: T) => T,
+): Promise<Snapshot> {
+  await queryClient.cancelQueries({ queryKey: prefix });
+  const snapshot = queryClient.getQueriesData({ queryKey: prefix });
+  queryClient.setQueriesData<T>({ queryKey: prefix }, (old) =>
+    old === undefined ? old : update(old),
+  );
+  return snapshot;
+}
+
+/**
+ * The caches as they were before each optimistic update, by a token kept in
+ * the mutation's context.
+ *
+ * Held here rather than in the context itself, because a paused mutation is
+ * persisted whole: a write replayed days later that failed would otherwise
+ * roll the caches back to what they held on the day it was queued, wiping
+ * every mark made since. After a restart this map is empty, so a replayed
+ * failure restores nothing and the refetch that follows tells the truth.
+ */
+const snapshots = new Map<number, Snapshot>();
+let nextSnapshot = 1;
+
+function keep(snapshot: Snapshot): { snapshotId: number } {
+  const snapshotId = nextSnapshot++;
+  snapshots.set(snapshotId, snapshot);
+  return { snapshotId };
+}
+
+function restore(queryClient: QueryClient, context: unknown) {
+  const id = (context as { snapshotId?: number } | undefined)?.snapshotId;
+  if (id === undefined) return;
+  for (const [key, data] of snapshots.get(id) ?? []) queryClient.setQueryData(key, data);
+  snapshots.delete(id);
+}
+
+function forget(context: unknown) {
+  const id = (context as { snapshotId?: number } | undefined)?.snapshotId;
+  if (id !== undefined) snapshots.delete(id);
+}
+
+function toggledSet(old: Set<number>, ids: number[], on: boolean): Set<number> {
+  if (!(old instanceof Set)) return old;
+  const next = new Set(old);
+  for (const id of ids) {
+    if (on) next.add(id);
+    else next.delete(id);
+  }
+  return next;
+}
+
+/**
+ * Refetches what a mark feeds — but only once the last write of its kind has
+ * settled, so a refetch started between two quick marks can't briefly bring
+ * back the state the second one already replaced.
+ */
+function invalidateWhenIdle(queryClient: QueryClient, key: QueryKey, prefixes: string[]) {
+  if (queryClient.isMutating({ mutationKey: key }) > 1) return;
+  for (const prefix of prefixes) queryClient.invalidateQueries({ queryKey: [prefix] });
+}
+
+const MARK_SCOPE = { id: "progress-marks" };
+
+export function registerProgressMutations(queryClient: QueryClient) {
+  queryClient.setMutationDefaults(MARK_KEYS.memorized, {
+    mutationFn: (vars: MemorizedVars) => writeMemorized(vars),
+    scope: MARK_SCOPE,
+    onMutate: async ({ verseId, memorized }: MemorizedVars) =>
+      keep(
+        await patchQueries<Set<number>>(queryClient, ["memorized"], (old) =>
+          toggledSet(old, [verseId], memorized),
+        ),
+      ),
+    onError: (_error, _vars, context) => restore(queryClient, context),
+    onSettled: (_data, _error, _vars, context) => {
+      forget(context);
+      invalidateWhenIdle(queryClient, MARK_KEYS.memorized, [
+        "memorized",
+        "memorization-overview",
+        "memorized-by-surah",
+        "ruku-progress",
+      ]);
     },
-    onSuccess: () => {
-      for (const key of [
+  });
+
+  queryClient.setMutationDefaults(MARK_KEYS.tafsirRead, {
+    mutationFn: (vars: TafsirReadVars) => writeTafsirRead(vars),
+    scope: MARK_SCOPE,
+    onMutate: async ({ verseIds, read }: TafsirReadVars) =>
+      keep(
+        await patchQueries<Set<number>>(queryClient, ["tafsir-read"], (old) =>
+          toggledSet(old, verseIds, read),
+        ),
+      ),
+    onError: (_error, _vars, context) => restore(queryClient, context),
+    onSettled: (_data, _error, _vars, context) => {
+      forget(context);
+      invalidateWhenIdle(queryClient, MARK_KEYS.tafsirRead, [
+        "tafsir-read",
+        "ruku-progress",
+      ]);
+    },
+  });
+
+  queryClient.setMutationDefaults(MARK_KEYS.wordsStatus, {
+    mutationFn: (vars: WordsStatusVars) => writeWordsStatus(vars),
+    scope: MARK_SCOPE,
+    onMutate: async ({ wordIds, status }: WordsStatusVars) => {
+      const progress = await patchQueries<Map<number, WordStatus>>(
+        queryClient,
+        ["word-progress"],
+        (old) => {
+          if (!(old instanceof Map)) return old;
+          const next = new Map(old);
+          for (const id of wordIds) next.set(id, status);
+          return next;
+        },
+      );
+      // The vocabulary list carries each row's status too.
+      const wanted = new Set(wordIds);
+      const vocabulary = await patchQueries<unknown>(queryClient, ["vocabulary"], (old) =>
+        Array.isArray(old)
+          ? old.map((row: { word?: { id?: number }; status?: WordStatus }) =>
+              row?.word?.id !== undefined && wanted.has(row.word.id) ? { ...row, status } : row,
+            )
+          : old,
+      );
+      return keep([...progress, ...vocabulary]);
+    },
+    onError: (_error, _vars, context) => restore(queryClient, context),
+    onSettled: (_data, _error, _vars, context) => {
+      forget(context);
+      invalidateWhenIdle(queryClient, MARK_KEYS.wordsStatus, [
         "word-progress",
         "memorization-overview",
         "vocabulary",
@@ -409,11 +611,98 @@ export function useSetWordsStatus() {
         "ruku-progress",
         "ruku-word-stats",
         "quiz-scoreboard",
-      ]) {
-        queryClient.invalidateQueries({ queryKey: [key] });
-      }
+      ]);
     },
   });
+}
+
+/**
+ * A mark mutation as a component uses it: the defaults above do the work,
+ * and this adds the toast when a write is refused and rolled back.
+ */
+function useMarkMutation<TVars>(key: QueryKey) {
+  const toast = useToast();
+  const t = useT();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const userId = user?.id;
+  const mutation = useMutation<void, Error, Owned<TVars>>({ mutationKey: key });
+  const { mutate: rawMutate } = mutation;
+  /** Returns whether the write was started; false when one on the same target is still in flight. */
+  const mutate = useCallback(
+    (vars: TVars, options?: { onSuccess?: () => void }): boolean => {
+      // The disabled buttons are the visible half of single-flight; this is
+      // the half that also covers keyboard shortcuts and anything else that
+      // calls in without a button to disable.
+      const busy = new Set(markTargets(vars));
+      const inFlight = queryClient.getMutationCache().findAll({
+        mutationKey: key,
+        status: "pending",
+        predicate: (m) =>
+          !m.state.isPaused && markTargets(m.state.variables).some((id) => busy.has(id)),
+      });
+      if (inFlight.length > 0) return false;
+      rawMutate(
+        { ...vars, userId },
+        {
+          onSuccess: options?.onSuccess,
+          onError: () => toast(t("common.saveFailed"), "error"),
+        },
+      );
+      return true;
+    },
+    [rawMutate, toast, t, queryClient, key, userId],
+  );
+  return { ...mutation, mutate };
+}
+
+/** The ayah or word ids a mark write touches. */
+function markTargets(vars: unknown): number[] {
+  const v = vars as Partial<MemorizedVars & TafsirReadVars & WordsStatusVars> | undefined;
+  if (!v) return [];
+  if (v.verseId !== undefined) return [v.verseId];
+  return v.verseIds ?? v.wordIds ?? [];
+}
+
+export interface PendingMarks {
+  memorized: Set<number>;
+  tafsirRead: Set<number>;
+  /** Word ids whose status write is in flight. */
+  words: Set<number>;
+}
+
+/**
+ * The marks whose write is on its way to the server right now, so their
+ * buttons can refuse a second press until it lands.
+ *
+ * Writes paused for want of a network are left out: they may wait for hours,
+ * and a button locked that long is broken, not careful. Offline taps queue
+ * in order instead, and the optimistic state they read is already current.
+ */
+export function usePendingMarks(): PendingMarks {
+  const pending = useMutationState({
+    filters: {
+      mutationKey: ["mark"],
+      status: "pending",
+      predicate: (mutation) => !mutation.state.isPaused,
+    },
+    select: (mutation) => ({
+      kind: mutation.options.mutationKey?.[1] as string | undefined,
+      vars: mutation.state.variables as
+        | Partial<MemorizedVars & TafsirReadVars & WordsStatusVars>
+        | undefined,
+    }),
+  });
+  return useMemo(() => {
+    const marks: PendingMarks = { memorized: new Set(), tafsirRead: new Set(), words: new Set() };
+    for (const { kind, vars } of pending) {
+      if (!vars) continue;
+      if (kind === "memorized" && vars.verseId !== undefined) marks.memorized.add(vars.verseId);
+      if (kind === "tafsir-read") for (const id of vars.verseIds ?? []) marks.tafsirRead.add(id);
+      if (kind === "words-status") for (const id of vars.wordIds ?? []) marks.words.add(id);
+    }
+    return marks;
+  }, [pending]);
 }
 
 // --- vocabulary ------------------------------------------------------------

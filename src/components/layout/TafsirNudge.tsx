@@ -67,8 +67,15 @@ export function TafsirNudge() {
     navigate(`/read/${row.ruku_number}?ayah=${row.ayah_number}`);
   };
 
-  const markAsRead = () =>
-    markRead.mutate({ verseIds: row.verse_ids }, { onSuccess: close });
+  // Closes on the tap: the mark is applied at once and its write runs (or
+  // waits for a network) behind the dialog, rolling back with a toast if the
+  // server refuses it.
+  // A write on the same passage still in flight (from the reader's own
+  // button) refuses this one; the dialog then stays open rather than closing
+  // on a mark that was never made.
+  const markAsRead = () => {
+    if (markRead.mutate({ verseIds: row.verse_ids })) close();
+  };
 
   return (
     <Modal

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   BookMarked,
@@ -39,12 +39,14 @@ import { useSurahDownload } from "@/hooks/useAudioDownloads";
 import { useUiPrefs, useUpdateProfile } from "@/hooks/useProfile";
 import { useReadingTimer } from "@/hooks/useReadingTimer";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
+import { useTafsirLayout } from "@/hooks/useTafsirLayout";
 import type { RepeatMode, Word } from "@/lib/types";
 import { ayahRangeLabel, cn, formatClock } from "@/lib/utils";
 import { useT } from "@/providers/I18nProvider";
 import { AudioBar } from "@/components/reader/AudioBar";
 import { VerseCard } from "@/components/reader/VerseCard";
-import { SplitPane } from "@/components/reader/SplitPane";
+import { SplitPane, TafsirToggleButton } from "@/components/reader/SplitPane";
+import { PagerFooter } from "@/components/reader/PagerFooter";
 import { FocusMode } from "@/components/reader/FocusMode";
 import { TafsirPanel } from "@/components/reader/TafsirPanel";
 import { TajweedLegend } from "@/components/reader/TajweedLegend";
@@ -133,6 +135,7 @@ export function Reader() {
   // Only consulted below md, where the tafsir is a sheet rather than a column.
   const [tafsirOpen, setTafsirOpen] = useState(false);
   const isDesktop = useIsDesktop();
+  const tafsirLayout = useTafsirLayout();
   const { sessionSeconds, idle } = useReadingTimer(valid ? rukuNumber : null);
 
   const surah = surahs?.find((s) => s.number === ruku?.surah_number);
@@ -152,9 +155,13 @@ export function Reader() {
   });
 
   const player = useRecitationPlayer({
-    // A downloaded copy wins over the CDN whenever there is one, so a surah
-    // saved for offline keeps playing when the connection doesn't.
-    src: download.localSrc ?? recitation?.audio_url ?? null,
+    // A downloaded copy wins over the CDN whenever there is one — and until
+    // the disk has been checked, nothing plays, so a saved surah never starts
+    // a stream (or fails one, offline) only to be swapped out a moment later.
+    src: download.ready ? (download.localSrc ?? recitation?.audio_url ?? null) : null,
+    // The same recording either way, so finishing a download mid-recitation
+    // swaps the file without losing the place.
+    sourceKey: `${reciter?.id}:${surahNumber}`,
     verseIds,
     timings,
     rate: prefs.playbackRate,
@@ -330,8 +337,11 @@ export function Reader() {
     (ayahNumber: number) => {
       setSelectedAyah(ayahNumber);
       if (!isDesktop) setTafsirOpen(true);
+      // Asking for an ayah's tafsir with the column folded away means "show
+      // it", not "remember it for later".
+      else if (tafsirLayout.layout === "hidden") tafsirLayout.setLayout("split");
     },
-    [isDesktop],
+    [isDesktop, tafsirLayout],
   );
 
   /**
@@ -698,6 +708,8 @@ export function Reader() {
               </Button>
             </Tooltip>
 
+            <TafsirToggleButton tafsirFirst={tafsirFirst} />
+
             <Tooltip content={t("reader.swapPanel")}>
               <Button
                 size="icon"
@@ -797,29 +809,23 @@ export function Reader() {
                   />
                 ))}
 
-                <div className="reader-gutter flex items-center justify-between gap-3 pt-7 pb-10">
-                  <Button
-                    variant="outline"
-                    disabled={rukuNumber <= 1}
-                    onClick={() => navigate(`/read/${rukuNumber - 1}`)}
-                  >
-                    <ChevronLeft className="size-4" aria-hidden />
-                    {t("reader.previousRuku")}
-                  </Button>
-                  <Button asChild variant="ghost">
-                    <Link to={surahNumber === null ? "/browse" : `/browse?surah=${surahNumber}`}>
-                      {t("common.allRukus")}
-                    </Link>
-                  </Button>
-                  <Button
-                    variant="primary"
-                    disabled={rukuNumber >= TOTAL_RUKUS}
-                    onClick={() => navigate(`/read/${rukuNumber + 1}`)}
-                  >
-                    {t("reader.nextRuku")}
-                    <ChevronRight className="size-4" aria-hidden />
-                  </Button>
-                </div>
+                <PagerFooter
+                  className="reader-gutter pt-7 pb-10"
+                  previous={{
+                    label: t("reader.previousRuku"),
+                    icon: <ChevronLeft className="size-4 shrink-0" aria-hidden />,
+                    disabled: rukuNumber <= 1,
+                    onClick: () => navigate(`/read/${rukuNumber - 1}`),
+                  }}
+                  next={{
+                    label: t("reader.nextRuku"),
+                    icon: <ChevronRight className="size-4 shrink-0" aria-hidden />,
+                    disabled: rukuNumber >= TOTAL_RUKUS,
+                    onClick: () => navigate(`/read/${rukuNumber + 1}`),
+                  }}
+                  allLabel={t("common.allRukus")}
+                  allTo={surahNumber === null ? "/browse" : `/browse?surah=${surahNumber}`}
+                />
               </div>
             </div>
           }

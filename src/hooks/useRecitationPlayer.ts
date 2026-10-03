@@ -42,6 +42,7 @@ export interface RecitationPlayer {
  */
 export function useRecitationPlayer({
   src,
+  sourceKey,
   verseIds,
   timings,
   rate,
@@ -50,6 +51,12 @@ export function useRecitationPlayer({
   onVerseChange,
 }: {
   src: string | null;
+  /**
+   * Names the recording `src` points at, independent of where it is served
+   * from. When `src` changes but this doesn't — a stream replaced by the copy
+   * just downloaded — playback carries on from the same place.
+   */
+  sourceKey?: string;
   /** The passage's ayahs, in recitation order. */
   verseIds: number[];
   timings: Map<number, RecitationTiming> | undefined;
@@ -153,10 +160,34 @@ export function useRecitationPlayer({
   // Changing reciter or surah swaps the file underneath; playback stops and
   // the playhead returns to the top of the passage rather than keeping an
   // offset that meant something in the previous recording.
+  const loadedRef = useRef<{ sourceKey: string | undefined; start: number } | null>(null);
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !src) return;
+    const previous = loadedRef.current;
+    loadedRef.current = { sourceKey, start };
     setError(null);
+
+    // Same recording from a new place: keep the playhead and keep playing.
+    if (
+      previous &&
+      sourceKey !== undefined &&
+      previous.sourceKey === sourceKey &&
+      previous.start === start
+    ) {
+      const wasPlaying = !audio.paused;
+      // Before metadata, currentTime is a meaningless 0 and the real target
+      // is the seek still waiting for it (the passage start, or the reader's).
+      if (audio.readyState > 0) pendingSeekRef.current = audio.currentTime * 1000;
+      audio.src = src;
+      audio.load();
+      if (wasPlaying) {
+        setLoading(true);
+        void audio.play().catch(() => setPlaying(false));
+      }
+      return;
+    }
+
     setLoading(true);
     setPlaying(false);
     audio.pause();
@@ -166,7 +197,7 @@ export function useRecitationPlayer({
     setCurrentMs(start);
     setCurrentVerseId(null);
     setCurrentWordPosition(null);
-  }, [src, start]);
+  }, [src, start, sourceKey]);
 
   useEffect(() => {
     const audio = audioRef.current;

@@ -18,6 +18,8 @@ import { cn } from "@/lib/utils";
 import { useT, type TFunction } from "@/providers/I18nProvider";
 import { useStreakStatus } from "@/hooks/useProgress";
 import { TafsirNudge } from "./TafsirNudge";
+import { useOnline } from "@/hooks/useOnline";
+import { useToast } from "@/components/ui/toast";
 import { Tooltip } from "@/components/ui/primitives";
 
 interface NavItem {
@@ -365,6 +367,17 @@ function useEdgeSwipe(onOpen: () => void, enabled: boolean) {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const t = useT();
+  const online = useOnline();
+  const toast = useToast();
+  const wasOnline = useRef(online);
+
+  // Said when it changes rather than shown all the time: on a phone there is
+  // no title bar to carry a standing badge, and the change is the news.
+  useEffect(() => {
+    if (wasOnline.current === online) return;
+    wasOnline.current = online;
+    toast(online ? t("offline.backOnline") : t("offline.wentOffline"), "info");
+  }, [online, toast, t]);
   const location = useLocation();
   const isDesktop = useIsDesktop();
   const [navOpen, setNavOpen] = useState(false);

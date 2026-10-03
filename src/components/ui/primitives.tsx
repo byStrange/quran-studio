@@ -150,20 +150,24 @@ export function Toggle({
   onCheckedChange,
   id,
   label,
+  disabled,
 }: {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   id?: string;
   label?: string;
+  disabled?: boolean;
 }) {
   return (
     <Switch.Root
       id={id}
       checked={checked}
+      disabled={disabled}
       onCheckedChange={onCheckedChange}
       aria-label={label}
       className={cn(
         "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+        "disabled:cursor-wait disabled:opacity-60",
         "border border-border data-[state=checked]:border-accent",
         "bg-surface-3 data-[state=checked]:bg-accent",
         "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--ring)]",

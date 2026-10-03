@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   AudioLines,
   Download,
@@ -20,6 +20,7 @@ import { cn, formatClock } from "@/lib/utils";
 import { useT, type TFunction } from "@/providers/I18nProvider";
 import { Button } from "@/components/ui/button";
 import { MenuButton, SelectField, Tooltip, type MenuAction } from "@/components/ui/primitives";
+import { useToast } from "@/components/ui/toast";
 
 const RATES = [0.75, 0.9, 1, 1.25, 1.5];
 
@@ -69,6 +70,18 @@ export function AudioBar({
   compact?: boolean;
 }) {
   const t = useT();
+  const toast = useToast();
+
+  // A failed download used to just turn the spinner back into an arrow, which
+  // reads as "it worked" as easily as "it didn't". Said once, then cleared.
+  const downloadError = download?.error ?? null;
+  const clearDownloadError = download?.clearError;
+  useEffect(() => {
+    if (!downloadError) return;
+    toast(t("audio.downloadFailed", { error: downloadError }), "error");
+    clearDownloadError?.();
+  }, [downloadError, clearDownloadError, toast, t]);
+
   const reciterOptions = useMemo(
     () =>
       (reciters ?? []).map((reciter) => ({

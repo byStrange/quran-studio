@@ -7,6 +7,7 @@ import type { VerseWithWords, WordStatus } from "@/lib/types";
 import { WordChip } from "./WordChip";
 import { TajweedText } from "./TajweedText";
 import { Tooltip } from "@/components/ui/primitives";
+import { usePendingMarks } from "@/hooks/useProgress";
 
 /**
  * A marker that records something about this ayah — memorized, tafsir read,
@@ -19,6 +20,7 @@ import { Tooltip } from "@/components/ui/primitives";
 function Marker({
   on,
   onToggle,
+  busy,
   tooltip,
   label,
   tone,
@@ -27,6 +29,11 @@ function Marker({
 }: {
   on: boolean;
   onToggle: () => void;
+  /**
+   * Its write is on the way. The marker already shows the new state; it only
+   * refuses another press until the server has answered.
+   */
+  busy?: boolean;
   tooltip: string;
   label: string;
   tone: "accent" | "gold" | "green";
@@ -41,10 +48,12 @@ function Marker({
     <Tooltip content={tooltip}>
       <button
         onClick={onToggle}
+        disabled={busy}
+        aria-busy={busy}
         aria-pressed={on}
         aria-label={label}
         className={cn(
-          "transition-colors",
+          "transition-colors disabled:cursor-wait disabled:opacity-60",
           caption
             ? "inline-flex h-11 min-w-0 flex-auto items-center justify-center gap-1.5 rounded-xl border px-2 text-[0.8125rem] font-medium"
             : "grid size-7 place-items-center rounded-lg",
@@ -151,6 +160,8 @@ export function VerseCard({
   const t = useT();
   const language = useLanguage();
   const reference = verseKey(verse.surah_number, verse.ayah_number);
+  const pending = usePendingMarks();
+  const wordsBusy = verse.words.some((word) => pending.words.has(word.id));
 
   // The three markers read as one group — "known by heart", "understood",
   // "vocabulary learned" is the set that says what is left to do on this
@@ -162,6 +173,7 @@ export function VerseCard({
       <Marker
         on={memorized}
         onToggle={onToggleMemorized}
+        busy={pending.memorized.has(verse.id)}
         tooltip={memorized ? t("verse.memorized") : t("verse.markMemorized")}
         label={t("verse.markMemorizedLabel", { reference })}
         tone="accent"
@@ -173,6 +185,7 @@ export function VerseCard({
       <Marker
         on={tafsirRead}
         onToggle={onToggleTafsirRead}
+        busy={pending.tafsirRead.has(verse.id)}
         tooltip={tafsirRead ? t("verse.tafsirRead") : t("verse.markTafsirRead")}
         label={t("verse.markTafsirLabel", { reference })}
         tone="gold"
@@ -184,6 +197,7 @@ export function VerseCard({
       <Marker
         on={wordsLearned}
         onToggle={onToggleWordsLearned}
+        busy={wordsBusy}
         tooltip={wordsLearned ? t("verse.wordsLearned") : t("verse.markWordsLearned")}
         label={t("verse.markWordsLabel", { reference })}
         tone="green"

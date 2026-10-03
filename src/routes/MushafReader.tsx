@@ -12,7 +12,7 @@
  * memorization counters need no notion of pages at all.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   BookOpen,
@@ -32,7 +32,8 @@ import { useReadingTimer } from "@/hooks/useReadingTimer";
 import { isValidPage, pageFontFamily, TOTAL_PAGES } from "@/lib/mushaf";
 import { cn, formatClock } from "@/lib/utils";
 import { MushafPage } from "@/components/reader/MushafPage";
-import { SplitPane } from "@/components/reader/SplitPane";
+import { SplitPane, TafsirToggleButton } from "@/components/reader/SplitPane";
+import { PagerFooter } from "@/components/reader/PagerFooter";
 import { TafsirPanel } from "@/components/reader/TafsirPanel";
 import { Button } from "@/components/ui/button";
 import { ErrorState, LoadingBlock } from "@/components/ui/feedback";
@@ -282,6 +283,8 @@ export function MushafReader() {
               </Button>
             </Tooltip>
 
+            <TafsirToggleButton tafsirFirst={tafsirFirst} />
+
             <Tooltip content={t("reader.swapPanel")}>
               <Button
                 size="icon"
@@ -368,27 +371,23 @@ export function MushafReader() {
                   </p>
                 ) : null}
 
-                <div className="flex items-center justify-between pt-6 pb-8">
-                  <Button
-                    variant="outline"
-                    disabled={pageNumber <= 1}
-                    onClick={() => goTo(pageNumber - 1)}
-                  >
-                    <ChevronRight className="size-4" aria-hidden />
-                    {t("reader.previousPage")}
-                  </Button>
-                  <Button asChild variant="ghost">
-                    <Link to="/browse">{t("common.allRukus")}</Link>
-                  </Button>
-                  <Button
-                    variant="primary"
-                    disabled={pageNumber >= TOTAL_PAGES}
-                    onClick={() => goTo(pageNumber + 1)}
-                  >
-                    {t("reader.nextPage")}
-                    <ChevronLeft className="size-4" aria-hidden />
-                  </Button>
-                </div>
+                <PagerFooter
+                  className="pt-6 pb-8"
+                  previous={{
+                    label: t("reader.previousPage"),
+                    icon: <ChevronRight className="size-4 shrink-0" aria-hidden />,
+                    disabled: pageNumber <= 1,
+                    onClick: () => goTo(pageNumber - 1),
+                  }}
+                  next={{
+                    label: t("reader.nextPage"),
+                    icon: <ChevronLeft className="size-4 shrink-0" aria-hidden />,
+                    disabled: pageNumber >= TOTAL_PAGES,
+                    onClick: () => goTo(pageNumber + 1),
+                  }}
+                  allLabel={t("common.allRukus")}
+                  allTo="/browse"
+                />
               </div>
             </div>
           }

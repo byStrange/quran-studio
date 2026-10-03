@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { Dialog } from "radix-ui";
 import { cn, formatClock } from "@/lib/utils";
+import { usePendingMarks } from "@/hooks/useProgress";
 import type { VerseWithWords, WordStatus } from "@/lib/types";
 import type { RecitationPlayer } from "@/hooks/useRecitationPlayer";
 import { IS_TAURI, setFullscreen } from "@/lib/window";
@@ -113,21 +114,25 @@ function ControlButton({
   onClick,
   active,
   label,
+  disabled,
   children,
 }: {
   onClick: () => void;
   active?: boolean;
   label?: string;
+  disabled?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-pressed={active}
       aria-label={label}
       className={cn(
         "inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-[0.8125rem] transition-colors",
+        "disabled:cursor-wait disabled:opacity-60",
         active
           ? "border-accent/40 bg-accent-soft text-accent-soft-fg"
           : "border-border text-fg-muted hover:border-border-strong hover:text-fg",
@@ -520,6 +525,10 @@ export function FocusMode({
   const isMemorized = verse ? memorized.has(verse.id) : false;
   const isTafsirRead = verse ? tafsirRead.has(verse.id) : false;
   const isWordsLearned = verse ? wordsLearned.has(verse.id) : false;
+  const pendingMarks = usePendingMarks();
+  const memorizedBusy = verse ? pendingMarks.memorized.has(verse.id) : false;
+  const tafsirBusy = verse ? pendingMarks.tafsirRead.has(verse.id) : false;
+  const wordsBusy = verse ? verse.words.some((word) => pendingMarks.words.has(word.id)) : false;
   const progress = verses.length > 0 ? ((index + 1) / verses.length) * 100 : 0;
 
   return (
@@ -737,6 +746,7 @@ export function FocusMode({
 
             <ControlButton
               onClick={() => verse && onToggleMemorized(verse)}
+              disabled={memorizedBusy}
               active={isMemorized}
               label={isMemorized ? t("focus.unmarkMemorized") : t("verse.markMemorized")}
             >
@@ -746,6 +756,7 @@ export function FocusMode({
 
             <ControlButton
               onClick={() => verse && onToggleTafsirRead(verse)}
+              disabled={tafsirBusy}
               active={isTafsirRead}
               label={isTafsirRead ? t("focus.unmarkTafsir") : t("verse.markTafsirRead")}
             >
@@ -755,6 +766,7 @@ export function FocusMode({
 
             <ControlButton
               onClick={() => verse && onToggleWordsLearned(verse)}
+              disabled={wordsBusy}
               active={isWordsLearned}
               label={isWordsLearned ? t("focus.unmarkWords") : t("verse.markWordsLearned")}
             >
@@ -837,6 +849,7 @@ export function FocusMode({
 
               <BarButton
                 onClick={() => verse && onToggleMemorized(verse)}
+                disabled={memorizedBusy}
                 active={isMemorized}
                 label={isMemorized ? t("focus.unmarkMemorized") : t("verse.markMemorized")}
               >
@@ -919,6 +932,7 @@ export function FocusMode({
                 <Toggle
                   checked={isTafsirRead}
                   onCheckedChange={() => verse && onToggleTafsirRead(verse)}
+                  disabled={tafsirBusy}
                   label={t("verse.markTafsirRead")}
                 />
               </SheetRow>
@@ -927,6 +941,7 @@ export function FocusMode({
                 <Toggle
                   checked={isWordsLearned}
                   onCheckedChange={() => verse && onToggleWordsLearned(verse)}
+                  disabled={wordsBusy}
                   label={t("verse.markWordsLearned")}
                 />
               </SheetRow>

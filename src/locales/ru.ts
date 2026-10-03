@@ -804,4 +804,34 @@ export const ru: Dictionary = {
   "ai.notInTauri":
     "Генерация ИИ работает в настольном бэкенде. Запустите приложение через `pnpm app:dev`, а не в браузере.",
   "ai.failed": "Не удалось сгенерировать ответ. Попробуйте ещё раз.",
+
+  // --- offline & layout ---------------------------------------------------
+  "common.cancel": "Отмена",
+  "common.saveFailed": "Не удалось сохранить изменение — оно отменено. Проверьте подключение и попробуйте снова.",
+  "reader.showTafsir": "Показать тафсир",
+  "reader.hideTafsir": "Скрыть тафсир",
+  "tafsir.fullscreen": "Тафсир на всю ширину",
+  "tafsir.exitFullscreen": "Вернуть рядом с текстом",
+  "audio.downloadFailed": "Не удалось загрузить: {error}",
+  "offline.title": "Офлайн",
+  "offline.description":
+    "Сохраните Коран и тафсир на устройство, чтобы читать без подключения. Отметки, сделанные офлайн, сохранятся и синхронизируются, когда связь вернётся.",
+  "offline.storageUsed": "Занято {size}",
+  "offline.quranTitle": "Коран",
+  "offline.quranDescription":
+    "Все 114 сур с переводами, пословным разбором, таджвидом и 604 страницами мусхафа.",
+  "offline.tafsirHeading": "Тафсир",
+  "offline.audioHeading": "Чтения",
+  "offline.notSaved": "Не сохранено",
+  "offline.savedOn": "Сохранено {date}",
+  "offline.downloading": "Загрузка… {percent}%",
+  "offline.download": "Загрузить",
+  "offline.update": "Обновить",
+  "offline.remove": "Удалить с устройства",
+  "offline.removeSurah": "Удалить {surah}",
+  "offline.failed": "Не удалось загрузить: {error}",
+  "offline.offline": "Офлайн",
+  "offline.offlineHint": "Нет подключения — загруженное по-прежнему доступно, отметки синхронизируются позже.",
+  "offline.wentOffline": "Нет подключения. Загруженное доступно, отметки синхронизируются позже.",
+  "offline.backOnline": "Подключение восстановлено.",
 };

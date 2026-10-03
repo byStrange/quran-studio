@@ -13,6 +13,7 @@ import { DEFAULT_LANGUAGE, isLanguage, LANGUAGES, languageInfo } from "@/lib/i18
 import { useLanguage, useT, type TFunction } from "@/providers/I18nProvider";
 import type { ReaderMode } from "@/lib/types";
 import { Page } from "@/components/layout/AppShell";
+import { OfflineCard } from "@/components/settings/OfflineCard";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
@@ -344,13 +345,15 @@ export function Settings() {
 
             {isTauri() ? (
               <div className="border-t border-border pt-4 text-[0.75rem] text-fg-subtle">
-                {downloaded?.size
-                  ? t("settings.downloadedCount", { count: downloaded.size })
+                {downloaded?.length
+                  ? t("settings.downloadedCount", { count: downloaded.length })
                   : t("settings.nothingDownloaded")}
               </div>
             ) : null}
           </CardBody>
         </Card>
+
+        <OfflineCard />
 
         <Card>
           <CardHeader

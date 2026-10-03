@@ -753,6 +753,36 @@ export const en = {
   "ai.notInTauri":
     "AI generation runs in the desktop backend. Launch the app with `pnpm app:dev` instead of the browser preview.",
   "ai.failed": "AI generation failed. Please try again.",
+
+  // --- offline & layout (added with offline mode) -------------------------
+  "common.cancel": "Cancel",
+  "common.saveFailed": "Couldn't save that change — it has been undone. Check your connection and try again.",
+  "reader.showTafsir": "Show tafsir",
+  "reader.hideTafsir": "Hide tafsir",
+  "tafsir.fullscreen": "Read tafsir full width",
+  "tafsir.exitFullscreen": "Back to side by side",
+  "audio.downloadFailed": "Download failed: {error}",
+  "offline.title": "Offline",
+  "offline.description":
+    "Save the Quran and tafsir to this device to read without a connection. Marks you make offline are kept and synced when you're back online.",
+  "offline.storageUsed": "{size} used",
+  "offline.quranTitle": "The Quran",
+  "offline.quranDescription":
+    "All 114 surahs with translations, word by word, tajweed and the 604 mushaf pages.",
+  "offline.tafsirHeading": "Tafsir",
+  "offline.audioHeading": "Recitations",
+  "offline.notSaved": "Not saved",
+  "offline.savedOn": "Saved on {date}",
+  "offline.downloading": "Downloading… {percent}%",
+  "offline.download": "Download",
+  "offline.update": "Update",
+  "offline.remove": "Remove from this device",
+  "offline.removeSurah": "Remove {surah}",
+  "offline.failed": "Download failed: {error}",
+  "offline.offline": "Offline",
+  "offline.offlineHint": "No connection — downloaded content still works, and your marks will sync later.",
+  "offline.wentOffline": "You're offline. Downloaded content still works; marks will sync later.",
+  "offline.backOnline": "Back online.",
 };
 
 /** Every key the app can ask for. */

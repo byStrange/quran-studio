@@ -1,13 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, GraduationCap } from "lucide-react";
+import {
+  BookOpen,
+  GraduationCap,
+  Maximize2,
+  Minimize2,
+  PanelLeftClose,
+  PanelRightClose,
+} from "lucide-react";
 import { useTafsirEditions, useTafsirForAyah } from "@/hooks/useQuranData";
 import { useUiPrefs, useUpdateProfile } from "@/hooks/useProfile";
+import { useIsDesktop } from "@/hooks/useMediaQuery";
+import { usePendingMarks } from "@/hooks/useProgress";
+import { useTafsirLayout } from "@/hooks/useTafsirLayout";
 import { useLanguage, useT } from "@/providers/I18nProvider";
 import { editionMatchesLanguage } from "@/lib/language";
 import { ayahRangeLabel, cn, toParagraphs } from "@/lib/utils";
 import { DEFAULT_TAFSIR_EDITION } from "@/lib/types";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/feedback";
-import { SelectField } from "@/components/ui/primitives";
+import { SelectField, Tooltip } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { SUMMARY_MIN_CHARS, TafsirSummaryCard } from "./TafsirSummaryCard";
 
@@ -44,6 +54,8 @@ export function TafsirPanel({
   const language = useLanguage();
   const updateProfile = useUpdateProfile();
   const { data: editions } = useTafsirEditions();
+  const isDesktop = useIsDesktop();
+  const layout = useTafsirLayout();
 
   /**
    * The stored choice, checked against what is actually seeded.
@@ -85,6 +97,10 @@ export function TafsirPanel({
     return ayahs;
   }, [data]);
 
+  // Which ayahs a pending write covers is known only by id here, so any
+  // tafsir write in flight holds the button until it lands.
+  const markBusy = usePendingMarks().tafsirRead.size > 0;
+
   const allRead = coveredAyahs.length > 0 && coveredAyahs.every((ayah) => readAyahs.has(ayah));
 
   const paragraphs = useMemo(() => (data ? toParagraphs(data.content) : []), [data]);
@@ -116,23 +132,68 @@ export function TafsirPanel({
     <div className="flex h-full flex-col">
       <header className="shrink-0 border-b border-border px-4 py-3 md:px-5 md:py-4">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
+          <div className="flex shrink-0 items-center gap-2 text-[0.6875rem] font-medium uppercase tracking-wider text-fg-subtle">
             <BookOpen className="size-3.5" aria-hidden />
             {t("tafsir.title")}
           </div>
-          {editions && editions.length > 1 ? (
-            <SelectField
-              value={edition}
-              onValueChange={(value) =>
-                updateProfile.mutate({ ui_prefs: { tafsirEdition: value } })
-              }
-              options={editions.map((e) => ({
-                value: e.slug,
-                label: `${e.name} · ${e.language_name}`,
-              }))}
-              className="h-8 w-auto max-w-[14rem] shrink-0 px-2.5 text-[0.8125rem]"
-            />
-          ) : null}
+          <div className="flex min-w-0 items-center gap-1">
+            {editions && editions.length > 1 ? (
+              <SelectField
+                value={edition}
+                onValueChange={(value) =>
+                  updateProfile.mutate({ ui_prefs: { tafsirEdition: value } })
+                }
+                options={editions.map((e) => ({
+                  value: e.slug,
+                  label: `${e.name} · ${e.language_name}`,
+                }))}
+                className="h-8 w-auto min-w-0 max-w-[14rem] px-2.5 text-[0.8125rem]"
+              />
+            ) : null}
+            {/* Below md the panel is a sheet that already fills the screen
+                and has its own close button. */}
+            {isDesktop ? (
+              <>
+                <Tooltip
+                  content={
+                    layout.layout === "full" ? t("tafsir.exitFullscreen") : t("tafsir.fullscreen")
+                  }
+                >
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-8 shrink-0"
+                    aria-label={
+                      layout.layout === "full" ? t("tafsir.exitFullscreen") : t("tafsir.fullscreen")
+                    }
+                    aria-pressed={layout.layout === "full"}
+                    onClick={layout.toggleFull}
+                  >
+                    {layout.layout === "full" ? (
+                      <Minimize2 className="size-4" aria-hidden />
+                    ) : (
+                      <Maximize2 className="size-4" aria-hidden />
+                    )}
+                  </Button>
+                </Tooltip>
+                <Tooltip content={t("reader.hideTafsir")}>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-8 shrink-0"
+                    aria-label={t("reader.hideTafsir")}
+                    onClick={() => layout.setLayout("hidden")}
+                  >
+                    {prefs.tafsirSide === "left" ? (
+                      <PanelLeftClose className="size-4" aria-hidden />
+                    ) : (
+                      <PanelRightClose className="size-4" aria-hidden />
+                    )}
+                  </Button>
+                </Tooltip>
+              </>
+            ) : null}
+          </div>
         </div>
         {data ? (
           <div className="mt-1.5 text-sm font-medium text-fg">
@@ -209,6 +270,7 @@ export function TafsirPanel({
                 size="sm"
                 variant={allRead ? "outline" : "primary"}
                 className={cn(allRead && "border-gold/50 bg-gold-soft text-gold-soft-fg")}
+                disabled={markBusy}
                 onClick={() => onToggleRead(data.ayah_start, data.ayah_end, !allRead)}
               >
                 <GraduationCap className="size-3.5" aria-hidden />

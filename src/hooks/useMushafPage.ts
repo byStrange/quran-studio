@@ -2,9 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { assemblePage, type MushafGlyph, type MushafLine, type MushafPageData } from "@/lib/mushaf";
 import type { Ruku, VerseWithWords } from "@/lib/types";
-
-/** Quran content never changes after seeding, so it is cached aggressively. */
-const CONTENT_QUERY = { staleTime: Infinity, gcTime: 60 * 60 * 1000 } as const;
+import { local, offlineFirst } from "@/lib/offline/packs";
+import { CONTENT_QUERY } from "@/hooks/useQuranData";
 
 /** One mushaf page: its 15 lines and the glyphs sitting on them. */
 export function useMushafPage(pageNumber: number | null) {
@@ -13,25 +12,33 @@ export function useMushafPage(pageNumber: number | null) {
     queryKey: ["mushaf-page", pageNumber],
     enabled: pageNumber !== null,
     queryFn: async (): Promise<MushafPageData> => {
-      const [lines, glyphs] = await Promise.all([
-        supabase
-          .from("quran_mushaf_lines")
-          .select("*")
-          .eq("page_number", pageNumber!)
-          .order("line_number"),
-        supabase
-          .from("quran_mushaf_glyphs")
-          .select("*")
-          .eq("page_number", pageNumber!)
-          .order("id"),
-      ]);
-      if (lines.error) throw lines.error;
-      if (glyphs.error) throw glyphs.error;
+      return offlineFirst(
+        async () => {
+          const stored = await local.mushafPage(pageNumber!);
+          return stored ? assemblePage(pageNumber!, stored.lines, stored.glyphs) : undefined;
+        },
+        async () => {
+          const [lines, glyphs] = await Promise.all([
+            supabase
+              .from("quran_mushaf_lines")
+              .select("*")
+              .eq("page_number", pageNumber!)
+              .order("line_number"),
+            supabase
+              .from("quran_mushaf_glyphs")
+              .select("*")
+              .eq("page_number", pageNumber!)
+              .order("id"),
+          ]);
+          if (lines.error) throw lines.error;
+          if (glyphs.error) throw glyphs.error;
 
-      return assemblePage(
-        pageNumber!,
-        (lines.data ?? []) as MushafLine[],
-        (glyphs.data ?? []) as MushafGlyph[],
+          return assemblePage(
+            pageNumber!,
+            (lines.data ?? []) as MushafLine[],
+            (glyphs.data ?? []) as MushafGlyph[],
+          );
+        },
       );
     },
   });
@@ -51,16 +58,26 @@ export function useMushafPageVerses(verseIds: readonly number[]) {
     queryKey: ["mushaf-page-verses", key],
     enabled: verseIds.length > 0,
     queryFn: async (): Promise<VerseWithWords[]> => {
-      const { data, error } = await supabase
-        .from("quran_verses")
-        .select("*, words:quran_words(*)")
-        .in("id", verseIds as number[])
-        .order("id");
-      if (error) throw error;
-      return (data ?? []).map((verse) => ({
-        ...verse,
-        words: [...(verse.words ?? [])].sort((a, b) => a.position - b.position),
-      })) as VerseWithWords[];
+      return offlineFirst(
+        async () => {
+          // Only a complete answer counts; a page with an ayah missing locally
+          // asks the network for the lot.
+          const stored = await local.versesById(verseIds);
+          return stored && stored.length === verseIds.length ? stored : undefined;
+        },
+        async () => {
+          const { data, error } = await supabase
+            .from("quran_verses")
+            .select("*, words:quran_words(*)")
+            .in("id", verseIds as number[])
+            .order("id");
+          if (error) throw error;
+          return (data ?? []).map((verse) => ({
+            ...verse,
+            words: [...(verse.words ?? [])].sort((a, b) => a.position - b.position),
+          })) as VerseWithWords[];
+        },
+      );
     },
   });
 }
@@ -75,14 +92,19 @@ export function useRukusOnPage(pageNumber: number | null) {
     queryKey: ["mushaf-page-rukus", pageNumber],
     enabled: pageNumber !== null,
     queryFn: async (): Promise<Ruku[]> => {
-      const { data, error } = await supabase
-        .from("quran_rukus")
-        .select("*")
-        .lte("page_start", pageNumber!)
-        .gte("page_end", pageNumber!)
-        .order("ruku_number");
-      if (error) throw error;
-      return data ?? [];
+      return offlineFirst(
+        () => local.rukusOnPage(pageNumber!),
+        async () => {
+          const { data, error } = await supabase
+            .from("quran_rukus")
+            .select("*")
+            .lte("page_start", pageNumber!)
+            .gte("page_end", pageNumber!)
+            .order("ruku_number");
+          if (error) throw error;
+          return data ?? [];
+        },
+      );
     },
   });
 }

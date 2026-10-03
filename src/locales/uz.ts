@@ -766,4 +766,34 @@ export const uz: Dictionary = {
   "ai.notInTauri":
     "Sun'iy intellekt ish stoli qismida ishlaydi. Dasturni brauzerda emas, `pnpm app:dev` orqali ishga tushiring.",
   "ai.failed": "Javob tayyorlanmadi. Qaytadan urinib ko'ring.",
+
+  // --- offline & layout ---------------------------------------------------
+  "common.cancel": "Bekor qilish",
+  "common.saveFailed": "O'zgarish saqlanmadi va bekor qilindi. Internetni tekshirib, qayta urinib ko'ring.",
+  "reader.showTafsir": "Tafsirni ko'rsatish",
+  "reader.hideTafsir": "Tafsirni yashirish",
+  "tafsir.fullscreen": "Tafsirni to'liq kenglikda o'qish",
+  "tafsir.exitFullscreen": "Yonma-yon ko'rinishga qaytish",
+  "audio.downloadFailed": "Yuklab bo'lmadi: {error}",
+  "offline.title": "Oflayn",
+  "offline.description":
+    "Internetsiz o'qish uchun Qur'on va tafsirni qurilmaga saqlang. Oflayn qo'yilgan belgilar saqlanadi va internet qaytganda sinxronlanadi.",
+  "offline.storageUsed": "{size} band",
+  "offline.quranTitle": "Qur'on",
+  "offline.quranDescription":
+    "114 sura: tarjimalar, so'zma-so'z tahlil, tajvid va mushafning 604 sahifasi.",
+  "offline.tafsirHeading": "Tafsir",
+  "offline.audioHeading": "Qiroatlar",
+  "offline.notSaved": "Saqlanmagan",
+  "offline.savedOn": "{date} da saqlangan",
+  "offline.downloading": "Yuklanmoqda… {percent}%",
+  "offline.download": "Yuklab olish",
+  "offline.update": "Yangilash",
+  "offline.remove": "Qurilmadan o'chirish",
+  "offline.removeSurah": "{surah} ni o'chirish",
+  "offline.failed": "Yuklab bo'lmadi: {error}",
+  "offline.offline": "Oflayn",
+  "offline.offlineHint": "Internet yo'q — yuklangan narsalar ishlaydi, belgilar keyinroq sinxronlanadi.",
+  "offline.wentOffline": "Internet yo'q. Yuklangan narsalar ishlaydi, belgilar keyinroq sinxronlanadi.",
+  "offline.backOnline": "Internet qaytdi.",
 };
