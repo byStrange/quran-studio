@@ -713,6 +713,9 @@ export const ru: Dictionary = {
     "Раскрашивает арабский текст по правилам чтения, с легендой в окне чтения. Только цвет — сам текст не меняется.",
   "settings.expandWords": "Разбор по словам по умолчанию",
   "settings.expandWordsDescription": "Показывать все разборы слов сразу при открытии руку.",
+  "settings.interlinearWords": "Перевод под арабским текстом",
+  "settings.interlinearWordsDescription":
+    "Показывать значение каждого слова прямо под ним в аяте, а не отдельным рядом карточек.",
 
   "settings.recitation": "Чтение вслух",
   "settings.recitationDescription": "Какой чтец звучит и насколько точно текст следует за ним.",
