@@ -126,3 +126,26 @@ export function toTajweedRuns(
 
   return runs;
 }
+
+/**
+ * The spans that fall inside `text.slice(start, end)`, re-expressed relative to
+ * that slice. A span straddling either edge is clipped to it, so a rule that
+ * runs across a word boundary colours both halves.
+ */
+export function sliceTajweedSpans(
+  spans: readonly TajweedSpan[] | null | undefined,
+  start: number,
+  end: number,
+): TajweedSpan[] | null {
+  if (!spans) return null;
+  const sliced: TajweedSpan[] = [];
+  for (const span of spans) {
+    if (!span || span.e <= start || span.s >= end) continue;
+    sliced.push({
+      r: span.r,
+      s: Math.max(span.s, start) - start,
+      e: Math.min(span.e, end) - start,
+    });
+  }
+  return sliced;
+}

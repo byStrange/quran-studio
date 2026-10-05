@@ -686,6 +686,7 @@ export function SurahReader() {
                         onSelect={() => showTafsirFor(verse.ayah_number)}
                         wordsExpanded={expandedVerses.has(verse.id)}
                         onToggleWords={() => toggleWords(verse.id)}
+                        interlinear={prefs.interlinearWords}
                         wordStatuses={wordStatuses ?? new Map()}
                         tajweed={prefs.tajweed}
                         reciting={player.currentVerseId === verse.id}

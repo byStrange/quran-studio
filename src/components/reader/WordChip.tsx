@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import { Popover } from "radix-ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, RefreshCw, Sparkles } from "lucide-react";
@@ -104,49 +104,32 @@ function WordDetail({ word, verse }: { word: Word; verse: VerseContext }) {
   );
 }
 
-export function WordChip({
+/**
+ * Opens a word's explanation and learning controls from whatever element
+ * renders the word — a chip in the word-by-word row, or the word itself when
+ * the glosses sit under the Arabic.
+ */
+export function WordPopover({
   word,
   verse,
   status,
-  reciting,
+  children,
 }: {
   word: Word;
   verse: VerseContext;
   status: WordStatus | undefined;
-  /** This word is the one currently being recited. */
-  reciting?: boolean;
+  /** The trigger. Must be a single element that can take a ref. */
+  children: ReactElement;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const setStatus = useSetWordsStatus();
   const statusBusy = usePendingMarks().words.has(word.id);
-  const language = useLanguage();
   const current = status ?? "none";
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>
-        <button
-          className={cn(
-            "flex min-w-[4.5rem] flex-col items-center gap-1 rounded-xl border px-3 py-2",
-            "transition-colors",
-            STATUS_STYLES[current],
-            // Overrides the learning-status colour while the word is being
-            // sung. The status is a long-lived fact the reader can check any
-            // time; this lasts under a second and is the only thing making the
-            // row followable, so it takes the chip for as long as it holds.
-            reciting && "border-accent bg-accent-soft text-accent-soft-fg ring-2 ring-accent/30",
-          )}
-        >
-          <span className="arabic-sm leading-tight text-fg">{word.arabic}</span>
-          {word.transliteration ? (
-            <span className="text-[0.6875rem] italic leading-tight text-fg-subtle">
-              {word.transliteration}
-            </span>
-          ) : null}
-          <span className="text-[0.75rem] leading-tight text-fg-muted">{wordGloss(word, language)}</span>
-        </button>
-      </Popover.Trigger>
+      <Popover.Trigger asChild>{children}</Popover.Trigger>
 
       <Popover.Portal>
         <Popover.Content
@@ -192,5 +175,46 @@ export function WordChip({
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
+  );
+}
+
+export function WordChip({
+  word,
+  verse,
+  status,
+  reciting,
+}: {
+  word: Word;
+  verse: VerseContext;
+  status: WordStatus | undefined;
+  /** This word is the one currently being recited. */
+  reciting?: boolean;
+}) {
+  const language = useLanguage();
+  const current = status ?? "none";
+
+  return (
+    <WordPopover word={word} verse={verse} status={status}>
+      <button
+        className={cn(
+          "flex min-w-[4.5rem] flex-col items-center gap-1 rounded-xl border px-3 py-2",
+          "transition-colors",
+          STATUS_STYLES[current],
+          // Overrides the learning-status colour while the word is being
+          // sung. The status is a long-lived fact the reader can check any
+          // time; this lasts under a second and is the only thing making the
+          // row followable, so it takes the chip for as long as it holds.
+          reciting && "border-accent bg-accent-soft text-accent-soft-fg ring-2 ring-accent/30",
+        )}
+      >
+        <span className="arabic-sm leading-tight text-fg">{word.arabic}</span>
+        {word.transliteration ? (
+          <span className="text-[0.6875rem] italic leading-tight text-fg-subtle">
+            {word.transliteration}
+          </span>
+        ) : null}
+        <span className="text-[0.75rem] leading-tight text-fg-muted">{wordGloss(word, language)}</span>
+      </button>
+    </WordPopover>
   );
 }

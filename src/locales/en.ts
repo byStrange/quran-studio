@@ -666,6 +666,9 @@ export const en = {
     "Colour the Arabic by recitation rule, with a legend in the reader. Colour only — the text itself is unchanged.",
   "settings.expandWords": "Expand word-by-word by default",
   "settings.expandWordsDescription": "Show every word breakdown as soon as a ruku opens.",
+  "settings.interlinearWords": "Word-by-word under the Arabic",
+  "settings.interlinearWordsDescription":
+    "Print each word's meaning directly beneath it in the ayah, instead of in a separate row of cards.",
 
   "settings.recitation": "Recitation",
   "settings.recitationDescription": "Which reciter plays, and how closely the reader follows along.",

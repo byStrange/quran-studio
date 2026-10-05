@@ -6,6 +6,7 @@ import { useLanguage, useT } from "@/providers/I18nProvider";
 import type { VerseWithWords, WordStatus } from "@/lib/types";
 import { WordChip } from "./WordChip";
 import { TajweedText } from "./TajweedText";
+import { InterlinearText } from "./InterlinearText";
 import { Tooltip } from "@/components/ui/primitives";
 import { usePendingMarks } from "@/hooks/useProgress";
 
@@ -121,6 +122,7 @@ export function VerseCard({
   onSelect,
   wordsExpanded,
   onToggleWords,
+  interlinear,
   wordStatuses,
   onOpenFocus,
   tajweed,
@@ -142,6 +144,11 @@ export function VerseCard({
   onSelect: () => void;
   wordsExpanded: boolean;
   onToggleWords: () => void;
+  /**
+   * Expanding the words prints each gloss under its word in the Arabic line,
+   * rather than in a row of chips below the translation.
+   */
+  interlinear: boolean;
   wordStatuses: Map<number, WordStatus>;
   /**
    * Opens focus mode on this ayah. Absent in the continuous surah reader,
@@ -282,9 +289,19 @@ export function VerseCard({
         ) : null}
       </div>
 
-      <p className="arabic mt-4 text-fg" data-selectable dir="rtl">
-        <TajweedText text={verse.arabic_text} spans={verse.tajweed} enabled={tajweed} />
-      </p>
+      {interlinear && wordsExpanded ? (
+        <InterlinearText
+          className="mt-4"
+          verse={verse}
+          wordStatuses={wordStatuses}
+          tajweed={tajweed}
+          recitingWordPosition={reciting ? recitingWordPosition : null}
+        />
+      ) : (
+        <p className="arabic mt-4 text-fg" data-selectable dir="rtl">
+          <TajweedText text={verse.arabic_text} spans={verse.tajweed} enabled={tajweed} />
+        </p>
+      )}
 
       <p className="mt-4 text-[0.9375rem] leading-relaxed text-fg-muted" data-selectable>
         {verseTranslation(verse, language)}
@@ -292,7 +309,7 @@ export function VerseCard({
 
       <div className="mt-5 hidden gap-2 touch:flex">{markers(true)}</div>
 
-      {wordsExpanded ? (
+      {wordsExpanded && !interlinear ? (
         <div className="mt-5 rounded-xl border border-border bg-surface-2/40 p-3.5">
           <div className="flex flex-wrap gap-2" dir="rtl">
             {verse.words.map((word) => (

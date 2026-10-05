@@ -275,6 +275,24 @@ export function Settings() {
                 label={t("settings.expandWords")}
               />
             </div>
+
+            <div className="flex items-center justify-between gap-6 border-t border-border pt-4">
+              <div>
+                <div className="text-[0.8125rem] font-medium text-fg">
+                  {t("settings.interlinearWords")}
+                </div>
+                <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
+                  {t("settings.interlinearWordsDescription")}
+                </p>
+              </div>
+              <Toggle
+                checked={prefs.interlinearWords}
+                onCheckedChange={(checked) =>
+                  updateProfile.mutate({ ui_prefs: { interlinearWords: checked } })
+                }
+                label={t("settings.interlinearWords")}
+              />
+            </div>
           </CardBody>
         </Card>
 

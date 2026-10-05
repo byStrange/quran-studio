@@ -47,6 +47,7 @@ import { Spinner } from "@/components/ui/feedback";
 import { Toggle } from "@/components/ui/primitives";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
 import { WordChip } from "./WordChip";
+import { InterlinearText } from "./InterlinearText";
 import { TajweedText } from "./TajweedText";
 import { verseTranslation } from "@/lib/language";
 import { useLanguage, useT } from "@/providers/I18nProvider";
@@ -306,6 +307,7 @@ export function FocusMode({
   loading,
   player,
   highlightWords,
+  interlinear,
   onPrevRuku,
   onNextRuku,
   tajweed,
@@ -330,6 +332,8 @@ export function FocusMode({
   /** The reader's player, shared so playback survives entering and leaving. */
   player: RecitationPlayer;
   highlightWords: boolean;
+  /** Show the words' glosses under the Arabic rather than in a row below. */
+  interlinear: boolean;
   /** Absent at the first ruku / the last one. */
   onPrevRuku?: () => void;
   onNextRuku?: () => void;
@@ -672,18 +676,32 @@ export function FocusMode({
                   ) : null}
                 </div>
 
-                <p
-                  className="font-arabic text-fg"
-                  dir="rtl"
-                  data-selectable
-                  style={{ fontSize: size.arabic, lineHeight: 1.95 }}
-                >
-                  <TajweedText
-                    text={verse.arabic_text}
-                    spans={verse.tajweed}
-                    enabled={tajweed}
+                {interlinear && showWords ? (
+                  <InterlinearText
+                    className="justify-center"
+                    verse={verse}
+                    wordStatuses={wordStatuses}
+                    tajweed={tajweed}
+                    recitingWordPosition={
+                      reciting && highlightWords ? player.currentWordPosition : null
+                    }
+                    arabicStyle={{ fontSize: size.arabic, lineHeight: 1.95 }}
+                    glossStyle={{ fontSize: `calc(${size.translation} * 0.85)` }}
                   />
-                </p>
+                ) : (
+                  <p
+                    className="font-arabic text-fg"
+                    dir="rtl"
+                    data-selectable
+                    style={{ fontSize: size.arabic, lineHeight: 1.95 }}
+                  >
+                    <TajweedText
+                      text={verse.arabic_text}
+                      spans={verse.tajweed}
+                      enabled={tajweed}
+                    />
+                  </p>
+                )}
 
                 {showTranslation ? (
                   <>
@@ -698,7 +716,7 @@ export function FocusMode({
                   </>
                 ) : null}
 
-                {showWords ? (
+                {showWords && !interlinear ? (
                   <div className="mt-8 w-full border-t border-border pt-6 md:mt-10 md:pt-8">
                     <div className="flex flex-wrap justify-center gap-2" dir="rtl">
                       {verse.words.map((word) => (

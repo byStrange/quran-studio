@@ -113,6 +113,12 @@ export interface UiPrefs {
   /** Show the word-by-word breakdown expanded by default. */
   wordsExpanded: boolean;
   /**
+   * Print the word-by-word gloss under each word of the Arabic itself, rather
+   * than in a separate row of chips below the translation. Off by default so
+   * the reader keeps the layout it had before the option existed.
+   */
+  interlinearWords: boolean;
+  /**
    * Colour the Arabic by tajweed rule. On by default: readers who rely on the
    * colouring to recite correctly should not have to discover a setting first,
    * and it is a change of colour only, so it costs nothing to those who don't.
@@ -159,6 +165,7 @@ export const DEFAULT_UI_PREFS: UiPrefs = {
   tafsirEdition: DEFAULT_TAFSIR_EDITION,
   theme: "system",
   wordsExpanded: false,
+  interlinearWords: false,
   tajweed: true,
   readerMode: "study",
   reciterId: null,

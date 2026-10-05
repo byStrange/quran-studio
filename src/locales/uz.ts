@@ -677,6 +677,9 @@ export const uz: Dictionary = {
     "Arab matnini qiroat qoidalari bo'yicha ranglaydi, o'qish oynasida izohi bilan. Faqat rang — matnning o'zi o'zgarmaydi.",
   "settings.expandWords": "So'zma-so'z tahlil doim ochiq",
   "settings.expandWordsDescription": "Ruku ochilishi bilan barcha so'z tahlillarini ko'rsatish.",
+  "settings.interlinearWords": "So'zma-so'z arabcha matn ostida",
+  "settings.interlinearWordsDescription":
+    "Har bir so'z ma'nosini oyatda uning ostida ko'rsatish, alohida kartochkalar qatorida emas.",
 
   "settings.recitation": "Qiroat",
   "settings.recitationDescription": "Qaysi qori o'qiydi va matn unga qanchalik ergashadi.",
