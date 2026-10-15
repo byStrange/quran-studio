@@ -264,6 +264,10 @@ export const ru: Dictionary = {
   "verse.markerMemorized": "Заучен",
   "verse.markerTafsir": "Тафсир",
   "verse.markerWords": "Слова",
+  "verse.mistake": "Отмечено как ошибка",
+  "verse.markMistake": "Отметить как ошибку",
+  "verse.markMistakeLabel": "Отметить {reference} как прочитанный с ошибкой",
+  "verse.markerMistake": "Ошибка",
   "verse.playFromHere": "Включить чтение с этого аята",
   "verse.play": "Слушать",
   "verse.showWordByWord": "Показать разбор по словам",
@@ -661,6 +665,12 @@ export const ru: Dictionary = {
   "vocab.notQuizzed": "Не повторялось",
 
   // --- memorization ------------------------------------------------------
+  "mistakes.title": "Ошибки для повторения",
+  "mistakes.description": "Аяты, отмеченные как ошибочные во время чтения. Снимите отметку, когда аят исправлен.",
+  "mistakes.empty": "Ошибок не отмечено. Отметьте аят флажком, пока вас слушают.",
+  "mistakes.loadFailed": "Не удалось загрузить ошибки. Проверьте подключение и попробуйте снова.",
+  "mistakes.clear": "Снять отметку об ошибке",
+  "mistakes.clearLabel": "Снять отметку об ошибке с {reference}",
   "memorization.title": "Заучивание",
   "memorization.description": "Аяты, отмеченные как заученные, по сурам.",
   "memorization.ayahsMemorized": "Аятов заучено",

@@ -771,6 +771,32 @@ export type Database = {
         }
         Relationships: []
       }
+      mistake_verses: {
+        Row: {
+          marked_at: string
+          user_id: string
+          verse_id: number
+        }
+        Insert: {
+          marked_at?: string
+          user_id: string
+          verse_id: number
+        }
+        Update: {
+          marked_at?: string
+          user_id?: string
+          verse_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mistake_verses_verse_id_fkey"
+            columns: ["verse_id"]
+            isOneToOne: false
+            referencedRelation: "quran_verses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tafsir_read_verses: {
         Row: {
           read_at: string

@@ -1,4 +1,4 @@
-import { BookOpen, Check, ChevronDown, Expand, GraduationCap, Play, Volume2, WholeWord } from "lucide-react";
+import { BookOpen, Check, ChevronDown, Expand, Flag, GraduationCap, Play, Volume2, WholeWord } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn, verseKey } from "@/lib/utils";
 import { verseTranslation } from "@/lib/language";
@@ -12,9 +12,9 @@ import { usePendingMarks } from "@/hooks/useProgress";
 
 /**
  * A marker that records something about this ayah — memorized, tafsir read,
- * words learned.
+ * words learned, heard wrong.
  *
- * The three stay visible whether lit or not. They are the ayah's progress, not
+ * They stay visible whether lit or not. They are the ayah's progress, not
  * a control surface, and hiding the unlit ones only left whichever was lit
  * floating in the gap the others had vacated — the set reads as a set.
  */
@@ -37,10 +37,10 @@ function Marker({
   busy?: boolean;
   tooltip: string;
   label: string;
-  tone: "accent" | "gold" | "green";
+  tone: "accent" | "gold" | "green" | "red";
   /**
    * Printed beside the icon, for the touch row. A finger has no tooltip to
-   * reveal, and three bare icons do not say which is which.
+   * reveal, and bare icons do not say which is which.
    */
   caption?: string;
   children: ReactNode;
@@ -63,7 +63,9 @@ function Marker({
               ? "border-transparent bg-accent-soft text-accent-soft-fg"
               : tone === "gold"
                 ? "border-transparent bg-gold-soft text-gold-soft-fg"
-                : "border-transparent bg-green-500/12 text-green-600 dark:text-green-400"
+                : tone === "red"
+                  ? "border-transparent bg-red-500/12 text-red-600 dark:text-red-400"
+                  : "border-transparent bg-green-500/12 text-green-600 dark:text-green-400"
             : cn(
                 "text-fg-subtle/70 hover:bg-surface-2 hover:text-fg",
                 // Unlit, a captioned marker still has to look like something
@@ -118,6 +120,8 @@ export function VerseCard({
   onToggleTafsirRead,
   wordsLearned,
   onToggleWordsLearned,
+  mistake,
+  onToggleMistake,
   selected,
   onSelect,
   wordsExpanded,
@@ -140,6 +144,9 @@ export function VerseCard({
   /** Whether the words in this ayah have been learned. */
   wordsLearned: boolean;
   onToggleWordsLearned: () => void;
+  /** Someone listening flagged this ayah as recited with a mistake. */
+  mistake: boolean;
+  onToggleMistake: () => void;
   selected: boolean;
   onSelect: () => void;
   wordsExpanded: boolean;
@@ -170,10 +177,10 @@ export function VerseCard({
   const pending = usePendingMarks();
   const wordsBusy = verse.words.some((word) => pending.words.has(word.id));
 
-  // The three markers read as one group — "known by heart", "understood",
-  // "vocabulary learned" is the set that says what is left to do on this
-  // ayah. With a pointer they ride in the header beside the actions; on touch
-  // that row cannot hold seven thumb-sized targets, so they drop to a row of
+  // The markers read as one group — "known by heart", "understood",
+  // "vocabulary learned", "heard wrong" is the set that says what is left to
+  // do on this ayah. With a pointer they ride in the header beside the actions; on touch
+  // that row cannot hold eight thumb-sized targets, so they drop to a row of
   // their own under the translation, captioned since no tooltip will show.
   const markers = (captioned: boolean) => (
     <>
@@ -211,6 +218,18 @@ export function VerseCard({
         caption={captioned ? t("verse.markerWords") : undefined}
       >
         <WholeWord className="size-3.5 shrink-0" aria-hidden />
+      </Marker>
+
+      <Marker
+        on={mistake}
+        onToggle={onToggleMistake}
+        busy={pending.mistake.has(verse.id)}
+        tooltip={mistake ? t("verse.mistake") : t("verse.markMistake")}
+        label={t("verse.markMistakeLabel", { reference })}
+        tone="red"
+        caption={captioned ? t("verse.markerMistake") : undefined}
+      >
+        <Flag className="size-3.5 shrink-0" aria-hidden />
       </Marker>
     </>
   );
@@ -307,7 +326,7 @@ export function VerseCard({
         {verseTranslation(verse, language)}
       </p>
 
-      <div className="mt-5 hidden gap-2 touch:flex">{markers(true)}</div>
+      <div className="mt-5 hidden flex-wrap gap-2 touch:flex">{markers(true)}</div>
 
       {wordsExpanded && !interlinear ? (
         <div className="mt-5 rounded-xl border border-border bg-surface-2/40 p-3.5">

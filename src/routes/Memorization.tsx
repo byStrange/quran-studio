@@ -7,6 +7,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useMemorizationOverview } from "@/hooks/useProgress";
 import { useRukus, useSurahs } from "@/hooks/useQuranData";
 import { Page } from "@/components/layout/AppShell";
+import { MistakesCard } from "@/components/memorization/MistakesCard";
 import { Card, CardBody, CardHeader, StatTile } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/primitives";
 import { LoadingBlock } from "@/components/ui/feedback";
@@ -108,6 +109,8 @@ export function Memorization() {
           hint={t("memorization.atLeastOne")}
         />
       </div>
+
+      <MistakesCard />
 
       <Card className="mt-6">
         <CardHeader
