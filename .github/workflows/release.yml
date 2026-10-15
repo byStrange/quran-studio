@@ -216,6 +216,7 @@ jobs:
           name: android
           path: artifacts/*.apk
           if-no-files-found: error
+          retention-days: 1
 
   # --- Linux ---------------------------------------------------------------
 
@@ -307,6 +308,7 @@ jobs:
           name: linux
           path: src-tauri/target/release/bundle/appimage/*.AppImage
           if-no-files-found: error
+          retention-days: 1
 
   # --- Windows -------------------------------------------------------------
 
@@ -374,6 +376,7 @@ jobs:
           name: windows
           path: src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
+          retention-days: 1
 
   # --- macOS ---------------------------------------------------------------
 
@@ -459,6 +462,7 @@ jobs:
           name: macos
           path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: error
+          retention-days: 1
 
   # --- publish -------------------------------------------------------------
 
