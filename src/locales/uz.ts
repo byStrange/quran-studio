@@ -243,6 +243,10 @@ export const uz: Dictionary = {
   "verse.markerMemorized": "Yodlangan",
   "verse.markerTafsir": "Tafsir",
   "verse.markerWords": "So'zlar",
+  "verse.mistake": "Xato deb belgilangan",
+  "verse.markMistake": "Xato deb belgilash",
+  "verse.markMistakeLabel": "{reference} ni xato o'qilgan deb belgilash",
+  "verse.markerMistake": "Xato",
   "verse.playFromHere": "Qiroatni shu oyatdan boshlash",
   "verse.play": "Tinglash",
   "verse.showWordByWord": "So'zma-so'z tahlilni ko'rsatish",
@@ -625,6 +629,12 @@ export const uz: Dictionary = {
   "vocab.notQuizzed": "Takrorlanmagan",
 
   // --- memorization ------------------------------------------------------
+  "mistakes.title": "Takrorlanadigan xatolar",
+  "mistakes.description": "O'qiyotganingizda xato deb belgilangan oyatlar. To'g'rilangach, belgini olib tashlang.",
+  "mistakes.empty": "Xato belgilanmagan. Sizni tinglayotganda oyatni bayroqcha bilan belgilang.",
+  "mistakes.loadFailed": "Xatolarni yuklab bo'lmadi. Internetni tekshirib, qayta urinib ko'ring.",
+  "mistakes.clear": "Xato belgisini olib tashlash",
+  "mistakes.clearLabel": "{reference} dagi xato belgisini olib tashlash",
   "memorization.title": "Yodlash",
   "memorization.description": "Yodlangan deb belgilagan oyatlaringiz, sura bo'yicha.",
   "memorization.ayahsMemorized": "Yodlangan oyatlar",

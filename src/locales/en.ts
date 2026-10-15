@@ -236,6 +236,10 @@ export const en = {
   "verse.markerMemorized": "Memorized",
   "verse.markerTafsir": "Tafsir",
   "verse.markerWords": "Words",
+  "verse.mistake": "Marked as a mistake",
+  "verse.markMistake": "Mark as a mistake",
+  "verse.markMistakeLabel": "Mark {reference} as recited with a mistake",
+  "verse.markerMistake": "Mistake",
   "verse.playFromHere": "Play the recitation from this ayah",
   "verse.play": "Play",
   "verse.showWordByWord": "Show word by word",
@@ -614,6 +618,12 @@ export const en = {
   "vocab.notQuizzed": "Not reviewed",
 
   // --- memorization ------------------------------------------------------
+  "mistakes.title": "Mistakes to review",
+  "mistakes.description": "Ayahs flagged as mistaken while you recited. Clear one once it's right.",
+  "mistakes.empty": "No mistakes flagged. Mark an ayah with the flag while someone listens to you.",
+  "mistakes.loadFailed": "Couldn't load your mistakes. Check your connection and try again.",
+  "mistakes.clear": "Clear this mistake",
+  "mistakes.clearLabel": "Clear the mistake on {reference}",
   "memorization.title": "Memorization",
   "memorization.description": "Ayahs you've marked as memorized, surah by surah.",
   "memorization.ayahsMemorized": "Ayahs memorized",

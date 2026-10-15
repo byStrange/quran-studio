@@ -22,8 +22,10 @@ import {
   useAllWordProgress,
   useMemorizedVerses,
   useSetWordsStatus,
+  useMistakeVerses,
   useTafsirReadVerses,
   useToggleMemorized,
+  useToggleMistake,
   useToggleTafsirRead,
 } from "@/hooks/useProgress";
 import { learnedVerseIds, quizzableWordIds } from "@/lib/vocabulary";
@@ -105,6 +107,8 @@ export function SurahReader() {
   const { data: wordStatuses } = useAllWordProgress();
   const toggleMemorized = useToggleMemorized();
   const toggleTafsirRead = useToggleTafsirRead();
+  const { data: mistakes } = useMistakeVerses(surahVerseIdList);
+  const toggleMistake = useToggleMistake();
   const setWordsStatus = useSetWordsStatus();
 
   /**
@@ -682,6 +686,15 @@ export function SurahReader() {
                             status: wordsLearned.has(verse.id) ? "learning" : "learned",
                           })
                         }
+                        mistake={mistakes?.has(verse.id) ?? false}
+                        onToggleMistake={() => {
+                          // Until the set has loaded, the flag's direction is unknown.
+                          if (!mistakes) return;
+                          toggleMistake.mutate({
+                            verseId: verse.id,
+                            mistake: !mistakes.has(verse.id),
+                          });
+                        }}
                         selected={selectedAyah === verse.ayah_number}
                         onSelect={() => showTafsirFor(verse.ayah_number)}
                         wordsExpanded={expandedVerses.has(verse.id)}

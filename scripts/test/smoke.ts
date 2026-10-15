@@ -339,6 +339,24 @@ async function main(): Promise<void> {
       return data.some((r) => r.verse_id === 2) ? null : "row not returned";
     });
 
+    await check("flags and clears a mistake on a verse", async () => {
+      const { error } = await client
+        .from("mistake_verses")
+        .upsert({ user_id: userId, verse_id: 3 }, { onConflict: "user_id,verse_id" });
+      if (error) return error.message;
+      const { data, error: readError } = await client.from("mistake_verses").select("verse_id");
+      if (readError) return readError.message;
+      if (!data.some((r) => r.verse_id === 3)) return "row not returned";
+      const { error: deleteError } = await client
+        .from("mistake_verses")
+        .delete()
+        .eq("user_id", userId)
+        .eq("verse_id", 3);
+      if (deleteError) return deleteError.message;
+      const { data: after } = await client.from("mistake_verses").select("verse_id");
+      return (after ?? []).some((r) => r.verse_id === 3) ? "row survived the delete" : null;
+    });
+
     await check("records word progress", async () => {
       const { data: word } = await client.from("quran_words").select("id").limit(1).single();
       const { error } = await client
@@ -890,9 +908,12 @@ async function main(): Promise<void> {
       });
       const otherId = other.user!.id;
       await admin.from("memorized_verses").insert({ user_id: otherId, verse_id: 500 });
+      await admin.from("mistake_verses").insert({ user_id: otherId, verse_id: 500 });
 
       const { data, error } = await client.from("memorized_verses").select("verse_id");
+      const { data: flagged } = await client.from("mistake_verses").select("verse_id");
       await admin.auth.admin.deleteUser(otherId);
+      if (flagged?.some((r) => r.verse_id === 500)) return "RLS leak: another user's mistake flag was visible";
 
       if (error) return error.message;
       return data.some((r) => r.verse_id === 500)

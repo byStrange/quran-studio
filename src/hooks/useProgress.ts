@@ -171,6 +171,69 @@ export function useToggleTafsirRead() {
   return useMarkMutation<TafsirReadVars>(MARK_KEYS.tafsirRead);
 }
 
+// --- mistakes --------------------------------------------------------------
+
+/**
+ * The ayahs flagged as recited with a mistake, optionally narrowed to a set
+ * of ids. `undefined` means all of them; an empty array means none.
+ */
+export function useMistakeVerses(verseIds?: number[]) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["mistakes", user?.id, verseIds?.join(",") ?? "all"],
+    enabled: Boolean(user),
+    queryFn: async (): Promise<Set<number>> => {
+      if (verseIds?.length === 0) return new Set();
+      let query = supabase.from("mistake_verses").select("verse_id");
+      if (verseIds) query = query.in("verse_id", verseIds);
+      const { data, error } = await query;
+      if (error) throw error;
+      return new Set((data ?? []).map((row) => row.verse_id));
+    },
+  });
+}
+
+/** One flagged ayah with what the review list needs to show and link to it. */
+export interface MistakeVerse {
+  id: number;
+  surah_number: number;
+  ayah_number: number;
+  ruku_number: number;
+  arabic_text: string;
+  marked_at: string;
+}
+
+/**
+ * Every flagged ayah in Quran order, for the review list.
+ *
+ * Its key sits under "mistakes" like the id-set queries above, so the same
+ * invalidation and optimistic patching reach it.
+ */
+export function useMistakeList() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["mistakes", user?.id, "list"],
+    enabled: Boolean(user),
+    queryFn: async (): Promise<MistakeVerse[]> => {
+      const { data, error } = await supabase
+        .from("mistake_verses")
+        .select("marked_at, verse:quran_verses!inner(id, surah_number, ayah_number, ruku_number, arabic_text)");
+      if (error) throw error;
+      return (data ?? [])
+        .flatMap((row) => (row.verse ? [{ ...row.verse, marked_at: row.marked_at }] : []))
+        .sort((a, b) => a.surah_number - b.surah_number || a.ayah_number - b.ayah_number);
+    },
+  });
+}
+
+/**
+ * Flags or clears the mistake mark on one ayah. Optimistic and queued offline
+ * like the other marks — the listener may well be marking without a connection.
+ */
+export function useToggleMistake() {
+  return useMarkMutation<MistakeVars>(MARK_KEYS.mistake);
+}
+
 /** Word totals for every ruku, keyed by ruku number — for the quiz buttons. */
 export function useRukuWordStats() {
   const { user } = useAuth();
@@ -343,8 +406,8 @@ export function useSetWordsStatus() {
 // --- progress marks: optimistic, single-flight, offline-queued -------------
 
 /**
- * The three marks a reader sets by hand — memorized, tafsir read, words
- * learned — share one way of being written.
+ * The four marks a reader sets by hand — memorized, tafsir read, words
+ * learned, mistake — share one way of being written.
  *
  * - The screen changes on the tap, not on the server's reply: `onMutate`
  *   writes the new state into every cached query that shows it, and a failure
@@ -357,13 +420,14 @@ export function useSetWordsStatus() {
  *   query cache, and these defaults are what let it resume after a restart:
  *   a resumed mutation has no component and no hook, only its key.
  *
- * All three run in one scope, so queued writes replay in the order they were
+ * All four run in one scope, so queued writes replay in the order they were
  * made — marking an ayah and unmarking it offline must not land reversed.
  */
 export const MARK_KEYS = {
   memorized: ["mark", "memorized"],
   tafsirRead: ["mark", "tafsir-read"],
   wordsStatus: ["mark", "words-status"],
+  mistake: ["mark", "mistake"],
 } as const satisfies Record<string, QueryKey>;
 
 export interface MemorizedVars {
@@ -373,6 +437,10 @@ export interface MemorizedVars {
 export interface TafsirReadVars {
   verseIds: number[];
   read: boolean;
+}
+export interface MistakeVars {
+  verseId: number;
+  mistake: boolean;
 }
 export interface WordsStatusVars {
   wordIds: number[];
@@ -444,6 +512,25 @@ async function writeTafsirRead(vars: Owned<TafsirReadVars>) {
       .delete()
       .eq("user_id", userId)
       .in("verse_id", verseIds);
+    if (error) throw error;
+  }
+}
+
+async function writeMistake(vars: Owned<MistakeVars>) {
+  const { verseId, mistake } = vars;
+  const userId = await ownerFor(vars);
+  if (!userId) return;
+  if (mistake) {
+    const { error } = await supabase
+      .from("mistake_verses")
+      .upsert({ user_id: userId, verse_id: verseId }, { onConflict: "user_id,verse_id" });
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from("mistake_verses")
+      .delete()
+      .eq("user_id", userId)
+      .eq("verse_id", verseId);
     if (error) throw error;
   }
 }
@@ -575,6 +662,28 @@ export function registerProgressMutations(queryClient: QueryClient) {
     },
   });
 
+  queryClient.setMutationDefaults(MARK_KEYS.mistake, {
+    mutationFn: (vars: MistakeVars) => writeMistake(vars),
+    scope: MARK_SCOPE,
+    onMutate: async ({ verseId, mistake }: MistakeVars) =>
+      keep(
+        await patchQueries<Set<number> | MistakeVerse[]>(queryClient, ["mistakes"], (old) =>
+          // The review list is rows, not ids: clearing a flag drops its row,
+          // while raising one has no row to show until the refetch brings it.
+          Array.isArray(old)
+            ? mistake
+              ? old
+              : old.filter((row) => row.id !== verseId)
+            : toggledSet(old, [verseId], mistake),
+        ),
+      ),
+    onError: (_error, _vars, context) => restore(queryClient, context),
+    onSettled: (_data, _error, _vars, context) => {
+      forget(context);
+      invalidateWhenIdle(queryClient, MARK_KEYS.mistake, ["mistakes"]);
+    },
+  });
+
   queryClient.setMutationDefaults(MARK_KEYS.wordsStatus, {
     mutationFn: (vars: WordsStatusVars) => writeWordsStatus(vars),
     scope: MARK_SCOPE,
@@ -667,6 +776,7 @@ function markTargets(vars: unknown): number[] {
 export interface PendingMarks {
   memorized: Set<number>;
   tafsirRead: Set<number>;
+  mistake: Set<number>;
   /** Word ids whose status write is in flight. */
   words: Set<number>;
 }
@@ -694,10 +804,16 @@ export function usePendingMarks(): PendingMarks {
     }),
   });
   return useMemo(() => {
-    const marks: PendingMarks = { memorized: new Set(), tafsirRead: new Set(), words: new Set() };
+    const marks: PendingMarks = {
+      memorized: new Set(),
+      tafsirRead: new Set(),
+      mistake: new Set(),
+      words: new Set(),
+    };
     for (const { kind, vars } of pending) {
       if (!vars) continue;
       if (kind === "memorized" && vars.verseId !== undefined) marks.memorized.add(vars.verseId);
+      if (kind === "mistake" && vars.verseId !== undefined) marks.mistake.add(vars.verseId);
       if (kind === "tafsir-read") for (const id of vars.verseIds ?? []) marks.tafsirRead.add(id);
       if (kind === "words-status") for (const id of vars.wordIds ?? []) marks.words.add(id);
     }

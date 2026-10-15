@@ -21,8 +21,10 @@ import {
 import { useRuku, useRukuVerses, useSurahs, useSurahVerseIds } from "@/hooks/useQuranData";
 import {
   useMemorizedVerses,
+  useMistakeVerses,
   useTafsirReadVerses,
   useToggleMemorized,
+  useToggleMistake,
   useToggleTafsirRead,
   useSetWordsStatus,
   useWordProgress,
@@ -126,6 +128,8 @@ export function Reader() {
   const surahVerseIdList = useMemo(() => [...(surahVerseIds?.values() ?? [])], [surahVerseIds]);
   const { data: tafsirRead } = useTafsirReadVerses(surahVerseIdList);
   const toggleTafsirRead = useToggleTafsirRead();
+  const { data: mistakes } = useMistakeVerses(surahVerseIdList);
+  const toggleMistake = useToggleMistake();
 
   const [searchParams] = useSearchParams();
   const [selectedAyah, setSelectedAyah] = useState<number | null>(null);
@@ -793,6 +797,15 @@ export function Reader() {
                     }
                     wordsLearned={wordsLearned.has(verse.id)}
                     onToggleWordsLearned={() => setVerseWordsLearned(verse)}
+                    mistake={mistakes?.has(verse.id) ?? false}
+                    onToggleMistake={() => {
+                      // Until the set has loaded, the flag's direction is unknown.
+                      if (!mistakes) return;
+                      toggleMistake.mutate({
+                        verseId: verse.id,
+                        mistake: !mistakes.has(verse.id),
+                      });
+                    }}
                     selected={selectedAyah === verse.ayah_number}
                     onSelect={() => showTafsirFor(verse.ayah_number)}
                     wordsExpanded={expandedVerses.has(verse.id)}
