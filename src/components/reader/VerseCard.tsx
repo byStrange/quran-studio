@@ -1,11 +1,11 @@
 import { BookOpen, Check, ChevronDown, Expand, Flag, GraduationCap, Play, Volume2, WholeWord } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn, verseKey } from "@/lib/utils";
-import { selectedVerseTranslations } from "@/lib/language";
-import { useLanguage, useT } from "@/providers/I18nProvider";
+import { useT } from "@/providers/I18nProvider";
 import type { VerseWithWords, WordStatus } from "@/lib/types";
 import { TajweedText } from "./TajweedText";
 import { InterlinearText } from "./InterlinearText";
+import { VerseTranslations } from "./VerseTranslations";
 import { Tooltip } from "@/components/ui/primitives";
 import { usePendingMarks } from "@/hooks/useProgress";
 
@@ -171,8 +171,6 @@ export function VerseCard({
   canPlay: boolean;
 }) {
   const t = useT();
-  const language = useLanguage();
-  const shownTranslations = selectedVerseTranslations(verse, translations, language);
   const reference = verseKey(verse.surah_number, verse.ayah_number);
   const pending = usePendingMarks();
   const wordsBusy = verse.words.some((word) => pending.words.has(word.id));
@@ -322,22 +320,12 @@ export function VerseCard({
         </p>
       )}
 
-      {/* Each selected translation on its own, attributed only when more than
-          one is shown — a single translation needs no label to tell it apart. */}
-      <div className="mt-4 space-y-3" data-selectable>
-        {shownTranslations.map((tr) => (
-          <div key={tr.key}>
-            {shownTranslations.length > 1 ? (
-              <div className="mb-0.5 text-[0.6875rem] font-medium uppercase tracking-wide text-fg-subtle">
-                {tr.translator}
-              </div>
-            ) : null}
-            <p lang={tr.tag} className="text-[0.9375rem] leading-relaxed text-fg-muted">
-              {tr.text}
-            </p>
-          </div>
-        ))}
-      </div>
+      <VerseTranslations
+        className="mt-4"
+        verse={verse}
+        translations={translations}
+        textClassName="text-[0.9375rem]"
+      />
 
       <div className="mt-5 hidden flex-wrap gap-2 touch:flex">{markers(true)}</div>
     </article>

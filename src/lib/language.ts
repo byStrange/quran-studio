@@ -137,7 +137,11 @@ export function resolveTranslationKeys(
   keys: string[] | undefined,
   language: Language,
 ): string[] {
-  const known = (keys ?? []).filter((key) => translationEdition(key) !== undefined);
+  // De-duplicated as well as filtered: `ui_prefs.translations` is free-form
+  // JSON, so a hand-edited or legacy value like ["en", "en"] would otherwise
+  // render the same translation twice under duplicate React keys. The app's own
+  // toggle never writes a duplicate, but the store is not the only writer.
+  const known = [...new Set(keys ?? [])].filter((key) => translationEdition(key) !== undefined);
   return known.length > 0 ? known : [defaultTranslationKey(language)];
 }
 
@@ -154,20 +158,31 @@ export interface RenderedTranslation {
  *
  * Each falls back to English per verse the same way `verseTranslation` does, so
  * a translation whose import has not reached a verse shows the English text
- * rather than a blank line.
+ * rather than a blank line. Crucially the attribution follows the text: a verse
+ * that falls back is labelled Saheeh International in `en`, not misattributed to
+ * the edition the reader selected. That matters now that the label is visible —
+ * before the seed runs, `translation_uz_mansur` is null for every verse, and
+ * printing Saheeh International's English under the heading "Alouddin Mansur"
+ * (and tagged `uz-Cyrl`) would be an actively wrong credit. `key` stays the
+ * selected edition's, so it is stable and unique across the rendered list.
  */
 export function selectedVerseTranslations(
   verse: MultiTranslatedVerse,
   keys: string[] | undefined,
   language: Language,
 ): RenderedTranslation[] {
+  const english = translationEdition("en")!;
   return resolveTranslationKeys(keys, language).map((key) => {
     const edition = translationEdition(key)!;
+    const own = verse[edition.column];
+    // The edition that actually supplied the text — the selected one when it
+    // has this verse, English when it is falling back.
+    const source = own ? edition : english;
     return {
       key,
-      translator: edition.translator,
-      tag: edition.tag,
-      text: verse[edition.column] || verse.translation_en,
+      translator: source.translator,
+      tag: source.tag,
+      text: own || verse.translation_en,
     };
   });
 }

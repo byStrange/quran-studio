@@ -48,8 +48,8 @@ import { Toggle } from "@/components/ui/primitives";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
 import { InterlinearText } from "./InterlinearText";
 import { TajweedText } from "./TajweedText";
-import { selectedVerseTranslations } from "@/lib/language";
-import { useLanguage, useT } from "@/providers/I18nProvider";
+import { VerseTranslations } from "./VerseTranslations";
+import { useT } from "@/providers/I18nProvider";
 
 /** Tuned pairs rather than one scale factor — translation shouldn't grow as
     fast as the Arabic, or it starts competing with it. */
@@ -348,7 +348,6 @@ export function FocusMode({
   const t = useT();
   const chromeHidden = useIdleChrome();
   const isDesktop = useIsDesktop();
-  const language = useLanguage();
   /** Phone only: everything that isn't play / mark / turn lives behind this. */
   const [optionsOpen, setOptionsOpen] = useState(false);
 
@@ -708,24 +707,13 @@ export function FocusMode({
                 {showTranslation ? (
                   <>
                     <span className="my-7 h-px w-16 bg-border md:my-9" aria-hidden />
-                    <div className="flex max-w-3xl flex-col items-center gap-4" data-selectable>
-                      {selectedVerseTranslations(verse, translations, language).map((tr, _i, all) => (
-                        <div key={tr.key} className="flex flex-col items-center gap-1">
-                          {all.length > 1 ? (
-                            <div className="text-[0.6875rem] font-medium uppercase tracking-wide text-fg-subtle">
-                              {tr.translator}
-                            </div>
-                          ) : null}
-                          <p
-                            lang={tr.tag}
-                            className="leading-relaxed text-fg-muted"
-                            style={{ fontSize: size.translation }}
-                          >
-                            {tr.text}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
+                    <VerseTranslations
+                      className="max-w-3xl"
+                      verse={verse}
+                      translations={translations}
+                      align="center"
+                      textStyle={{ fontSize: size.translation }}
+                    />
                   </>
                 ) : null}
               </div>
