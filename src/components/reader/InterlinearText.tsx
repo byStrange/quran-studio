@@ -17,7 +17,7 @@ import { wordGloss } from "@/lib/language";
 import type { VerseWithWords, WordStatus } from "@/lib/types";
 import { useLanguage } from "@/providers/I18nProvider";
 import { TajweedText } from "./TajweedText";
-import { WordPopover } from "./WordChip";
+import { WordPopover } from "./WordPopover";
 
 /**
  * Learning status shows on the gloss rather than as a box around the word: a

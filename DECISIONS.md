@@ -449,6 +449,17 @@ tafsir marker is a separate corner icon on the same tile, because the two
 finish at different times and the rukus that are memorized but not yet read are
 precisely what the second marker was added to surface.
 
+**Word-by-word is interlinear only — each gloss under its own word.** It began
+as a toggle between a row of cards below the translation and glosses printed
+under the Arabic; the interlinear form won and the cards were removed, along
+with the setting that chose between them. Under-the-word is simply the better
+reading: the eye stays on the ayah instead of jumping to a card grid, the word
+and its meaning never drift apart, and it is how an interlinear mushaf has
+always set the two. The expand/collapse control that shows and hides the
+word-by-word is untouched — it was never the thing in question. The word's
+popover (explanation, learning controls) is shared with what the cards used, so
+nothing was lost by dropping them.
+
 ---
 
 ## Mushaf mode
@@ -835,14 +846,50 @@ already legible there are left at their printed value.
 
 ## Localization
 
-**One language, not two.** The picker sets the interface, the verse
-translation, the word-by-word glosses, the tafsir edition and the language the
-AI writes in — all of it, from one row in Settings. That reverses the Russian
-mode decision above, which kept the interface English on the theory that the
-two are separate requests. They are not, often enough to matter: a reader who
-picks Russian wants a Russian app, and making them find a second switch to get
-one served the rare case at the common one's expense. Two settings also have to
-be explained; one does not.
+**One language, not two.** The picker sets the interface, the word-by-word
+glosses, the tafsir edition and the language the AI writes in — from one row in
+Settings. That reverses the Russian mode decision above, which kept the
+interface English on the theory that the two are separate requests. They are
+not, often enough to matter: a reader who picks Russian wants a Russian app, and
+making them find a second switch to get one served the rare case at the common
+one's expense. Two settings also have to be explained; one does not.
+
+**Verse translations are the one thing the language no longer fixes on its
+own.** They became a *set* the reader chooses in `ui_prefs.translations` and
+stacks under the Arabic, because the language-to-translation mapping stopped
+being one-to-one: Uzbek carries two translations (Shaykh Muhammad Sodiq in
+Latin, Alouddin Mansur in Cyrillic), and a reader may want more than one at
+once — an English reader checking an Uzbek rendering, or the two Uzbek editions
+side by side. This is deliberately *not* a return to two language pickers: the
+interface, glosses, tafsir and AI still move as one with the language. Only the
+verse translation, the one piece a reader genuinely wants to multiply, was
+pulled out.
+
+The default stays the common case. An empty `translations` means "follow the
+interface language", so every existing reader — and every new one who never
+opens the picker — sees exactly the one translation the language used to pick on
+its own. A non-empty list is an explicit choice; unknown keys are dropped on
+read, and the resolver never returns an empty set, so the reader always shows at
+least one translation.
+
+**A translation is still a column, not a table.** A `quran_translations` table
+was considered and rejected for the same reason it was at the Uzbek migration:
+a translation is one short string per verse, the read paths already `select *`,
+and the registry in `lib/language.ts` chooses which columns to render rather
+than which rows to fetch. Adding Alouddin Mansur was therefore a column
+(`translation_uz_mansur`), a seed script, and a row in that registry — no read
+path changed. The editions table earns its place for tafsir (ranged, paragraphs
+long, genuinely sparse) and not here.
+
+**Alouddin Mansur is the one Cyrillic verse translation, on purpose.** The only
+published edition of it is Cyrillic, and it is a translation Uzbek readers ask
+for by name, so the reader offers it labelled as Cyrillic rather than going
+without it. This is the same stance the bundled Al-Mukhtasar tafsir already took
+(below): the script is a fact about the edition, and a reader who selects it is
+one who reads that script. The Latin-only guard in `seed/translation-uz.ts`
+still holds for `translation_uz` — the column that stands in for the Uzbek
+interface — while `seed/translation-uz-mansur.ts` inverts it and *requires*
+Cyrillic, so fetching the wrong resource fails loudly either way.
 
 **English, Russian, Uzbek.** Uzbek in the Latin alphabet, which is what the
 country writes in today. The bundled Al-Mukhtasar tafsir is Cyrillic, because

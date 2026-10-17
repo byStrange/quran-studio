@@ -810,7 +810,7 @@ export function Reader() {
                     onSelect={() => showTafsirFor(verse.ayah_number)}
                     wordsExpanded={expandedVerses.has(verse.id)}
                     onToggleWords={() => toggleWords(verse.id)}
-                    interlinear={prefs.interlinearWords}
+                    translations={prefs.translations}
                     wordStatuses={wordStatuses ?? new Map()}
                     onOpenFocus={() => openFocus(index)}
                     tajweed={prefs.tajweed}
@@ -898,7 +898,7 @@ export function Reader() {
           loading={versesLoading}
           player={player}
           highlightWords={prefs.highlightWords}
-          interlinear={prefs.interlinearWords}
+          translations={prefs.translations}
           tajweed={prefs.tajweed}
           onToggleTajweed={toggleTajweed}
           onPrevRuku={

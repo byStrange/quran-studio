@@ -46,11 +46,10 @@ import { IS_TAURI, setFullscreen } from "@/lib/window";
 import { Spinner } from "@/components/ui/feedback";
 import { Toggle } from "@/components/ui/primitives";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
-import { WordChip } from "./WordChip";
 import { InterlinearText } from "./InterlinearText";
 import { TajweedText } from "./TajweedText";
-import { verseTranslation } from "@/lib/language";
-import { useLanguage, useT } from "@/providers/I18nProvider";
+import { VerseTranslations } from "./VerseTranslations";
+import { useT } from "@/providers/I18nProvider";
 
 /** Tuned pairs rather than one scale factor — translation shouldn't grow as
     fast as the Arabic, or it starts competing with it. */
@@ -307,7 +306,7 @@ export function FocusMode({
   loading,
   player,
   highlightWords,
-  interlinear,
+  translations,
   onPrevRuku,
   onNextRuku,
   tajweed,
@@ -332,8 +331,11 @@ export function FocusMode({
   /** The reader's player, shared so playback survives entering and leaving. */
   player: RecitationPlayer;
   highlightWords: boolean;
-  /** Show the words' glosses under the Arabic rather than in a row below. */
-  interlinear: boolean;
+  /**
+   * Which translations to stack under the Arabic, as `TRANSLATION_EDITIONS`
+   * keys. Empty follows the interface language; see `selectedVerseTranslations`.
+   */
+  translations: string[];
   /** Absent at the first ruku / the last one. */
   onPrevRuku?: () => void;
   onNextRuku?: () => void;
@@ -346,7 +348,6 @@ export function FocusMode({
   const t = useT();
   const chromeHidden = useIdleChrome();
   const isDesktop = useIsDesktop();
-  const language = useLanguage();
   /** Phone only: everything that isn't play / mark / turn lives behind this. */
   const [optionsOpen, setOptionsOpen] = useState(false);
 
@@ -676,7 +677,7 @@ export function FocusMode({
                   ) : null}
                 </div>
 
-                {interlinear && showWords ? (
+                {showWords ? (
                   <InterlinearText
                     className="justify-center"
                     verse={verse}
@@ -706,32 +707,14 @@ export function FocusMode({
                 {showTranslation ? (
                   <>
                     <span className="my-7 h-px w-16 bg-border md:my-9" aria-hidden />
-                    <p
-                      className="max-w-3xl leading-relaxed text-fg-muted"
-                      data-selectable
-                      style={{ fontSize: size.translation }}
-                    >
-                      {verseTranslation(verse, language)}
-                    </p>
+                    <VerseTranslations
+                      className="max-w-3xl"
+                      verse={verse}
+                      translations={translations}
+                      align="center"
+                      textStyle={{ fontSize: size.translation }}
+                    />
                   </>
-                ) : null}
-
-                {showWords && !interlinear ? (
-                  <div className="mt-8 w-full border-t border-border pt-6 md:mt-10 md:pt-8">
-                    <div className="flex flex-wrap justify-center gap-2" dir="rtl">
-                      {verse.words.map((word) => (
-                        <WordChip
-                          key={word.id}
-                          word={word}
-                          verse={verse}
-                          status={wordStatuses.get(word.id)}
-                          reciting={
-                            reciting && highlightWords && player.currentWordPosition === word.position
-                          }
-                        />
-                      ))}
-                    </div>
-                  </div>
                 ) : null}
               </div>
             </div>
