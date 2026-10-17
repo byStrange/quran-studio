@@ -113,11 +113,18 @@ export interface UiPrefs {
   /** Show the word-by-word breakdown expanded by default. */
   wordsExpanded: boolean;
   /**
-   * Print the word-by-word gloss under each word of the Arabic itself, rather
-   * than in a separate row of chips below the translation. Off by default so
-   * the reader keeps the layout it had before the option existed.
+   * Which verse translations the reader stacks, as `TRANSLATION_EDITIONS` keys
+   * in display order.
+   *
+   * Empty means "follow the interface language" — the state every reader starts
+   * in, which shows the one translation the `language` setting used to pick on
+   * its own. A non-empty list is an explicit choice made in Settings, and may
+   * hold several (two Uzbek editions beside the English, say). Unknown keys are
+   * ignored on read, so an edition dropped from a later build degrades to the
+   * language default rather than to a blank reader. Resolved through
+   * `resolveTranslationKeys` / `selectedVerseTranslations` in `lib/language.ts`.
    */
-  interlinearWords: boolean;
+  translations: string[];
   /**
    * Colour the Arabic by tajweed rule. On by default: readers who rely on the
    * colouring to recite correctly should not have to discover a setting first,
@@ -165,7 +172,7 @@ export const DEFAULT_UI_PREFS: UiPrefs = {
   tafsirEdition: DEFAULT_TAFSIR_EDITION,
   theme: "system",
   wordsExpanded: false,
-  interlinearWords: false,
+  translations: [],
   tajweed: true,
   readerMode: "study",
   reciterId: null,

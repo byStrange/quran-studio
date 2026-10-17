@@ -38,7 +38,7 @@ import { TafsirPanel } from "@/components/reader/TafsirPanel";
 import { Button } from "@/components/ui/button";
 import { ErrorState, LoadingBlock } from "@/components/ui/feedback";
 import { Tooltip } from "@/components/ui/primitives";
-import { verseTranslation } from "@/lib/language";
+import { selectedVerseTranslations } from "@/lib/language";
 import { useLanguage, useT } from "@/providers/I18nProvider";
 
 export function MushafReader() {
@@ -360,15 +360,29 @@ export function MushafReader() {
                 </div>
 
                 {selectedVerse ? (
-                  <p
-                    className="mt-4 text-[0.9375rem] leading-relaxed text-fg-muted"
-                    data-selectable
-                  >
-                    <span className="mr-2 text-fg-subtle tabular-nums">
-                      {selectedVerse.surah_number}:{selectedVerse.ayah_number}
-                    </span>
-                    {verseTranslation(selectedVerse, language)}
-                  </p>
+                  <div className="mt-4 space-y-3" data-selectable>
+                    {selectedVerseTranslations(selectedVerse, prefs.translations, language).map(
+                      (tr, i, all) => (
+                        <p
+                          key={tr.key}
+                          lang={tr.tag}
+                          className="text-[0.9375rem] leading-relaxed text-fg-muted"
+                        >
+                          {i === 0 ? (
+                            <span className="mr-2 text-fg-subtle tabular-nums">
+                              {selectedVerse.surah_number}:{selectedVerse.ayah_number}
+                            </span>
+                          ) : null}
+                          {all.length > 1 ? (
+                            <span className="mr-1.5 font-medium text-fg-subtle">
+                              {tr.translator}:
+                            </span>
+                          ) : null}
+                          {tr.text}
+                        </p>
+                      ),
+                    )}
+                  </div>
                 ) : null}
 
                 <PagerFooter

@@ -1,18 +1,24 @@
 /**
  * Localization.
  *
- * One language drives everything: the interface chrome, the verse translation,
- * the word-by-word gloss, the tafsir edition, and the language the AI writes
- * its explanations in. Splitting "interface language" from "content language"
- * was the earlier design and it was a worse one — a reader who picks Russian
- * is asking for a Russian app, and asking them to find two pickers to get it
- * made the common case harder to serve the rarest one.
+ * One language drives most things: the interface chrome, the word-by-word
+ * gloss, the tafsir edition, and the language the AI writes its explanations
+ * in. Splitting "interface language" from "content language" was the earlier
+ * design and it was a worse one — a reader who picks Russian is asking for a
+ * Russian app, and asking them to find two pickers to get it made the common
+ * case harder to serve the rarest one.
+ *
+ * The one thing it no longer fixes on its own is which verse translations the
+ * reader shows: those became a set the reader picks in `ui_prefs.translations`,
+ * since a language can carry more than one (Uzbek has two) and a reader may
+ * want several at once. The language still supplies the default — a reader who
+ * picks nothing sees their language's translation — so the common case is
+ * unchanged; `lib/language.ts` owns the registry and that default.
  *
  * Where a language has no data for something, the accessor falls back rather
  * than the picker hiding the language: `lib/language.ts` holds those rules.
  * Uzbek is the live example — the interface, the AI and the tafsir are Uzbek
- * today, and the verse translation falls back to English until the import
- * lands.
+ * today, and the glosses fall back to English until a corpus lands.
  *
  * The dictionary is a plain typed object rather than an i18n library. The app
  * needs interpolation and plurals and nothing else, both are a few lines over
@@ -28,8 +34,6 @@ export interface LanguageInfo {
   label: string;
   /** Name in the language itself — what the picker actually shows. */
   nativeLabel: string;
-  /** Whose verse translation this language reads, for attribution. */
-  translator: string;
   /** BCP-47 tag, for `document.documentElement.lang` and `Intl`. */
   tag: string;
 }
@@ -39,14 +43,12 @@ export const LANGUAGES: readonly LanguageInfo[] = [
     code: "en",
     label: "English",
     nativeLabel: "English",
-    translator: "Saheeh International",
     tag: "en",
   },
   {
     code: "ru",
     label: "Russian",
     nativeLabel: "Русский",
-    translator: "Эльмир Кулиев",
     tag: "ru",
   },
   {
@@ -57,7 +59,6 @@ export const LANGUAGES: readonly LanguageInfo[] = [
     code: "uz",
     label: "Uzbek",
     nativeLabel: "O'zbekcha",
-    translator: "Saheeh International",
     tag: "uz-Latn",
   },
 ] as const;

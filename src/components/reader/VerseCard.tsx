@@ -1,10 +1,9 @@
 import { BookOpen, Check, ChevronDown, Expand, Flag, GraduationCap, Play, Volume2, WholeWord } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn, verseKey } from "@/lib/utils";
-import { verseTranslation } from "@/lib/language";
+import { selectedVerseTranslations } from "@/lib/language";
 import { useLanguage, useT } from "@/providers/I18nProvider";
 import type { VerseWithWords, WordStatus } from "@/lib/types";
-import { WordChip } from "./WordChip";
 import { TajweedText } from "./TajweedText";
 import { InterlinearText } from "./InterlinearText";
 import { Tooltip } from "@/components/ui/primitives";
@@ -126,7 +125,7 @@ export function VerseCard({
   onSelect,
   wordsExpanded,
   onToggleWords,
-  interlinear,
+  translations,
   wordStatuses,
   onOpenFocus,
   tajweed,
@@ -152,10 +151,10 @@ export function VerseCard({
   wordsExpanded: boolean;
   onToggleWords: () => void;
   /**
-   * Expanding the words prints each gloss under its word in the Arabic line,
-   * rather than in a row of chips below the translation.
+   * Which translations to stack under the Arabic, as `TRANSLATION_EDITIONS`
+   * keys. Empty follows the interface language; see `selectedVerseTranslations`.
    */
-  interlinear: boolean;
+  translations: string[];
   wordStatuses: Map<number, WordStatus>;
   /**
    * Opens focus mode on this ayah. Absent in the continuous surah reader,
@@ -173,6 +172,7 @@ export function VerseCard({
 }) {
   const t = useT();
   const language = useLanguage();
+  const shownTranslations = selectedVerseTranslations(verse, translations, language);
   const reference = verseKey(verse.surah_number, verse.ayah_number);
   const pending = usePendingMarks();
   const wordsBusy = verse.words.some((word) => pending.words.has(word.id));
@@ -308,7 +308,7 @@ export function VerseCard({
         ) : null}
       </div>
 
-      {interlinear && wordsExpanded ? (
+      {wordsExpanded ? (
         <InterlinearText
           className="mt-4"
           verse={verse}
@@ -322,27 +322,24 @@ export function VerseCard({
         </p>
       )}
 
-      <p className="mt-4 text-[0.9375rem] leading-relaxed text-fg-muted" data-selectable>
-        {verseTranslation(verse, language)}
-      </p>
+      {/* Each selected translation on its own, attributed only when more than
+          one is shown — a single translation needs no label to tell it apart. */}
+      <div className="mt-4 space-y-3" data-selectable>
+        {shownTranslations.map((tr) => (
+          <div key={tr.key}>
+            {shownTranslations.length > 1 ? (
+              <div className="mb-0.5 text-[0.6875rem] font-medium uppercase tracking-wide text-fg-subtle">
+                {tr.translator}
+              </div>
+            ) : null}
+            <p lang={tr.tag} className="text-[0.9375rem] leading-relaxed text-fg-muted">
+              {tr.text}
+            </p>
+          </div>
+        ))}
+      </div>
 
       <div className="mt-5 hidden flex-wrap gap-2 touch:flex">{markers(true)}</div>
-
-      {wordsExpanded && !interlinear ? (
-        <div className="mt-5 rounded-xl border border-border bg-surface-2/40 p-3.5">
-          <div className="flex flex-wrap gap-2" dir="rtl">
-            {verse.words.map((word) => (
-              <WordChip
-                key={word.id}
-                word={word}
-                verse={verse}
-                status={wordStatuses.get(word.id)}
-                reciting={reciting && recitingWordPosition === word.position}
-              />
-            ))}
-          </div>
-        </div>
-      ) : null}
     </article>
   );
 }

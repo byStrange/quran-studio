@@ -653,11 +653,17 @@ export const en = {
   "settings.languageDescription": "One choice, applied everywhere.",
   "settings.languageRow": "App language",
   "settings.languageRowDescription":
-    "Sets the interface, the verse translation, the word-by-word glosses, the tafsir edition, and the language the AI writes its explanations in. Currently reading {translator}.",
+    "Sets the interface, the word-by-word glosses, the tafsir edition, and the language the AI writes its explanations in. The verse translations shown in the reader are chosen separately, below.",
   "settings.russianGlossNote":
     "About 1.5% of words have no Russian gloss in the upstream corpus and show the English one instead.",
   "settings.uzbekDataNote":
-    "The interface, the AI explanations and the Al-Mukhtasar tafsir are in Uzbek. The verse translation and the word-by-word glosses have no Uzbek corpus imported yet and show the English ones.",
+    "The interface, the AI explanations and the Al-Mukhtasar tafsir are in Uzbek. The word-by-word glosses have no Uzbek corpus imported yet and show the English ones.",
+
+  "settings.translations": "Translations",
+  "settings.translationsDescription":
+    "Which verse translations the reader shows. Pick any number — they stack under the Arabic, each labelled.",
+  "settings.scriptLatin": "Latin",
+  "settings.scriptCyrillic": "Cyrillic",
 
   "settings.reader": "Reader",
   "settings.readerDescription": "How the lesson view is laid out.",
@@ -676,9 +682,6 @@ export const en = {
     "Colour the Arabic by recitation rule, with a legend in the reader. Colour only — the text itself is unchanged.",
   "settings.expandWords": "Expand word-by-word by default",
   "settings.expandWordsDescription": "Show every word breakdown as soon as a ruku opens.",
-  "settings.interlinearWords": "Word-by-word under the Arabic",
-  "settings.interlinearWordsDescription":
-    "Print each word's meaning directly beneath it in the ayah, instead of in a separate row of cards.",
 
   "settings.recitation": "Recitation",
   "settings.recitationDescription": "Which reciter plays, and how closely the reader follows along.",

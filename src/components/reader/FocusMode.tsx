@@ -46,10 +46,9 @@ import { IS_TAURI, setFullscreen } from "@/lib/window";
 import { Spinner } from "@/components/ui/feedback";
 import { Toggle } from "@/components/ui/primitives";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
-import { WordChip } from "./WordChip";
 import { InterlinearText } from "./InterlinearText";
 import { TajweedText } from "./TajweedText";
-import { verseTranslation } from "@/lib/language";
+import { selectedVerseTranslations } from "@/lib/language";
 import { useLanguage, useT } from "@/providers/I18nProvider";
 
 /** Tuned pairs rather than one scale factor — translation shouldn't grow as
@@ -307,7 +306,7 @@ export function FocusMode({
   loading,
   player,
   highlightWords,
-  interlinear,
+  translations,
   onPrevRuku,
   onNextRuku,
   tajweed,
@@ -332,8 +331,11 @@ export function FocusMode({
   /** The reader's player, shared so playback survives entering and leaving. */
   player: RecitationPlayer;
   highlightWords: boolean;
-  /** Show the words' glosses under the Arabic rather than in a row below. */
-  interlinear: boolean;
+  /**
+   * Which translations to stack under the Arabic, as `TRANSLATION_EDITIONS`
+   * keys. Empty follows the interface language; see `selectedVerseTranslations`.
+   */
+  translations: string[];
   /** Absent at the first ruku / the last one. */
   onPrevRuku?: () => void;
   onNextRuku?: () => void;
@@ -676,7 +678,7 @@ export function FocusMode({
                   ) : null}
                 </div>
 
-                {interlinear && showWords ? (
+                {showWords ? (
                   <InterlinearText
                     className="justify-center"
                     verse={verse}
@@ -706,32 +708,25 @@ export function FocusMode({
                 {showTranslation ? (
                   <>
                     <span className="my-7 h-px w-16 bg-border md:my-9" aria-hidden />
-                    <p
-                      className="max-w-3xl leading-relaxed text-fg-muted"
-                      data-selectable
-                      style={{ fontSize: size.translation }}
-                    >
-                      {verseTranslation(verse, language)}
-                    </p>
-                  </>
-                ) : null}
-
-                {showWords && !interlinear ? (
-                  <div className="mt-8 w-full border-t border-border pt-6 md:mt-10 md:pt-8">
-                    <div className="flex flex-wrap justify-center gap-2" dir="rtl">
-                      {verse.words.map((word) => (
-                        <WordChip
-                          key={word.id}
-                          word={word}
-                          verse={verse}
-                          status={wordStatuses.get(word.id)}
-                          reciting={
-                            reciting && highlightWords && player.currentWordPosition === word.position
-                          }
-                        />
+                    <div className="flex max-w-3xl flex-col items-center gap-4" data-selectable>
+                      {selectedVerseTranslations(verse, translations, language).map((tr, _i, all) => (
+                        <div key={tr.key} className="flex flex-col items-center gap-1">
+                          {all.length > 1 ? (
+                            <div className="text-[0.6875rem] font-medium uppercase tracking-wide text-fg-subtle">
+                              {tr.translator}
+                            </div>
+                          ) : null}
+                          <p
+                            lang={tr.tag}
+                            className="leading-relaxed text-fg-muted"
+                            style={{ fontSize: size.translation }}
+                          >
+                            {tr.text}
+                          </p>
+                        </div>
                       ))}
                     </div>
-                  </div>
+                  </>
                 ) : null}
               </div>
             </div>

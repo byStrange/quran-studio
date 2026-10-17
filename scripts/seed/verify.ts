@@ -117,6 +117,27 @@ const checks: Check[] = [
     },
   },
   {
+    name: "every verse has Alouddin Mansur's Uzbek translation",
+    run: async () => {
+      // Same contract as the Uzbek check above: an unimported column is a
+      // supported state (the reader falls back to English), a half-imported one
+      // is not. This is the Cyrillic edition the reader offers alongside the
+      // Latin one.
+      const missing = await count("quran_verses", (q) => q.is("translation_uz_mansur", null));
+      const empty = await count("quran_verses", (q) => q.eq("translation_uz_mansur", ""));
+      const n = missing + empty;
+      if (n === 0) return null;
+      if (n === EXPECTED_VERSES) {
+        notes.push(
+          "Alouddin Mansur translation not imported — run `pnpm seed:translation-uz-mansur`. " +
+            "Until then readers who select it see the English translation, which is a supported state.",
+        );
+        return null;
+      }
+      return `${n} verses have no Alouddin Mansur translation`;
+    },
+  },
+  {
     name: "Russian word glosses cover most of the Quran",
     run: async () => {
       // The upstream corpus is ~98.5% complete and the reader falls back to

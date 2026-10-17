@@ -8,7 +8,11 @@ import { useActiveReciter, useReciters } from "@/hooks/useRecitation";
 import { useTafsirEditions } from "@/hooks/useQuranData";
 import { useDownloadedSurahs } from "@/hooks/useAudioDownloads";
 import { describeAiError, getAiStatus, isTauri, setAiApiKey } from "@/lib/ai";
-import { editionMatchesLanguage } from "@/lib/language";
+import {
+  editionMatchesLanguage,
+  resolveTranslationKeys,
+  TRANSLATION_EDITIONS,
+} from "@/lib/language";
 import { DEFAULT_LANGUAGE, isLanguage, LANGUAGES, languageInfo } from "@/lib/i18n";
 import { useLanguage, useT, type TFunction } from "@/providers/I18nProvider";
 import type { ReaderMode } from "@/lib/types";
@@ -59,6 +63,23 @@ export function Settings() {
   // reciter that will actually play when nothing has been chosen yet.
   const reciter = useActiveReciter(prefs.reciterId);
   const toast = useToast();
+
+  // Resolved so the checkboxes show what the reader actually renders — a reader
+  // who has chosen nothing still sees their language's translation ticked, and
+  // the first toggle materialises that implicit set into an explicit one.
+  const selectedTranslations = resolveTranslationKeys(prefs.translations, language);
+  const toggleTranslation = (key: string, on: boolean) => {
+    const next = new Set(selectedTranslations);
+    if (on) next.add(key);
+    else next.delete(key);
+    // Never leave the reader with no translation; refuse to clear the last one.
+    if (next.size === 0) return;
+    updateProfile.mutate({
+      ui_prefs: {
+        translations: TRANSLATION_EDITIONS.filter((e) => next.has(e.key)).map((e) => e.key),
+      },
+    });
+  };
 
   const [apiKey, setApiKey] = useState("");
 
@@ -142,9 +163,7 @@ export function Settings() {
                   {t("settings.languageRow")}
                 </div>
                 <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
-                  {t("settings.languageRowDescription", {
-                    translator: languageInfo(language).translator,
-                  })}
+                  {t("settings.languageRowDescription")}
                 </p>
               </div>
               <SelectField
@@ -184,6 +203,49 @@ export function Settings() {
                 {t("settings.uzbekDataNote")}
               </p>
             ) : null}
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader
+            title={t("settings.translations")}
+            description={t("settings.translationsDescription")}
+          />
+          <CardBody className="space-y-4">
+            {TRANSLATION_EDITIONS.map((edition, i) => {
+              const checked = selectedTranslations.includes(edition.key);
+              return (
+                <div
+                  key={edition.key}
+                  className={cn(
+                    "flex items-center justify-between gap-6",
+                    i > 0 && "border-t border-border pt-4",
+                  )}
+                >
+                  <div>
+                    <div className="text-[0.8125rem] font-medium text-fg">
+                      {edition.translator}
+                    </div>
+                    <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
+                      {languageInfo(edition.language).nativeLabel}
+                      {edition.tag.includes("Cyrl")
+                        ? ` · ${t("settings.scriptCyrillic")}`
+                        : edition.tag.includes("Latn")
+                          ? ` · ${t("settings.scriptLatin")}`
+                          : ""}
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={checked}
+                    // The last remaining translation cannot be turned off — the
+                    // reader always shows at least one.
+                    disabled={checked && selectedTranslations.length === 1}
+                    onCheckedChange={(on) => toggleTranslation(edition.key, on)}
+                    label={edition.translator}
+                  />
+                </div>
+              );
+            })}
           </CardBody>
         </Card>
 
@@ -276,23 +338,6 @@ export function Settings() {
               />
             </div>
 
-            <div className="flex items-center justify-between gap-6 border-t border-border pt-4">
-              <div>
-                <div className="text-[0.8125rem] font-medium text-fg">
-                  {t("settings.interlinearWords")}
-                </div>
-                <p className="mt-0.5 text-[0.75rem] text-fg-subtle">
-                  {t("settings.interlinearWordsDescription")}
-                </p>
-              </div>
-              <Toggle
-                checked={prefs.interlinearWords}
-                onCheckedChange={(checked) =>
-                  updateProfile.mutate({ ui_prefs: { interlinearWords: checked } })
-                }
-                label={t("settings.interlinearWords")}
-              />
-            </div>
           </CardBody>
         </Card>
 
