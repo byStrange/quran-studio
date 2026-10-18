@@ -116,6 +116,25 @@ pnpm app:dev     # desktop app (Tauri)
 pnpm dev         # browser preview — no AI, since that needs the Rust backend
 ```
 
+### 9. (Optional) Enable the Uzbek gloss contribution tool
+
+A gated desktop tool where trusted volunteers photograph a page of a printed
+Uzbek word-by-word Quran and the Ollama vision model transcribes the gloss under
+each Arabic word, for review and approval into `quran_words.gloss_uz`. To turn
+it on:
+
+- Pin a vision-capable model in `.env` as `OLLAMA_VISION_MODEL` (the text models
+  are not multimodal).
+- Add contributors to the allowlist with the service role (Supabase SQL editor).
+  `can_review` marks the few who may approve submissions into the live corpus:
+
+  ```sql
+  insert into gloss_uz_contributors (user_id, can_review)
+  select id, true from auth.users where email = 'you@example.com';
+  ```
+
+The tool then appears in the sidebar for those accounts only, in the desktop app.
+
 ---
 
 ## Commands

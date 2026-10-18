@@ -970,3 +970,24 @@ costs about 60 MB unpacked. Building the AppImage locally needs `patchelf` on
 - **Offline write queue.** Reads are cached aggressively by TanStack Query, but
   writes require connectivity. Unflushed reading time is retained in memory and
   retried rather than silently dropped.
+- **Uzbek word-by-word, built in-app from photographs.** No Uzbek word-by-word
+  corpus exists upstream (the reason `uzbek_mode` left `gloss_uz` off). Rather
+  than wait for one, trusted volunteers photograph a page of a printed Uzbek
+  word-by-word mushaf and the app's Ollama vision model transcribes the gloss
+  under each Arabic word. The model is handed the known, ordered list of that
+  range's Arabic words as a scaffold and only fills a gloss per word id — the
+  alignment back to `quran_words` is our data, not the model's reading of the
+  page grid, which is the part OCR gets wrong. The physical book paginates
+  differently from the Madani mushaf the app stores, so the capture unit is an
+  ayah range, not a page number.
+- **A review queue, not direct writes.** Contributions land in a staging pair
+  (`gloss_uz_batches` / `gloss_uz_submissions`) and reach the live `gloss_uz`
+  only when a reviewer approves the batch — scripture-adjacent text that a reader
+  will trust should not go live on one person's OCR correction.
+- **The app's first role.** Gating this needed the first notion of privilege in
+  a schema that had only self-owned rows and public content. It is a single
+  allowlist table (`gloss_uz_contributors`, `can_review` for approvers) you
+  populate with the service role, checked inside `security definer` RPCs that
+  carry every write path — the content tables themselves still take no client
+  writes. Deliberately the whole of it: no general role system, just the one
+  allowlist the one gated feature needs.

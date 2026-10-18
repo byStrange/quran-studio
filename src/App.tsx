@@ -12,6 +12,7 @@ import { Vocabulary } from "./routes/Vocabulary";
 import { Quiz } from "./routes/Quiz";
 import { Memorization } from "./routes/Memorization";
 import { Settings } from "./routes/Settings";
+import { GlossContribute } from "./routes/GlossContribute";
 import { About } from "./routes/About";
 import { Spinner } from "./components/ui/feedback";
 
@@ -42,6 +43,7 @@ export default function App() {
             <Route path="/quiz" element={<Quiz />} />
             <Route path="/memorization" element={<Memorization />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/contribute/gloss" element={<GlossContribute />} />
             <Route path="/about" element={<About />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

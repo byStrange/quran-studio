@@ -429,11 +429,108 @@ export type Database = {
           },
         ]
       }
+      gloss_uz_batches: {
+        Row: {
+          ayah_end: number
+          ayah_start: number
+          id: string
+          note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_at: string
+          submitted_by: string
+          surah_number: number
+        }
+        Insert: {
+          ayah_end: number
+          ayah_start: number
+          id?: string
+          note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string
+          submitted_by: string
+          surah_number: number
+        }
+        Update: {
+          ayah_end?: number
+          ayah_start?: number
+          id?: string
+          note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string
+          submitted_by?: string
+          surah_number?: number
+        }
+        Relationships: []
+      }
+      gloss_uz_contributors: {
+        Row: {
+          added_at: string
+          can_review: boolean
+          note: string | null
+          user_id: string
+        }
+        Insert: {
+          added_at?: string
+          can_review?: boolean
+          note?: string | null
+          user_id: string
+        }
+        Update: {
+          added_at?: string
+          can_review?: boolean
+          note?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      gloss_uz_submissions: {
+        Row: {
+          batch_id: string
+          id: number
+          proposed_gloss: string
+          word_id: number
+        }
+        Insert: {
+          batch_id: string
+          id?: number
+          proposed_gloss: string
+          word_id: number
+        }
+        Update: {
+          batch_id?: string
+          id?: number
+          proposed_gloss?: string
+          word_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gloss_uz_submissions_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "gloss_uz_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gloss_uz_submissions_word_id_fkey"
+            columns: ["word_id"]
+            isOneToOne: false
+            referencedRelation: "quran_words"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quran_words: {
         Row: {
           arabic: string
           gloss_en: string | null
           gloss_ru: string | null
+          gloss_uz: string | null
           id: number
           position: number
           transliteration: string | null
@@ -443,6 +540,7 @@ export type Database = {
           arabic: string
           gloss_en?: string | null
           gloss_ru?: string | null
+          gloss_uz?: string | null
           id: number
           position: number
           transliteration?: string | null
@@ -452,6 +550,7 @@ export type Database = {
           arabic?: string
           gloss_en?: string | null
           gloss_ru?: string | null
+          gloss_uz?: string | null
           id?: number
           position?: number
           transliteration?: string | null
@@ -1140,6 +1239,16 @@ export type Database = {
           verse_count: number
           words_learned_count: number
         }[]
+      }
+      approve_gloss_batch: { Args: { p_batch: string }; Returns: number }
+      gloss_contributor_status: {
+        Args: never
+        Returns: { is_contributor: boolean; can_review: boolean }[]
+      }
+      reject_gloss_batch: { Args: { p_batch: string; p_note?: string }; Returns: undefined }
+      submit_gloss_uz: {
+        Args: { p_surah: number; p_start: number; p_end: number; p_rows: Json }
+        Returns: string
       }
       set_word_glosses_ru: { Args: { p_rows: Json }; Returns: number }
       set_words_status: {

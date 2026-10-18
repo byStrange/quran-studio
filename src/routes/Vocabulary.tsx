@@ -29,6 +29,7 @@ interface VocabRow {
     transliteration: string | null;
     gloss_en: string | null;
     gloss_ru: string | null;
+    gloss_uz: string | null;
     verse: { surah_number: number; ayah_number: number; ruku_number: number };
   };
 }
@@ -55,7 +56,7 @@ export function Vocabulary() {
         .from("user_word_progress")
         .select(
           "status, review_count, correct_count, due_at, " +
-            "word:quran_words!inner(id, arabic, transliteration, gloss_en, gloss_ru, " +
+            "word:quran_words!inner(id, arabic, transliteration, gloss_en, gloss_ru, gloss_uz, " +
             "verse:quran_verses!inner(surah_number, ayah_number, ruku_number))",
         )
         .limit(500);

@@ -10,10 +10,12 @@ import {
   LayoutDashboard,
   Library,
   Menu,
+  ScanText,
   Settings as SettingsIcon,
   X,
 } from "lucide-react";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
+import { useGlossContributor } from "@/hooks/useGlossContributor";
 import { cn } from "@/lib/utils";
 import { useT, type TFunction } from "@/providers/I18nProvider";
 import { useStreakStatus } from "@/hooks/useProgress";
@@ -42,7 +44,18 @@ const primaryNav = (t: TFunction): NavItem[] => [
   },
 ];
 
-const secondaryNav = (t: TFunction): NavItem[] => [
+// `contribute` is gated on the gloss-contributor allowlist, so the tool's
+// entry is present only for the handful of accounts that may use it.
+const secondaryNav = (t: TFunction, opts: { contribute: boolean }): NavItem[] => [
+  ...(opts.contribute
+    ? [
+        {
+          to: "/contribute/gloss",
+          label: t("nav.contribute"),
+          icon: <ScanText className="size-[1.125rem]" />,
+        },
+      ]
+    : []),
   { to: "/settings", label: t("nav.settings"), icon: <SettingsIcon className="size-[1.125rem]" /> },
   { to: "/about", label: t("nav.about"), icon: <Info className="size-[1.125rem]" /> },
 ];
@@ -139,6 +152,7 @@ function StreakRail() {
 
 function DesktopRail() {
   const t = useT();
+  const { isContributor } = useGlossContributor();
 
   return (
     <aside className="hidden w-14 shrink-0 flex-col items-center border-r border-border bg-surface/50 py-3 md:flex">
@@ -151,7 +165,7 @@ function DesktopRail() {
       <div className="flex-1" />
 
       <div className="flex w-full flex-col items-center gap-1 border-t border-border pt-3">
-        {secondaryNav(t).map((item) => (
+        {secondaryNav(t, { contribute: isContributor }).map((item) => (
           <RailItem key={item.to} item={item} />
         ))}
         <div className="pt-1">
@@ -250,6 +264,7 @@ function StreakPanel() {
  */
 function MobileMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const t = useT();
+  const { isContributor } = useGlossContributor();
   // Where a horizontal drag began, so a swipe back towards the left edge can
   // dismiss the menu the same way the swipe from that edge opened it.
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
@@ -306,7 +321,7 @@ function MobileMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (open
 
             <div className="my-3 h-px bg-border" aria-hidden />
 
-            {secondaryNav(t).map((item, index) => (
+            {secondaryNav(t, { contribute: isContributor }).map((item, index) => (
               <MenuRow key={item.to} item={item} index={primaryNav(t).length + index} />
             ))}
           </nav>

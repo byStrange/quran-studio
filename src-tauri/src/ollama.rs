@@ -14,6 +14,9 @@ use tauri::Manager;
 
 const DEFAULT_BASE_URL: &str = "https://ollama.com";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(90);
+/// Vision requests carry image data up and read a dense page, so they run well
+/// past the text timeout.
+const VISION_TIMEOUT: Duration = Duration::from_secs(180);
 
 /// What we ask for unless the catalog says otherwise or `OLLAMA_MODEL` pins
 /// something else.
@@ -98,6 +101,17 @@ fn base_url() -> String {
         .map(|u| u.trim().trim_end_matches('/').to_string())
         .filter(|u| !u.is_empty())
         .unwrap_or_else(|| DEFAULT_BASE_URL.to_string())
+}
+
+/// A vision-capable model, pinned explicitly. The default catalog picks are all
+/// text-only, so gloss extraction reads `OLLAMA_VISION_MODEL` and falls back to
+/// the normal resolved model only when it is unset (which then needs to be a
+/// multimodal one, or the request fails with the provider's own error).
+fn vision_model() -> Option<String> {
+    std::env::var("OLLAMA_VISION_MODEL")
+        .ok()
+        .map(|m| m.trim().to_string())
+        .filter(|m| !m.is_empty())
 }
 
 /// Where `ai_set_api_key` stores the key for bundled builds that have no
@@ -219,6 +233,10 @@ async fn resolve_model(state: &AiState) -> AiResult<String> {
 struct ChatMessage<'a> {
     role: &'a str,
     content: &'a str,
+    /// Base64-encoded images (no `data:` URL prefix) for a vision model, as
+    /// Ollama's chat API takes them. Omitted entirely for the text generators.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    images: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
@@ -284,8 +302,8 @@ async fn chat_with(
     let request = ChatRequest {
         model: &model,
         messages: vec![
-            ChatMessage { role: "system", content: system },
-            ChatMessage { role: "user", content: user },
+            ChatMessage { role: "system", content: system, images: None },
+            ChatMessage { role: "user", content: user, images: None },
         ],
         stream: false,
         options: ChatOptions { temperature, num_predict: max_tokens },
@@ -576,6 +594,172 @@ pub async fn ai_generate_ruku_summary(
     let (summary, model_used) =
         chat(&state, &ruku_system(language, guidance), &prompt, 500).await?;
     Ok(RukuSummary { summary, model_used })
+}
+
+// --- word-by-word gloss extraction (vision) --------------------------------
+
+/// Like `chat_with`, but attaches image(s) to the user message and resolves a
+/// vision-capable model. Kept separate from `chat_with` so the text generators
+/// are untouched: this path always carries images, a longer timeout and a
+/// vision model, and a shared function would only be a pile of options.
+async fn chat_vision(
+    state: &AiState,
+    system: &str,
+    user: &str,
+    images: Vec<String>,
+    max_tokens: u32,
+    format: Option<serde_json::Value>,
+) -> AiResult<(String, String)> {
+    let key = api_key().ok_or(AiError::NotConfigured)?;
+    let model = match vision_model() {
+        Some(m) => m,
+        None => resolve_model(state).await?,
+    };
+    let format_requested = format.is_some();
+
+    let request = ChatRequest {
+        model: &model,
+        messages: vec![
+            ChatMessage { role: "system", content: system, images: None },
+            // Low temperature: this is transcription, not composition.
+            ChatMessage { role: "user", content: user, images: Some(images) },
+        ],
+        stream: false,
+        options: ChatOptions { temperature: 0.1, num_predict: max_tokens },
+        format,
+    };
+
+    let resp = client()?
+        .post(format!("{}/api/chat", base_url()))
+        .bearer_auth(&key)
+        .timeout(VISION_TIMEOUT)
+        .json(&request)
+        .send()
+        .await
+        .map_err(|e| AiError::Network(e.to_string()))?;
+
+    let status = resp.status();
+    let body = resp.text().await.map_err(|e| AiError::Network(e.to_string()))?;
+    if !status.is_success() {
+        return Err(AiError::Api { status: status.as_u16(), body: truncate(&body, 300) });
+    }
+
+    let parsed: ChatResponse = serde_json::from_str(&body).map_err(|_| AiError::BadResponse)?;
+    if format_requested && parsed.done_reason.as_deref() == Some("length") {
+        return Err(AiError::Truncated);
+    }
+    let content = parsed.message.map(|m| m.content).ok_or(AiError::BadResponse)?;
+    let cleaned = clean_output(&content);
+    if cleaned.is_empty() {
+        return Err(AiError::BadResponse);
+    }
+    Ok((cleaned, model))
+}
+
+/// One Arabic word to be glossed, with the id it is known by in `quran_words`.
+/// The list is the scaffold: the model fills a gloss per id, and the alignment
+/// back to the word rows is this list, not the model's own reading of the grid.
+#[derive(Deserialize)]
+pub struct ScaffoldWord {
+    pub id: i32,
+    pub arabic: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ExtractedGloss {
+    pub id: i32,
+    pub gloss: String,
+}
+
+#[derive(Deserialize)]
+struct ExtractedGlosses {
+    #[serde(default)]
+    glosses: Vec<ExtractedGloss>,
+}
+
+fn gloss_extract_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "glosses": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "integer" },
+                        "gloss": { "type": "string" }
+                    },
+                    "required": ["id", "gloss"]
+                }
+            }
+        },
+        "required": ["glosses"]
+    })
+}
+
+fn gloss_extract_system(language: &str) -> String {
+    format!(
+        "You are transcribing a word-by-word translation from a photographed page of a printed \
+word-by-word Quran. Under each Arabic word on the page is its {language} translation. You are given \
+the exact list of Arabic words to transcribe, each with a numeric id, in the Quran's reading order \
+(right to left, line by line). For each id, return ONLY the {language} translation printed directly \
+beneath that Arabic word on the page.\n\n\
+Rules:\n\
+- Transcribe exactly what is printed, in the SAME SCRIPT as the page (if the page is Cyrillic, keep \
+it Cyrillic). Do not translate, transliterate, romanize, or correct it.\n\
+- Match words by their Arabic, not by position guessing. If a word from the list is not visible on \
+the page(s), return an empty string for its gloss. Never invent a translation.\n\
+- Ignore ayah-number medallions, the running paragraph translation, headers and page decoration — \
+only the small word-under-word glosses.\n\
+- Return every id from the list exactly once."
+    )
+}
+
+/// Reads the {language} word-by-word glosses off photographed mushaf page(s).
+///
+/// `words` is the ordered scaffold the app built from `quran_words`; `images`
+/// are base64 (no `data:` prefix). The reply is one gloss per id; the app
+/// aligns them back by id and lets the contributor correct them before any are
+/// stored, so an imperfect read is a starting point, not a commitment.
+#[tauri::command]
+pub async fn ai_extract_glosses(
+    state: tauri::State<'_, AiState>,
+    words: Vec<ScaffoldWord>,
+    images: Vec<String>,
+    language: String,
+) -> Result<Vec<ExtractedGloss>, AiError> {
+    if words.is_empty() || images.is_empty() {
+        return Err(AiError::BadResponse);
+    }
+    let language = language_name(&language);
+
+    let list = words
+        .iter()
+        .map(|w| format!("{}\t{}", w.id, w.arabic))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let prompt = format!(
+        "Transcribe the {language} word-by-word gloss for each of these {} Arabic words (id, then \
+the Arabic, tab-separated) from the attached page photo(s):\n\n{list}",
+        words.len()
+    );
+
+    // Each gloss is a few words; budget by count with headroom, and let the
+    // vision timeout rather than the token cap be what a big range runs into.
+    let budget = (words.len() as u32 * 24).clamp(512, 8_000);
+    let (content, _model_used) = chat_vision(
+        &state,
+        &gloss_extract_system(language),
+        &prompt,
+        images,
+        budget,
+        Some(gloss_extract_schema()),
+    )
+    .await?;
+
+    let json = extract_json(&content).ok_or(AiError::BadResponse)?;
+    let parsed: ExtractedGlosses = serde_json::from_str(json).map_err(|_| AiError::BadResponse)?;
+    Ok(parsed.glosses)
 }
 
 // --- knowledge quizzes -----------------------------------------------------

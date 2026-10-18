@@ -176,6 +176,62 @@ export function useSurahVerseIds(surahNumber: number | null) {
   });
 }
 
+/** One word of a chosen ayah range, for the gloss contribution tool's scaffold. */
+export interface AyahRangeWord {
+  id: number;
+  arabic: string;
+  gloss_en: string | null;
+  gloss_uz: string | null;
+  surah_number: number;
+  ayah_number: number;
+  position: number;
+}
+
+/**
+ * Every word of an ayah range, in reading order, for the gloss tool.
+ *
+ * Not a `CONTENT_QUERY` and not offline-first on purpose: this reads live from
+ * Supabase (including `gloss_uz`, which changes as batches are approved) and the
+ * tool is desktop + online by nature. Enabled only once a range is committed.
+ */
+export function useAyahRangeWords(
+  range: { surah: number; start: number; end: number } | null,
+) {
+  return useQuery({
+    queryKey: ["ayah-range-words", range?.surah, range?.start, range?.end],
+    enabled: range !== null,
+    staleTime: 0,
+    queryFn: async (): Promise<AyahRangeWord[]> => {
+      const { data, error } = await supabase
+        .from("quran_verses")
+        .select(
+          "surah_number, ayah_number, words:quran_words(id, position, arabic, gloss_en, gloss_uz)",
+        )
+        .eq("surah_number", range!.surah)
+        .gte("ayah_number", range!.start)
+        .lte("ayah_number", range!.end)
+        .order("ayah_number");
+      if (error) throw error;
+      const rows: AyahRangeWord[] = [];
+      for (const verse of data ?? []) {
+        const words = [...(verse.words ?? [])].sort((a, b) => a.position - b.position);
+        for (const w of words) {
+          rows.push({
+            id: w.id,
+            arabic: w.arabic,
+            gloss_en: w.gloss_en,
+            gloss_uz: w.gloss_uz,
+            surah_number: verse.surah_number,
+            ayah_number: verse.ayah_number,
+            position: w.position,
+          });
+        }
+      }
+      return rows;
+    },
+  });
+}
+
 /** The tafsir editions that were seeded, in the order the picker shows them. */
 export function useTafsirEditions() {
   return useQuery({

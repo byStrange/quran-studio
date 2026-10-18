@@ -35,6 +35,7 @@ pub fn run() {
             ollama::ai_generate_knowledge_quiz,
             ollama::ai_generate_tafsir_quiz,
             ollama::ai_generate_tafsir_summary,
+            ollama::ai_extract_glosses,
             audio::recitation_local_file,
             audio::recitation_downloads,
             audio::recitation_download,
