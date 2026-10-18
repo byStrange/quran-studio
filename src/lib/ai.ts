@@ -53,6 +53,38 @@ export async function setAiApiKey(apiKey: string): Promise<AiStatus> {
   return invoke<AiStatus>("ai_set_api_key", { apiKey });
 }
 
+// --- word-by-word gloss extraction (vision) --------------------------------
+
+/** One Arabic word to be glossed, keyed by its `quran_words.id`. */
+export interface ScaffoldWord {
+  id: number;
+  arabic: string;
+}
+
+/** One gloss the vision model read off the page, keyed back to the word id. */
+export interface ExtractedGloss {
+  id: number;
+  gloss: string;
+}
+
+/**
+ * Reads the Uzbek word-by-word glosses off photographed mushaf page(s).
+ *
+ * `words` is the ordered scaffold built from `quran_words`; the model fills a
+ * gloss per id and the caller aligns by id. `images` are base64 strings WITHOUT
+ * the `data:` URL prefix. Desktop only — the Ollama key lives in the backend.
+ * Unlike the other generators this is never cached: it is a one-off transcription
+ * a human then edits, not a shared result.
+ */
+export async function extractGlosses(
+  words: ScaffoldWord[],
+  images: string[],
+  language: Language,
+): Promise<ExtractedGloss[]> {
+  if (!isTauri()) throw new AiUnavailableError(NOT_IN_TAURI);
+  return invoke<ExtractedGloss[]>("ai_extract_glosses", { words, images, language });
+}
+
 // --- word context ----------------------------------------------------------
 
 export interface WordContext {

@@ -21,6 +21,7 @@ export const uz: Dictionary = {
   // --- shared ------------------------------------------------------------
   "common.loading": "Yuklanmoqda…",
   "common.close": "Yopish",
+  "common.remove": "O'chirish",
   "common.dismiss": "Yopish",
   "common.select": "Tanlang…",
   "common.tryAgain": "Qayta urinish",
@@ -57,6 +58,7 @@ export const uz: Dictionary = {
   "nav.memorization": "Yodlash",
   "nav.settings": "Sozlamalar",
   "nav.about": "Dastur haqida",
+  "nav.contribute": "Glossa qo'shish",
 
   "window.minimise": "Kichiklashtirish",
   "window.maximise": "Kattalashtirish",
@@ -812,4 +814,51 @@ export const uz: Dictionary = {
   "offline.offlineHint": "Internet yo'q — yuklangan narsalar ishlaydi, belgilar keyinroq sinxronlanadi.",
   "offline.wentOffline": "Internet yo'q. Yuklangan narsalar ishlaydi, belgilar keyinroq sinxronlanadi.",
   "offline.backOnline": "Internet qaytdi.",
+
+  "gloss.title": "So'zma-so'z o'zbekcha",
+  "gloss.description":
+    "Bosma so'zma-so'z Qur'on sahifasining suratidan so'zma-so'z o'zbekcha tarjimani to'plang. AI har bir arabcha so'z ostidagi tarjimani o'qiydi; siz uni to'g'rilaysiz, muharrir esa uni ilovaga tasdiqlaydi.",
+  "gloss.desktopOnly":
+    "Bu vosita AI backend joylashgan ish stoli ilovasida ishlaydi. Undan foydalanish uchun Quran Studio'ni kompyuteringizda oching.",
+  "gloss.notContributor":
+    "Bu vosita faqat tasdiqlangan ishtirokchilar uchun. Hisobingizni qo'shishni administratordan so'rang.",
+  "gloss.tabContribute": "Qo'shish",
+  "gloss.tabReview": "Ko'rib chiqish",
+  "gloss.rangeTitle": "Parchani tanlang",
+  "gloss.rangeDescription":
+    "Suratga olmoqchi bo'lgan sahifa(lar)dagi sura va oyatlarni tanlang.",
+  "gloss.rangeSurah": "Sura",
+  "gloss.rangeFrom": "Oyatdan",
+  "gloss.rangeTo": "Oyatgacha",
+  "gloss.loadWords": "So'zlarni yuklash",
+  "gloss.loadingWords": "Yuklanmoqda…",
+  "gloss.rangeInvalid": "Sura va to'g'ri oyat oralig'ini kiriting.",
+  "gloss.noWords": "Bu oraliq uchun so'z topilmadi.",
+  "gloss.uploadTitle": "Sahifa suratlari",
+  "gloss.uploadHint":
+    "Ushbu parchani qamrab oluvchi har bir sahifaning aniq suratini qo'shing. Bir nechta sahifa bo'lishi mumkin.",
+  "gloss.addImages": "Rasm qo'shish",
+  "gloss.noImages": "Hali rasm qo'shilmagan.",
+  "gloss.extract": "Glossalarni o'qish",
+  "gloss.extracting": "O'qilmoqda…",
+  "gloss.extractWait": "AI sahifani o'qimoqda — bu bir-ikki daqiqa olishi mumkin.",
+  "gloss.extractDone": "{count} ta glossa o'qildi. Quyida tekshiring va to'g'rilang.",
+  "gloss.needImages": "Avval kamida bitta sahifa suratini qo'shing.",
+  "gloss.reviewDraftTitle": "Glossalarni tekshiring",
+  "gloss.reviewDraftHint":
+    "AI xato o'qigan joylarni to'g'rilang, so'ng to'plamni ko'rib chiqishga yuboring.",
+  "gloss.submit": "Ko'rib chiqishga yuborish",
+  "gloss.submitting": "Yuborilmoqda…",
+  "gloss.submitDone": "{count} ta glossa ko'rib chiqishga yuborildi.",
+  "gloss.nothingToSubmit": "Yuboradigan narsa yo'q — kamida bitta glossani to'ldiring.",
+  "gloss.ayahLabel": "{surah}:{ayah}-oyat",
+  "gloss.uzbekPlaceholder": "O'zbekcha glossa",
+  "gloss.reviewEmpty": "Ko'rib chiqishni kutayotgan to'plamlar yo'q.",
+  "gloss.batchRange": "{surah}-sura, {from}–{to}-oyatlar",
+  "gloss.approve": "Tasdiqlash",
+  "gloss.reject": "Rad etish",
+  "gloss.approveDone": "Tasdiqlandi — {count} ta glossa qo'shildi.",
+  "gloss.rejectDone": "To'plam rad etildi.",
+  "gloss.showWords": "So'zlarni ko'rsatish",
+  "gloss.hideWords": "So'zlarni yashirish",
 };
