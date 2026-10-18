@@ -744,9 +744,14 @@ the Arabic, tab-separated) from the attached page photo(s):\n\n{list}",
         words.len()
     );
 
-    // Each gloss is a few words; budget by count with headroom, and let the
-    // vision timeout rather than the token cap be what a big range runs into.
-    let budget = (words.len() as u32 * 24).clamp(512, 8_000);
+    // Budget generously per word: a gloss is a few words, but in Cyrillic each
+    // runs to several tokens, and the structured wrapper (id + braces) adds
+    // more — too tight a cap makes the model stop mid-array, and a structured
+    // reply cut off at `length` is unrecoverable (half an object parses as
+    // nothing), so the whole read would be lost. A page's worth of words stays
+    // well under this ceiling; a range large enough to exceed it should be split
+    // across more passes, which the per-page workflow already nudges toward.
+    let budget = (words.len() as u32 * 48).clamp(1_024, 16_000);
     let (content, _model_used) = chat_vision(
         &state,
         &gloss_extract_system(language),

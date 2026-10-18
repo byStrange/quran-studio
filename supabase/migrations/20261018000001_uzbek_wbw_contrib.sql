@@ -176,10 +176,24 @@ begin
     values (auth.uid(), p_surah, p_start, p_end)
     returning id into v_batch;
 
+  -- Only words that actually sit in the declared range are stored. The allowlist
+  -- trusts the contributor, but the batch's range label is what a reviewer reads
+  -- before approving, so a row whose word_id belongs to some other verse — a
+  -- client bug, or a hand-crafted request — must not ride in under it and get
+  -- written to an unrelated word on approval. Out-of-range rows are dropped
+  -- here; a batch left with nothing then fails the empty check below.
   insert into public.gloss_uz_submissions (batch_id, word_id, proposed_gloss)
     select v_batch, (r->>'word_id')::integer, btrim(r->>'gloss')
       from jsonb_array_elements(p_rows) as r
-     where coalesce(btrim(r->>'gloss'), '') <> '';
+     where coalesce(btrim(r->>'gloss'), '') <> ''
+       and exists (
+         select 1
+           from public.quran_words w
+           join public.quran_verses v on v.id = w.verse_id
+          where w.id = (r->>'word_id')::integer
+            and v.surah_number = p_surah
+            and v.ayah_number between p_start and p_end
+       );
 
   get diagnostics v_count = row_count;
   -- A batch with nothing in it is noise in the reviewer's queue.
@@ -278,60 +292,53 @@ grant execute on function public.approve_gloss_batch(uuid) to authenticated;
 grant execute on function public.reject_gloss_batch(uuid, text) to authenticated;
 
 -- --- quiz pool: teach it the Uzbek gloss -----------------------------------
--- The pool resolved every non-Russian gloss to English because there was no
--- gloss_uz. There is now, so Uzbek gets the same coalesce Russian has. The
--- return signature is unchanged, so this is a plain replace — but the grant is
--- reasserted since a recreate drops it.
+-- The vocabulary pool resolved every non-Russian gloss to English because there
+-- was no gloss_uz. There is now, so Uzbek gets the same coalesce Russian has —
+-- the only change from the current definition (20260920000002_spaced_vocabulary)
+-- is the added `uz` arm in the gloss CASE. The whole body is reproduced so this
+-- replace keeps the SRS scheduling intact rather than regressing it; the return
+-- signature is unchanged, so `create or replace` suffices, and the grant is
+-- reasserted since a recreate drops it. (The sibling `quiz_verse_pool` already
+-- handles `uz`, so it needs nothing here.)
 create or replace function public.quiz_pool(
-  p_scope    public.quiz_scope default 'global',
+  p_scope    public.quiz_scope default 'due',
   p_limit    integer default 10,
   p_language text    default 'en',
   p_surah    smallint default null,
   p_ruku     smallint default null
 )
 returns table (
-  word_id         integer,
-  arabic          text,
-  transliteration text,
-  gloss           text,
-  status          public.word_status,
-  tracked         boolean,
-  surah_number    smallint,
-  ayah_number     smallint,
-  ruku_number     smallint,
-  verse_id        integer,
-  verse_arabic    text,
-  translation_en  text,
-  translation_ru  text,
-  translation_uz  text,
-  pool_size       integer
+  word_id            integer,
+  arabic             text,
+  transliteration    text,
+  gloss              text,
+  status             public.word_status,
+  tracked            boolean,
+  surah_number       smallint,
+  ayah_number        smallint,
+  ruku_number        smallint,
+  verse_id           integer,
+  verse_arabic       text,
+  translation_en     text,
+  translation_ru     text,
+  translation_uz     text,
+  ease               real,
+  interval_days      real,
+  reps               integer,
+  due_at             timestamptz,
+  next_again_minutes double precision,
+  next_hard_minutes  double precision,
+  next_good_minutes  double precision,
+  next_easy_minutes  double precision,
+  pool_size          integer,
+  due_count          integer
 )
 language sql
 security definer
 set search_path = public
 stable
 as $$
-  with scope_verses as (
-    select v.id, v.surah_number, v.ayah_number, v.ruku_number, v.arabic_text,
-           v.translation_en, v.translation_ru, v.translation_uz
-      from public.quran_verses v
-     where case p_scope
-             when 'ruku' then
-               v.ruku_number = p_ruku
-             when 'surah' then
-               v.surah_number = p_surah
-               and exists (
-                 select 1 from public.memorized_verses m
-                  where m.user_id = auth.uid() and m.verse_id = v.id
-               )
-             else
-               exists (
-                 select 1 from public.memorized_verses m
-                  where m.user_id = auth.uid() and m.verse_id = v.id
-               )
-           end
-  ),
-  quizzable as (
+  with quizzable as (
     select w.id as word_id,
            w.arabic,
            w.transliteration,
@@ -340,42 +347,71 @@ as $$
              when p_language = 'uz' then coalesce(nullif(w.gloss_uz, ''), w.gloss_en)
              else w.gloss_en
            end as gloss,
-           sv.id as verse_id,
-           sv.surah_number,
-           sv.ayah_number,
-           sv.ruku_number,
-           sv.arabic_text,
-           sv.translation_en,
-           sv.translation_ru,
-           sv.translation_uz,
-           p.status,
-           (p.word_id is not null) as tracked,
-           p.last_reviewed_at
-      from scope_verses sv
-      join public.quran_words w on w.verse_id = sv.id
+           v.id as verse_id,
+           v.surah_number,
+           v.ayah_number,
+           v.ruku_number,
+           v.arabic_text,
+           v.translation_en,
+           v.translation_ru,
+           v.translation_uz,
+           coalesce(p.status, 'new'::public.word_status) as status,
+           (p.word_id is not null)                       as tracked,
+           coalesce(p.ease, 2.5::real)                    as ease,
+           coalesce(p.interval_days, 0::real)             as interval_days,
+           coalesce(p.reps, 0)                            as reps,
+           p.due_at
+      from public.quran_words w
+      join public.quran_verses v on v.id = w.verse_id
       left join public.user_word_progress p
              on p.word_id = w.id and p.user_id = auth.uid()
+     where case p_scope::text
+             when 'ruku'  then v.ruku_number = p_ruku
+             when 'surah' then v.surah_number = p_surah
+             when 'due'   then p.word_id is not null
+                               and p.due_at is not null
+                               and p.due_at <= now()
+             else exists (
+                    select 1 from public.memorized_verses m
+                     where m.user_id = auth.uid() and m.verse_id = v.id
+                  )
+           end
+  ),
+  ranked as (
+    select q.*,
+           (count(*) over ())::integer as pool_size,
+           (count(*) filter (where q.due_at is not null and q.due_at <= now())
+              over ())::integer        as due_count,
+           row_number() over (
+             order by
+               case
+                 when q.due_at is not null and q.due_at <= now() then 0
+                 when not q.tracked                              then 1
+                 else                                                 2
+               end,
+               q.due_at nulls last,
+               random()
+           ) as ord
+      from quizzable q
+     where coalesce(q.gloss, '') <> ''
   )
-  select word_id, arabic, transliteration, gloss,
-         coalesce(status, 'new'::public.word_status) as status,
-         tracked, surah_number, ayah_number, ruku_number, verse_id,
-         arabic_text, translation_en, translation_ru, translation_uz,
-         (count(*) over ())::integer as pool_size
-    from quizzable q
-   where coalesce(q.gloss, '') <> ''
-   order by
-     case coalesce(q.status, 'new')
-       when 'learning' then 0
-       when 'new'      then 1
-       else                 2
-     end,
-     q.last_reviewed_at nulls first,
-     random()
-   limit greatest(1, least(coalesce(p_limit, 10), 100));
+  select r.word_id, r.arabic, r.transliteration, r.gloss, r.status, r.tracked,
+         r.surah_number, r.ayah_number, r.ruku_number, r.verse_id,
+         r.arabic_text, r.translation_en, r.translation_ru, r.translation_uz,
+         r.ease, r.interval_days, r.reps, r.due_at,
+         (public.srs_next(r.ease, r.interval_days, r.reps, 'again')).due_minutes,
+         (public.srs_next(r.ease, r.interval_days, r.reps, 'hard')).due_minutes,
+         (public.srs_next(r.ease, r.interval_days, r.reps, 'good')).due_minutes,
+         (public.srs_next(r.ease, r.interval_days, r.reps, 'easy')).due_minutes,
+         r.pool_size,
+         r.due_count
+    from ranked r
+   where r.ord <= greatest(1, least(coalesce(p_limit, 10), 100))
+   order by r.ord;
 $$;
 
 comment on function public.quiz_pool(public.quiz_scope, integer, text, smallint, smallint) is
-  'A round of blind-recall questions for a ruku, a surah''s memorized ayahs, or every memorized ayah.';
+  'A round of vocabulary cards: what is due, a ruku, a surah, or every memorized ayah.';
 
 grant execute on function
   public.quiz_pool(public.quiz_scope, integer, text, smallint, smallint) to authenticated;

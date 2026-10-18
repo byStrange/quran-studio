@@ -430,7 +430,6 @@ function WordTable({
                   {w.gloss_en}
                 </div>
                 <Input
-                  dir="rtl"
                   value={drafts[w.id] ?? ""}
                   onChange={(e) => onChange(w.id, e.target.value)}
                   placeholder={t("gloss.uzbekPlaceholder")}
@@ -588,10 +587,10 @@ function BatchCard({ batch }: { batch: Batch }) {
                   <div className="arabic text-right text-lg text-fg" dir="rtl">
                     {row.word?.arabic}
                   </div>
-                  <div className="text-sm text-fg" dir="rtl">
+                  <div className="text-sm text-fg">
                     {row.proposed_gloss}
                     {row.word?.gloss_uz && row.word.gloss_uz !== row.proposed_gloss ? (
-                      <span className="ml-2 text-[0.75rem] text-fg-subtle line-through" dir="rtl">
+                      <span className="ml-2 text-[0.75rem] text-fg-subtle line-through">
                         {row.word.gloss_uz}
                       </span>
                     ) : null}
