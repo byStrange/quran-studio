@@ -43,3 +43,9 @@ filelist.txt
 tracked.txt
 untracked.txt
 quran-studio-source.tar.gz
+
+# Scratch Quran page photos dropped in the repo root for the gloss tool — test
+# input, never source.
+/photo_*.jpg
+/photo_*.jpeg
+/photo_*.png
