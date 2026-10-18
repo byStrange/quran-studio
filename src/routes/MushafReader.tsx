@@ -38,8 +38,8 @@ import { TafsirPanel } from "@/components/reader/TafsirPanel";
 import { Button } from "@/components/ui/button";
 import { ErrorState, LoadingBlock } from "@/components/ui/feedback";
 import { Tooltip } from "@/components/ui/primitives";
-import { verseTranslation } from "@/lib/language";
-import { useLanguage, useT } from "@/providers/I18nProvider";
+import { VerseTranslations } from "@/components/reader/VerseTranslations";
+import { useT } from "@/providers/I18nProvider";
 
 export function MushafReader() {
   const t = useT();
@@ -49,7 +49,6 @@ export function MushafReader() {
   const valid = isValidPage(pageNumber);
 
   const prefs = useUiPrefs();
-  const language = useLanguage();
   const updateProfile = useUpdateProfile();
 
   const {
@@ -360,15 +359,18 @@ export function MushafReader() {
                 </div>
 
                 {selectedVerse ? (
-                  <p
-                    className="mt-4 text-[0.9375rem] leading-relaxed text-fg-muted"
-                    data-selectable
-                  >
-                    <span className="mr-2 text-fg-subtle tabular-nums">
-                      {selectedVerse.surah_number}:{selectedVerse.ayah_number}
-                    </span>
-                    {verseTranslation(selectedVerse, language)}
-                  </p>
+                  <VerseTranslations
+                    className="mt-4"
+                    verse={selectedVerse}
+                    translations={prefs.translations}
+                    textClassName="text-[0.9375rem]"
+                    inlineLabel
+                    leading={
+                      <span className="mr-2 text-fg-subtle tabular-nums">
+                        {selectedVerse.surah_number}:{selectedVerse.ayah_number}
+                      </span>
+                    }
+                  />
                 ) : null}
 
                 <PagerFooter

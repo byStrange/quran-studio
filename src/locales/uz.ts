@@ -664,11 +664,17 @@ export const uz: Dictionary = {
   "settings.languageDescription": "Bitta tanlov — hamma joyda qo'llanadi.",
   "settings.languageRow": "Dastur tili",
   "settings.languageRowDescription":
-    "Interfeys, oyat tarjimasi, so'zma-so'z ma'nolar, tafsir nashri va sun'iy intellekt izoh yozadigan tilni belgilaydi. Hozirgi tarjima: {translator}.",
+    "Interfeys, so'zma-so'z ma'nolar, tafsir nashri va sun'iy intellekt izoh yozadigan tilni belgilaydi. O'qish oynasida ko'rsatiladigan oyat tarjimalari quyida alohida tanlanadi.",
   "settings.russianGlossNote":
     "Manba korpusida so'zlarning taxminan 1,5% uchun ruscha so'zma-so'z ma'no yo'q — ular o'rniga inglizchasi ko'rsatiladi.",
   "settings.uzbekDataNote":
-    "Interfeys, sun'iy intellekt izohlari va «Ал-Мухтасар» tafsiri o'zbek tilida. Oyatlarning o'zbekcha tarjimasi va so'zma-so'z ma'nolari hali yuklanmagani uchun inglizchasi ko'rsatiladi.",
+    "Interfeys, sun'iy intellekt izohlari va «Ал-Мухтасар» tafsiri o'zbek tilida. So'zma-so'z ma'nolar hali o'zbekchada yuklanmagani uchun inglizchasi ko'rsatiladi.",
+
+  "settings.translations": "Tarjimalar",
+  "settings.translationsDescription":
+    "O'qish oynasida qaysi oyat tarjimalari ko'rsatiladi. Istagancha tanlang — ular arab matni ostida, har biri nomi bilan joylashadi.",
+  "settings.scriptLatin": "Lotin",
+  "settings.scriptCyrillic": "Kirill",
 
   "settings.reader": "O'qish",
   "settings.readerDescription": "Dars ko'rinishi qanday joylashadi.",
@@ -687,9 +693,6 @@ export const uz: Dictionary = {
     "Arab matnini qiroat qoidalari bo'yicha ranglaydi, o'qish oynasida izohi bilan. Faqat rang — matnning o'zi o'zgarmaydi.",
   "settings.expandWords": "So'zma-so'z tahlil doim ochiq",
   "settings.expandWordsDescription": "Ruku ochilishi bilan barcha so'z tahlillarini ko'rsatish.",
-  "settings.interlinearWords": "So'zma-so'z arabcha matn ostida",
-  "settings.interlinearWordsDescription":
-    "Har bir so'z ma'nosini oyatda uning ostida ko'rsatish, alohida kartochkalar qatorida emas.",
 
   "settings.recitation": "Qiroat",
   "settings.recitationDescription": "Qaysi qori o'qiydi va matn unga qanchalik ergashadi.",

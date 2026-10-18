@@ -50,6 +50,17 @@ export const TRANSLATION_ID_RU = 45;
 export const TRANSLATION_ID_UZ = 55;
 
 /**
+ * Alouddin Mansur's Uzbek translation, resource id 101.
+ *
+ * Cyrillic, unlike every other translation this seed imports. It is the only
+ * published edition of a translation Uzbek readers specifically ask for, so the
+ * reader offers it in the translation picker labelled as Cyrillic rather than
+ * going without it — `translation_uz_mansur` is the one column exempt from the
+ * Latin-only rule that `translation_uz` (the interface's stand-in) must keep.
+ */
+export const TRANSLATION_ID_UZ_MANSUR = 101;
+
+/**
  * The tafsir editions imported, with display metadata written alongside them.
  *
  * The upstream catalogue is not used for these fields: it lists the Uzbek
@@ -164,6 +175,7 @@ export interface Verse {
   translation_en: string;
   translation_ru: string;
   translation_uz: string;
+  translation_uz_mansur: string;
 }
 
 export interface Word {
@@ -212,7 +224,7 @@ export async function fetchSurahContent(
     const url =
       `${QURAN_API}/verses/by_chapter/${surahNumber}` +
       `?language=en&words=true&word_fields=text_uthmani,transliteration` +
-      `&translations=${TRANSLATION_ID},${TRANSLATION_ID_RU},${TRANSLATION_ID_UZ}` +
+      `&translations=${TRANSLATION_ID},${TRANSLATION_ID_RU},${TRANSLATION_ID_UZ},${TRANSLATION_ID_UZ_MANSUR}` +
       `&fields=text_uthmani,ruku_number,juz_number,page_number` +
       `&per_page=50&page=${page}`;
     // The requested translations belong in the cache key. Without them, a
@@ -220,7 +232,7 @@ export async function fetchSurahContent(
     // downloads after Russian was added to the URL, and every verse would
     // import with an empty Russian translation and no error anywhere.
     const data: VersesResponse = await cachedJson<VersesResponse>(
-      `verses-${TRANSLATION_ID}-${TRANSLATION_ID_RU}-${TRANSLATION_ID_UZ}-${surahNumber}-${page}`,
+      `verses-${TRANSLATION_ID}-${TRANSLATION_ID_RU}-${TRANSLATION_ID_UZ}-${TRANSLATION_ID_UZ_MANSUR}-${surahNumber}-${page}`,
       url,
     );
 
@@ -239,6 +251,9 @@ export async function fetchSurahContent(
         translation_en: translation(TRANSLATION_ID),
         translation_ru: translation(TRANSLATION_ID_RU),
         translation_uz: normaliseUzbekApostrophes(translation(TRANSLATION_ID_UZ)),
+        // Cyrillic, so no Latin-apostrophe normalisation — there are no
+        // ʻokina-style apostrophes to fix in a Cyrillic edition.
+        translation_uz_mansur: translation(TRANSLATION_ID_UZ_MANSUR),
       });
 
       for (const w of v.words ?? []) {

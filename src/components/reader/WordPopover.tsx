@@ -11,13 +11,6 @@ import { wordGloss } from "@/lib/language";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/feedback";
 
-const STATUS_STYLES: Record<WordStatus | "none", string> = {
-  none: "border-border bg-surface hover:border-border-strong hover:bg-surface-2",
-  new: "border-border bg-surface hover:border-border-strong hover:bg-surface-2",
-  learning: "border-gold/40 bg-gold-soft/50 hover:border-gold/60",
-  learned: "border-accent/40 bg-accent-soft/60 hover:border-accent/60",
-};
-
 /**
  * The AI explanation is fetched only once the user opens a word, so opening a
  * ruku never triggers hundreds of generations.
@@ -105,9 +98,8 @@ function WordDetail({ word, verse }: { word: Word; verse: VerseContext }) {
 }
 
 /**
- * Opens a word's explanation and learning controls from whatever element
- * renders the word — a chip in the word-by-word row, or the word itself when
- * the glosses sit under the Arabic.
+ * Opens a word's explanation and learning controls from the word itself, as it
+ * sits over its gloss in the interlinear line.
  */
 export function WordPopover({
   word,
@@ -136,7 +128,7 @@ export function WordPopover({
           sideOffset={8}
           collisionPadding={16}
           className={cn(
-            // Above the focus-mode overlay (z-70), which also shows word chips.
+            // Above the focus-mode overlay (z-70), which shows the same words.
             "z-[80] w-[22rem] rounded-xl border border-border bg-surface p-4",
             "shadow-xl shadow-black/20 animate-rise",
           )}
@@ -175,46 +167,5 @@ export function WordPopover({
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
-  );
-}
-
-export function WordChip({
-  word,
-  verse,
-  status,
-  reciting,
-}: {
-  word: Word;
-  verse: VerseContext;
-  status: WordStatus | undefined;
-  /** This word is the one currently being recited. */
-  reciting?: boolean;
-}) {
-  const language = useLanguage();
-  const current = status ?? "none";
-
-  return (
-    <WordPopover word={word} verse={verse} status={status}>
-      <button
-        className={cn(
-          "flex min-w-[4.5rem] flex-col items-center gap-1 rounded-xl border px-3 py-2",
-          "transition-colors",
-          STATUS_STYLES[current],
-          // Overrides the learning-status colour while the word is being
-          // sung. The status is a long-lived fact the reader can check any
-          // time; this lasts under a second and is the only thing making the
-          // row followable, so it takes the chip for as long as it holds.
-          reciting && "border-accent bg-accent-soft text-accent-soft-fg ring-2 ring-accent/30",
-        )}
-      >
-        <span className="arabic-sm leading-tight text-fg">{word.arabic}</span>
-        {word.transliteration ? (
-          <span className="text-[0.6875rem] italic leading-tight text-fg-subtle">
-            {word.transliteration}
-          </span>
-        ) : null}
-        <span className="text-[0.75rem] leading-tight text-fg-muted">{wordGloss(word, language)}</span>
-      </button>
-    </WordPopover>
   );
 }

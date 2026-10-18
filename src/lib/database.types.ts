@@ -389,6 +389,7 @@ export type Database = {
           translation_en: string
           translation_ru: string | null
           translation_uz: string | null
+          translation_uz_mansur: string | null
         }
         Insert: {
           arabic_text: string
@@ -402,6 +403,7 @@ export type Database = {
           translation_en: string
           translation_ru?: string | null
           translation_uz?: string | null
+          translation_uz_mansur?: string | null
         }
         Update: {
           arabic_text?: string
@@ -415,6 +417,7 @@ export type Database = {
           translation_en?: string
           translation_ru?: string | null
           translation_uz?: string | null
+          translation_uz_mansur?: string | null
         }
         Relationships: [
           {

@@ -130,6 +130,7 @@ pnpm dev         # browser preview — no AI, since that needs the Rust backend
 | `pnpm seed:tafsir` | Re-import just the tafsir editions |
 | `pnpm seed:translation-ru` | Import the Russian verse translation (Kuliev) |
 | `pnpm seed:translation-uz` | Import the Uzbek verse translation (Muhammad Sodiq, Latin) |
+| `pnpm seed:translation-uz-mansur` | Import the Uzbek verse translation (Alouddin Mansur, Cyrillic) |
 | `pnpm seed:wbw-ru` | Import the Russian word-by-word glosses |
 | `pnpm seed:mushaf` | Import the 604-page Madani mushaf layout |
 | `pnpm seed:audio` | Import reciters, surah recordings and ayah timings |
