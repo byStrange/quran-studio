@@ -930,9 +930,11 @@ reports an unimported Uzbek translation as a note rather than a failure. The
 alternative — holding the language back until it is complete — trades an app
 that is Uzbek in most places for one that is Uzbek in none.
 
-**No `gloss_uz` column.** There is nothing upstream to fill it with, and a
-column that is null for all 77,429 rows is a promise the data cannot keep.
-Uzbek reads the English glosses, and `lib/language.ts` says so.
+**No per-word `gloss_uz` column.** There is nothing upstream to fill it with,
+and a column that is null for all 77,429 rows is a promise the data cannot keep.
+Uzbek word-level lookups read the English glosses, and `lib/language.ts` says
+so. The Uzbek word-by-word that *is* built in-app is phrase-level and lives in
+`gloss_uz_segments` (see the gloss contribution tool below), not on the word.
 
 **The Uzbek prompt carries writing notes; English and Russian do not.**
 `language_guidance` in `src-tauri/src/ollama.rs` appends three things to the
@@ -973,17 +975,26 @@ costs about 60 MB unpacked. Building the AppImage locally needs `patchelf` on
 - **Uzbek word-by-word, built in-app from photographs.** No Uzbek word-by-word
   corpus exists upstream (the reason `uzbek_mode` left `gloss_uz` off). Rather
   than wait for one, trusted volunteers photograph a page of a printed Uzbek
-  word-by-word mushaf and the app's Ollama vision model transcribes the gloss
-  under each Arabic word. The model is handed the known, ordered list of that
-  range's Arabic words as a scaffold and only fills a gloss per word id — the
-  alignment back to `quran_words` is our data, not the model's reading of the
-  page grid, which is the part OCR gets wrong. The physical book paginates
-  differently from the Madani mushaf the app stores, so the capture unit is an
-  ayah range, not a page number.
+  word-by-word mushaf and the app's Ollama vision model transcribes the gloss.
+  The model is handed the known, ordered list of that range's Arabic words as a
+  scaffold — the alignment back to `quran_words` is our data, not the model's
+  reading of the page grid, which is the part OCR gets wrong. The physical book
+  paginates differently from the Madani mushaf the app stores, so the capture
+  unit is an ayah range, not a page number.
+- **A gloss is a segment, not a word.** This book prints one Uzbek gloss under a
+  *run* of Arabic words as often as under a single one, so the corpus is
+  `gloss_uz_segments` — a gloss keyed by a range of positions in a verse — not a
+  `quran_words.gloss_uz` column (dropped; a phrase has nowhere to live on a
+  single word, and the old column only ever smeared one across the run). The
+  model proposes the grouping, the backend reconciles it into a clean partition
+  of the scaffold, and the contributor adjusts it (merge/split) before submit.
 - **A review queue, not direct writes.** Contributions land in a staging pair
-  (`gloss_uz_batches` / `gloss_uz_submissions`) and reach the live `gloss_uz`
-  only when a reviewer approves the batch — scripture-adjacent text that a reader
-  will trust should not go live on one person's OCR correction.
+  (`gloss_uz_batches` / `gloss_uz_submissions`) and reach the live
+  `gloss_uz_segments` only when a reviewer approves the batch — scripture-adjacent
+  text that a reader will trust should not go live on one person's OCR
+  correction. Approval replaces only the live segments its batch overlaps, so a
+  re-grouped span cleanly supersedes what it covers while a verse's other
+  approved segments survive a partial resubmission.
 - **The app's first role.** Gating this needed the first notion of privilege in
   a schema that had only self-owned rows and public content. It is a single
   allowlist table (`gloss_uz_contributors`, `can_review` for approvers) you

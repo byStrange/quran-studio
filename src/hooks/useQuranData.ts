@@ -181,7 +181,7 @@ export interface AyahRangeWord {
   id: number;
   arabic: string;
   gloss_en: string | null;
-  gloss_uz: string | null;
+  verse_id: number;
   surah_number: number;
   ayah_number: number;
   position: number;
@@ -191,8 +191,9 @@ export interface AyahRangeWord {
  * Every word of an ayah range, in reading order, for the gloss tool.
  *
  * Not a `CONTENT_QUERY` and not offline-first on purpose: this reads live from
- * Supabase (including `gloss_uz`, which changes as batches are approved) and the
- * tool is desktop + online by nature. Enabled only once a range is committed.
+ * Supabase and the tool is desktop + online by nature. Enabled only once a
+ * range is committed. Carries `verse_id` and `position` because an Uzbek gloss
+ * is a segment — a range of positions within a verse — not a per-word value.
  */
 export function useAyahRangeWords(
   range: { surah: number; start: number; end: number } | null,
@@ -205,7 +206,7 @@ export function useAyahRangeWords(
       const { data, error } = await supabase
         .from("quran_verses")
         .select(
-          "surah_number, ayah_number, words:quran_words(id, position, arabic, gloss_en, gloss_uz)",
+          "id, surah_number, ayah_number, words:quran_words(id, position, arabic, gloss_en)",
         )
         .eq("surah_number", range!.surah)
         .gte("ayah_number", range!.start)
@@ -220,7 +221,7 @@ export function useAyahRangeWords(
             id: w.id,
             arabic: w.arabic,
             gloss_en: w.gloss_en,
-            gloss_uz: w.gloss_uz,
+            verse_id: verse.id,
             surah_number: verse.surah_number,
             ayah_number: verse.ayah_number,
             position: w.position,

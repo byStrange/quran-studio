@@ -659,82 +659,147 @@ async fn chat_vision(
 }
 
 /// One Arabic word to be glossed, with the id it is known by in `quran_words`.
-/// The list is the scaffold: the model fills a gloss per id, and the alignment
-/// back to the word rows is this list, not the model's own reading of the grid.
+/// The list is the scaffold: the model groups consecutive ids under one gloss,
+/// and the alignment back to the word rows is this list, not the model's own
+/// reading of the grid.
 #[derive(Deserialize)]
 pub struct ScaffoldWord {
     pub id: i32,
     pub arabic: String,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct ExtractedGloss {
-    pub id: i32,
+/// A phrase gloss over one or more consecutive scaffold words.
+///
+/// The printed Uzbek mushaf glosses runs of words, not single words, so the
+/// unit the model returns is a group: the ids it covers (in reading order) and
+/// the one gloss printed beneath them. A single-word gloss is a group of one.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ExtractedSegment {
+    pub ids: Vec<i32>,
     pub gloss: String,
 }
 
 #[derive(Deserialize)]
-struct ExtractedGlosses {
+struct ExtractedSegments {
     #[serde(default)]
-    glosses: Vec<ExtractedGloss>,
+    segments: Vec<ExtractedSegment>,
 }
 
 fn gloss_extract_schema() -> serde_json::Value {
     serde_json::json!({
         "type": "object",
         "properties": {
-            "glosses": {
+            "segments": {
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "id": { "type": "integer" },
+                        "ids": { "type": "array", "items": { "type": "integer" } },
                         "gloss": { "type": "string" }
                     },
-                    "required": ["id", "gloss"]
+                    "required": ["ids", "gloss"]
                 }
             }
         },
-        "required": ["glosses"]
+        "required": ["segments"]
     })
 }
 
 fn gloss_extract_system(language: &str) -> String {
     format!(
         "You are transcribing a word-by-word translation from a photographed page of a printed \
-word-by-word Quran. Under each Arabic word on the page is its {language} translation. You are given \
-the exact list of Arabic words to transcribe, each with a numeric id, in the Quran's reading order \
-(right to left, line by line). For each id, return ONLY the {language} translation printed directly \
-beneath that Arabic word on the page.\n\n\
+word-by-word Quran. You are given the exact list of Arabic words on the page, each with a numeric \
+id, in the Quran's reading order (right to left, line by line).\n\n\
+The key point: this book often prints ONE {language} gloss under a RUN of several Arabic words, not \
+one gloss per word. Your job is to group the ids the way the page groups them, and give each group \
+the single gloss printed beneath it.\n\n\
 Rules:\n\
-- Transcribe exactly what is printed, in the SAME SCRIPT as the page (if the page is Cyrillic, keep \
-it Cyrillic). Do not translate, transliterate, romanize, or correct it.\n\
-- Match words by their Arabic, not by position guessing. If a word from the list is not visible on \
-the page(s), return an empty string for its gloss. Never invent a translation.\n\
+- Partition the ids into consecutive groups. Each group is one or more ids that are adjacent in the \
+list and that share a single printed {language} gloss on the page. A word glossed on its own is a \
+group of one.\n\
+- Every id appears in exactly one group. Keep the list's order; never reorder ids and never put a \
+non-adjacent id in a group.\n\
+- Transcribe each gloss exactly as printed, in the SAME SCRIPT as the page (if the page is Cyrillic, \
+keep it Cyrillic). Do not translate, transliterate, romanize, or correct it.\n\
+- If a run of words has no visible gloss on the page, give that group an empty string. Never invent \
+a translation.\n\
 - Ignore ayah-number medallions, the running paragraph translation, headers and page decoration — \
-only the small word-under-word glosses.\n\
-- Return every id from the list exactly once.\n\n\
+only the small word-under-word glosses.\n\n\
 OUTPUT\n\
 Return JSON only — no prose, no explanation, no markdown fence:\n\
-{{\"glosses\":[{{\"id\":0,\"gloss\":\"…\"}}]}}\n\
-Copy each `id` from the list; `gloss` is the transcription (an empty string when the word is not \
-on the page)."
+{{\"segments\":[{{\"ids\":[1,2],\"gloss\":\"…\"}},{{\"ids\":[3],\"gloss\":\"…\"}}]}}\n\
+`ids` are from the list; `gloss` is the one transcription printed beneath that run."
     )
+}
+
+/// Reshapes the model's groups into a clean ordered partition of the scaffold.
+///
+/// The alignment of record is our own word list, not the model's reply, so the
+/// reply is reconciled against it rather than trusted: every scaffold id ends up
+/// in exactly one segment, segments are runs of consecutive scaffold words, and
+/// each run takes the gloss of the model group its words fell into. A word the
+/// model did not place becomes a single-word segment with an empty gloss, for
+/// the contributor to fill. This way a model that groups loosely still yields a
+/// well-formed draft the merge/split UI can build on.
+fn reconcile_segments(words: &[ScaffoldWord], raw: &[ExtractedSegment]) -> Vec<ExtractedSegment> {
+    use std::collections::HashMap;
+    // Each known id -> the first model group that listed it.
+    let mut group_of: HashMap<i32, usize> = HashMap::new();
+    for (gi, seg) in raw.iter().enumerate() {
+        for &id in &seg.ids {
+            group_of.entry(id).or_insert(gi);
+        }
+    }
+
+    // A model group whose ids are not actually adjacent in the scaffold breaks
+    // into more than one run; only the first run carries the gloss, the rest
+    // start empty, so one gloss is never duplicated across separate segments.
+    let mut glossed: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    let mut out: Vec<ExtractedSegment> = Vec::new();
+    let mut i = 0;
+    while i < words.len() {
+        let group = group_of.get(&words[i].id).copied();
+        let mut j = i + 1;
+        match group {
+            Some(gi) => {
+                while j < words.len() && group_of.get(&words[j].id).copied() == Some(gi) {
+                    j += 1;
+                }
+                let gloss = if glossed.insert(gi) {
+                    raw[gi].gloss.trim().to_string()
+                } else {
+                    String::new()
+                };
+                out.push(ExtractedSegment {
+                    ids: words[i..j].iter().map(|w| w.id).collect(),
+                    gloss,
+                });
+            }
+            None => out.push(ExtractedSegment {
+                ids: vec![words[i].id],
+                gloss: String::new(),
+            }),
+        }
+        i = j;
+    }
+    out
 }
 
 /// Reads the {language} word-by-word glosses off photographed mushaf page(s).
 ///
 /// `words` is the ordered scaffold the app built from `quran_words`; `images`
-/// are base64 (no `data:` prefix). The reply is one gloss per id; the app
-/// aligns them back by id and lets the contributor correct them before any are
-/// stored, so an imperfect read is a starting point, not a commitment.
+/// are base64 (no `data:` prefix). The reply groups consecutive words that share
+/// one printed gloss; `reconcile_segments` aligns the groups back to the scaffold
+/// and the app lets the contributor adjust the groupings and correct the text
+/// before any are stored, so an imperfect read is a starting point, not a
+/// commitment.
 #[tauri::command]
 pub async fn ai_extract_glosses(
     state: tauri::State<'_, AiState>,
     words: Vec<ScaffoldWord>,
     images: Vec<String>,
     language: String,
-) -> Result<Vec<ExtractedGloss>, AiError> {
+) -> Result<Vec<ExtractedSegment>, AiError> {
     if words.is_empty() || images.is_empty() {
         return Err(AiError::BadResponse);
     }
@@ -746,13 +811,13 @@ pub async fn ai_extract_glosses(
         .collect::<Vec<_>>()
         .join("\n");
     let prompt = format!(
-        "Transcribe the {language} word-by-word gloss for each of these {} Arabic words (id, then \
+        "Group and transcribe the {language} word-by-word gloss for these {} Arabic words (id, then \
 the Arabic, tab-separated) from the attached page photo(s):\n\n{list}",
         words.len()
     );
 
     // Budget generously per word: a gloss is a few words, but in Cyrillic each
-    // runs to several tokens, and the structured wrapper (id + braces) adds
+    // runs to several tokens, and the structured wrapper (ids + braces) adds
     // more — too tight a cap makes the model stop mid-array, and a structured
     // reply cut off at `length` is unrecoverable (half an object parses as
     // nothing), so the whole read would be lost. A page's worth of words stays
@@ -776,17 +841,17 @@ the Arabic, tab-separated) from the attached page photo(s):\n\n{list}",
     // "unexpected response shape" that gave no clue which of the two failed.
     let json = extract_json(&content)
         .ok_or_else(|| AiError::BadGlossShape(truncate(&content, 200)))?;
-    let parsed: ExtractedGlosses =
+    let parsed: ExtractedSegments =
         serde_json::from_str(json).map_err(|_| AiError::BadGlossShape(truncate(json, 200)))?;
-    // Valid JSON of the wrong shape — `{}`, `{"error":…}`, or `{"glosses":[]}` —
-    // parses to an empty Vec (`glosses` defaults when absent), which would
-    // otherwise return Ok([]) and show the contributor "zero glosses" with no
-    // error. A read that produced nothing is the same failure as a prose reply:
-    // report it so they can retry.
-    if parsed.glosses.is_empty() {
+
+    let segments = reconcile_segments(&words, &parsed.segments);
+    // Every segment gloss empty means the read produced nothing — the same
+    // failure as a prose reply, worth reporting rather than returning a draft of
+    // blanks the contributor would have to fill from scratch anyway.
+    if segments.iter().all(|s| s.gloss.trim().is_empty()) {
         return Err(AiError::BadGlossShape(truncate(json, 200)));
     }
-    Ok(parsed.glosses)
+    Ok(segments)
 }
 
 // --- knowledge quizzes -----------------------------------------------------
@@ -2028,5 +2093,55 @@ mod tests {
     #[test]
     fn heading_markers_are_stripped() {
         assert_eq!(prepare_tafsir("### Heading\n\nBody"), "Heading\n\nBody");
+    }
+
+    fn scaffold(ids: &[i32]) -> Vec<ScaffoldWord> {
+        ids.iter().map(|&id| ScaffoldWord { id, arabic: String::new() }).collect()
+    }
+
+    fn seg(ids: &[i32], gloss: &str) -> ExtractedSegment {
+        ExtractedSegment { ids: ids.to_vec(), gloss: gloss.into() }
+    }
+
+    #[test]
+    fn reconcile_groups_consecutive_ids_under_one_gloss() {
+        let words = scaffold(&[10, 11, 12, 13]);
+        let raw = vec![seg(&[10, 11, 12], "phrase"), seg(&[13], "last")];
+        let out = reconcile_segments(&words, &raw);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].ids, vec![10, 11, 12]);
+        assert_eq!(out[0].gloss, "phrase");
+        assert_eq!(out[1].ids, vec![13]);
+    }
+
+    #[test]
+    fn reconcile_covers_every_id_once_even_when_model_skips_some() {
+        let words = scaffold(&[1, 2, 3, 4]);
+        // Model grouped 2+3 and ignored 1 and 4 entirely.
+        let raw = vec![seg(&[2, 3], "mid")];
+        let out = reconcile_segments(&words, &raw);
+        let covered: Vec<i32> = out.iter().flat_map(|s| s.ids.clone()).collect();
+        assert_eq!(covered, vec![1, 2, 3, 4]);
+        // The ungrouped words become empty singletons; the group keeps its gloss.
+        assert_eq!(out[0].ids, vec![1]);
+        assert!(out[0].gloss.is_empty());
+        assert_eq!(out[1].ids, vec![2, 3]);
+        assert_eq!(out[1].gloss, "mid");
+        assert!(out[2].gloss.is_empty());
+    }
+
+    #[test]
+    fn reconcile_keeps_scaffold_order_and_does_not_duplicate_gloss() {
+        let words = scaffold(&[1, 2, 3]);
+        // A non-adjacent group splits into runs in scaffold order; the gloss
+        // rides only the first run so it is never duplicated.
+        let raw = vec![seg(&[3, 1], "x")];
+        let out = reconcile_segments(&words, &raw);
+        let covered: Vec<i32> = out.iter().flat_map(|s| s.ids.clone()).collect();
+        assert_eq!(covered, vec![1, 2, 3]);
+        assert_eq!(out[0].ids, vec![1]);
+        assert_eq!(out[0].gloss, "x");
+        assert!(out[1].gloss.is_empty()); // id 2, ungrouped
+        assert!(out[2].gloss.is_empty()); // id 3, second run of the same group
     }
 }
