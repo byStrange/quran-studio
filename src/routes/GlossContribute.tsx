@@ -508,8 +508,11 @@ function SegmentTable({
               const next = segments[index + 1];
               const canMerge = Boolean(next) && byId.get(next!.wordIds[0]!)?.ayah_number === ayah;
               return (
+                // Keyed by the ids it covers, not its index: merge/split change
+                // the list length, and an index key would rebind an in-progress
+                // input to a different segment.
                 <div
-                  key={index}
+                  key={seg.wordIds.join("-")}
                   className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] items-center gap-3"
                 >
                   <div className="arabic text-right text-lg text-fg" dir="rtl">

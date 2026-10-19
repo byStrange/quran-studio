@@ -992,8 +992,9 @@ costs about 60 MB unpacked. Building the AppImage locally needs `patchelf` on
   (`gloss_uz_batches` / `gloss_uz_submissions`) and reach the live
   `gloss_uz_segments` only when a reviewer approves the batch — scripture-adjacent
   text that a reader will trust should not go live on one person's OCR
-  correction. Approval replaces a verse's segments wholesale, so a re-done range
-  that regroups the words leaves no stale or overlapping segments behind.
+  correction. Approval replaces only the live segments its batch overlaps, so a
+  re-grouped span cleanly supersedes what it covers while a verse's other
+  approved segments survive a partial resubmission.
 - **The app's first role.** Gating this needed the first notion of privilege in
   a schema that had only self-owned rows and public content. It is a single
   allowlist table (`gloss_uz_contributors`, `can_review` for approvers) you

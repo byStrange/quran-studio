@@ -751,6 +751,10 @@ fn reconcile_segments(words: &[ScaffoldWord], raw: &[ExtractedSegment]) -> Vec<E
         }
     }
 
+    // A model group whose ids are not actually adjacent in the scaffold breaks
+    // into more than one run; only the first run carries the gloss, the rest
+    // start empty, so one gloss is never duplicated across separate segments.
+    let mut glossed: std::collections::HashSet<usize> = std::collections::HashSet::new();
     let mut out: Vec<ExtractedSegment> = Vec::new();
     let mut i = 0;
     while i < words.len() {
@@ -761,9 +765,14 @@ fn reconcile_segments(words: &[ScaffoldWord], raw: &[ExtractedSegment]) -> Vec<E
                 while j < words.len() && group_of.get(&words[j].id).copied() == Some(gi) {
                     j += 1;
                 }
+                let gloss = if glossed.insert(gi) {
+                    raw[gi].gloss.trim().to_string()
+                } else {
+                    String::new()
+                };
                 out.push(ExtractedSegment {
                     ids: words[i..j].iter().map(|w| w.id).collect(),
-                    gloss: raw[gi].gloss.trim().to_string(),
+                    gloss,
                 });
             }
             None => out.push(ExtractedSegment {
@@ -2122,12 +2131,17 @@ mod tests {
     }
 
     #[test]
-    fn reconcile_keeps_scaffold_order_not_model_order() {
+    fn reconcile_keeps_scaffold_order_and_does_not_duplicate_gloss() {
         let words = scaffold(&[1, 2, 3]);
-        // A non-adjacent group is split into contiguous runs in scaffold order.
+        // A non-adjacent group splits into runs in scaffold order; the gloss
+        // rides only the first run so it is never duplicated.
         let raw = vec![seg(&[3, 1], "x")];
         let out = reconcile_segments(&words, &raw);
         let covered: Vec<i32> = out.iter().flat_map(|s| s.ids.clone()).collect();
         assert_eq!(covered, vec![1, 2, 3]);
+        assert_eq!(out[0].ids, vec![1]);
+        assert_eq!(out[0].gloss, "x");
+        assert!(out[1].gloss.is_empty()); // id 2, ungrouped
+        assert!(out[2].gloss.is_empty()); // id 3, second run of the same group
     }
 }

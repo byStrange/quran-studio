@@ -139,6 +139,18 @@ begin
           where v.id = (r->>'verse_id')::integer
             and v.surah_number = p_surah
             and v.ayah_number between p_start and p_end
+       )
+       -- Both endpoints must be real word positions of that verse, so a crafted
+       -- request cannot store a segment over positions that cover no words.
+       and exists (
+         select 1 from public.quran_words w
+          where w.verse_id = (r->>'verse_id')::integer
+            and w.position = (r->>'start_position')::smallint
+       )
+       and exists (
+         select 1 from public.quran_words w
+          where w.verse_id = (r->>'verse_id')::integer
+            and w.position = (r->>'end_position')::smallint
        );
 
   get diagnostics v_count = row_count;
@@ -154,10 +166,11 @@ $$;
 comment on function public.submit_gloss_uz(smallint, smallint, smallint, jsonb) is
   'Stages a contributor''s proposed Uzbek gloss segments as a pending batch; returns the batch id.';
 
--- Approve a pending batch: replace the live segments of every verse the batch
--- touches with the batch's segments, then mark it approved. Replacing per verse
--- (rather than upserting per row) keeps the corpus free of stale or overlapping
--- segments when a re-done range regroups the words differently.
+-- Approve a pending batch: replace the live segments the batch's segments
+-- overlap with the batch's own, then mark it approved. Replacing by overlap
+-- (rather than clearing the whole verse) lets a partial or re-grouped resubmit
+-- land without erasing the verse's other approved segments, while a regroup of
+-- the same span still cleanly supersedes what it covers.
 create or replace function public.approve_gloss_batch(p_batch uuid)
 returns integer
 language plpgsql
@@ -180,17 +193,23 @@ begin
     raise exception 'batch is not pending' using errcode = '22023';
   end if;
 
-  -- Clear the verses this batch covers, so the batch becomes their whole gloss.
+  -- Replace only the segments this batch's segments overlap, so a partial or
+  -- re-grouped resubmission leaves a verse's other approved segments intact.
   delete from public.gloss_uz_segments g
-   where g.verse_id in (
-     select distinct s.verse_id from public.gloss_uz_submissions s where s.batch_id = p_batch
-   );
+    using public.gloss_uz_submissions s
+   where s.batch_id = p_batch
+     and g.verse_id = s.verse_id
+     and g.start_position <= s.end_position
+     and g.end_position   >= s.start_position;
 
   with ins as (
     insert into public.gloss_uz_segments (verse_id, start_position, end_position, gloss)
       select s.verse_id, s.start_position, s.end_position, s.proposed_gloss
         from public.gloss_uz_submissions s
        where s.batch_id = p_batch
+      -- A crafted batch could stage two segments sharing a start_position; keep
+      -- the first rather than abort the whole approval on the unique constraint.
+      on conflict (verse_id, start_position) do nothing
     returning 1
   )
   select count(*)::integer into v_count from ins;
@@ -204,7 +223,7 @@ end;
 $$;
 
 comment on function public.approve_gloss_batch(uuid) is
-  'Reviewer-only: replaces the covered verses'' Uzbek segments with a pending batch''s segments and marks it approved.';
+  'Reviewer-only: replaces the live Uzbek segments a pending batch overlaps with the batch''s own and marks it approved.';
 
 -- submit_gloss_uz keeps its signature, so its existing grants/revokes still
 -- hold; approve_gloss_batch likewise. Re-assert nothing here but the new table's

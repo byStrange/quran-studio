@@ -198,9 +198,10 @@ export type GlossedWord = Pick<Word, "gloss_en" | "gloss_ru">;
  *
  * Uzbek has no per-word corpus: the Uzbek word-by-word mushaf glosses runs of
  * words, not single words, so Uzbek glosses live in `gloss_uz_segments` (a gloss
- * per range of positions) rather than on the word. Per-word lookups therefore
- * fall back to the English gloss; the reader renders the Uzbek segments
- * separately, over the run of words each one covers.
+ * per range of positions) rather than on the word. A per-word lookup therefore
+ * has no Uzbek value to return and falls back to the English gloss. Rendering
+ * the Uzbek segments over the run of words each one covers is a separate reader
+ * concern (not wired in yet), not something this per-word helper does.
  */
 export function wordGloss(word: GlossedWord, language: Language): string | null {
   if (language === "ru") return word.gloss_ru || word.gloss_en;
