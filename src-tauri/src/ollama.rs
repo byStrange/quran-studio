@@ -44,6 +44,8 @@ pub enum AiError {
     NoModel,
     #[error("unexpected response shape from Ollama Cloud")]
     BadResponse,
+    #[error("Ollama Cloud did not return the expected gloss JSON — it replied with something else. Try again. (got: {0})")]
+    BadGlossShape(String),
     #[error("the model's reply was cut off before it finished; try again")]
     Truncated,
     #[error("could not persist the API key: {0}")]
@@ -711,7 +713,12 @@ it Cyrillic). Do not translate, transliterate, romanize, or correct it.\n\
 the page(s), return an empty string for its gloss. Never invent a translation.\n\
 - Ignore ayah-number medallions, the running paragraph translation, headers and page decoration — \
 only the small word-under-word glosses.\n\
-- Return every id from the list exactly once."
+- Return every id from the list exactly once.\n\n\
+OUTPUT\n\
+Return JSON only — no prose, no explanation, no markdown fence:\n\
+{{\"glosses\":[{{\"id\":0,\"gloss\":\"…\"}}]}}\n\
+Copy each `id` from the list; `gloss` is the transcription (an empty string when the word is not \
+on the page)."
     )
 }
 
@@ -762,8 +769,23 @@ the Arabic, tab-separated) from the attached page photo(s):\n\n{list}",
     )
     .await?;
 
-    let json = extract_json(&content).ok_or(AiError::BadResponse)?;
-    let parsed: ExtractedGlosses = serde_json::from_str(json).map_err(|_| AiError::BadResponse)?;
+    // `gloss_extract_schema` is sent as Ollama's `format`, but not every model
+    // honours it — some ignore the schema and reply in prose. So the prompt also
+    // asks for JSON outright, and a reply that still carries no locatable object
+    // is reported with a snippet of what did come back, rather than the opaque
+    // "unexpected response shape" that gave no clue which of the two failed.
+    let json = extract_json(&content)
+        .ok_or_else(|| AiError::BadGlossShape(truncate(&content, 200)))?;
+    let parsed: ExtractedGlosses =
+        serde_json::from_str(json).map_err(|_| AiError::BadGlossShape(truncate(json, 200)))?;
+    // Valid JSON of the wrong shape — `{}`, `{"error":…}`, or `{"glosses":[]}` —
+    // parses to an empty Vec (`glosses` defaults when absent), which would
+    // otherwise return Ok([]) and show the contributor "zero glosses" with no
+    // error. A read that produced nothing is the same failure as a prose reply:
+    // report it so they can retry.
+    if parsed.glosses.is_empty() {
+        return Err(AiError::BadGlossShape(truncate(json, 200)));
+    }
     Ok(parsed.glosses)
 }
 
