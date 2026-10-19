@@ -489,24 +489,62 @@ export type Database = {
         }
         Relationships: []
       }
+      gloss_uz_segments: {
+        Row: {
+          end_position: number
+          gloss: string
+          id: number
+          start_position: number
+          verse_id: number
+        }
+        Insert: {
+          end_position: number
+          gloss: string
+          id?: number
+          start_position: number
+          verse_id: number
+        }
+        Update: {
+          end_position?: number
+          gloss?: string
+          id?: number
+          start_position?: number
+          verse_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gloss_uz_segments_verse_id_fkey"
+            columns: ["verse_id"]
+            isOneToOne: false
+            referencedRelation: "quran_verses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gloss_uz_submissions: {
         Row: {
           batch_id: string
+          end_position: number
           id: number
           proposed_gloss: string
-          word_id: number
+          start_position: number
+          verse_id: number
         }
         Insert: {
           batch_id: string
+          end_position: number
           id?: number
           proposed_gloss: string
-          word_id: number
+          start_position: number
+          verse_id: number
         }
         Update: {
           batch_id?: string
+          end_position?: number
           id?: number
           proposed_gloss?: string
-          word_id?: number
+          start_position?: number
+          verse_id?: number
         }
         Relationships: [
           {
@@ -517,10 +555,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "gloss_uz_submissions_word_id_fkey"
-            columns: ["word_id"]
+            foreignKeyName: "gloss_uz_submissions_verse_id_fkey"
+            columns: ["verse_id"]
             isOneToOne: false
-            referencedRelation: "quran_words"
+            referencedRelation: "quran_verses"
             referencedColumns: ["id"]
           },
         ]
@@ -530,7 +568,6 @@ export type Database = {
           arabic: string
           gloss_en: string | null
           gloss_ru: string | null
-          gloss_uz: string | null
           id: number
           position: number
           transliteration: string | null
@@ -540,7 +577,6 @@ export type Database = {
           arabic: string
           gloss_en?: string | null
           gloss_ru?: string | null
-          gloss_uz?: string | null
           id: number
           position: number
           transliteration?: string | null
@@ -550,7 +586,6 @@ export type Database = {
           arabic?: string
           gloss_en?: string | null
           gloss_ru?: string | null
-          gloss_uz?: string | null
           id?: number
           position?: number
           transliteration?: string | null

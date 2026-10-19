@@ -826,7 +826,7 @@ export const en = {
   "gloss.extract": "Extract glosses",
   "gloss.extracting": "Reading…",
   "gloss.extractWait": "The AI is reading the page — this can take up to a minute or two.",
-  "gloss.extractDone": "Read {count} glosses. Check and correct them below.",
+  "gloss.extractDone": "Read {count} groups. Check the grouping and text below.",
   "gloss.needImages": "Add at least one page photo first.",
   "gloss.reviewDraftTitle": "Check the glosses",
   "gloss.reviewDraftHint": "Fix anything the AI misread, then submit the batch for review.",
@@ -844,6 +844,10 @@ export const en = {
   "gloss.rejectDone": "Batch rejected.",
   "gloss.showWords": "Show words",
   "gloss.hideWords": "Hide words",
+  "gloss.groupHint":
+    "Each row is a group of Arabic words that share one Uzbek gloss. The AI proposes the groups — merge or split them to match the page, then fix the text.",
+  "gloss.merge": "Merge with next",
+  "gloss.split": "Split apart",
 };
 
 /** Every key the app can ask for. */

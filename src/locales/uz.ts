@@ -842,7 +842,7 @@ export const uz: Dictionary = {
   "gloss.extract": "Glossalarni o'qish",
   "gloss.extracting": "O'qilmoqda…",
   "gloss.extractWait": "AI sahifani o'qimoqda — bu bir-ikki daqiqa olishi mumkin.",
-  "gloss.extractDone": "{count} ta glossa o'qildi. Quyida tekshiring va to'g'rilang.",
+  "gloss.extractDone": "{count} ta guruh o'qildi. Quyida guruhlash va matnni tekshiring.",
   "gloss.needImages": "Avval kamida bitta sahifa suratini qo'shing.",
   "gloss.reviewDraftTitle": "Glossalarni tekshiring",
   "gloss.reviewDraftHint":
@@ -861,4 +861,8 @@ export const uz: Dictionary = {
   "gloss.rejectDone": "To'plam rad etildi.",
   "gloss.showWords": "So'zlarni ko'rsatish",
   "gloss.hideWords": "So'zlarni yashirish",
+  "gloss.groupHint":
+    "Har bir qator — bitta o'zbekcha glossaga ega arab so'zlari guruhi. AI guruhlarni taklif qiladi — sahifaga moslab birlashtiring yoki ajrating, so'ng matnni to'g'rilang.",
+  "gloss.merge": "Keyingisi bilan birlashtirish",
+  "gloss.split": "Ajratish",
 };

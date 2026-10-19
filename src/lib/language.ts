@@ -187,7 +187,7 @@ export function selectedVerseTranslations(
   });
 }
 
-export type GlossedWord = Pick<Word, "gloss_en" | "gloss_ru" | "gloss_uz">;
+export type GlossedWord = Pick<Word, "gloss_en" | "gloss_ru">;
 
 /**
  * The word-by-word gloss in the chosen language.
@@ -196,15 +196,14 @@ export type GlossedWord = Pick<Word, "gloss_en" | "gloss_ru" | "gloss_uz">;
  * is not a migration artefact but the steady state: roughly a thousand words
  * have no Russian gloss and show the English one rather than an empty chip.
  *
- * Uzbek has no upstream corpus; `gloss_uz` is instead filled in-app by trusted
- * volunteers (the gloss contribution tool), approved word by word. It starts
- * null for every word and grows as batches are approved, so Uzbek falls back to
- * the English gloss per word until a word has been contributed — the same
- * per-word fallback Russian uses, just with a long way to go.
+ * Uzbek has no per-word corpus: the Uzbek word-by-word mushaf glosses runs of
+ * words, not single words, so Uzbek glosses live in `gloss_uz_segments` (a gloss
+ * per range of positions) rather than on the word. Per-word lookups therefore
+ * fall back to the English gloss; the reader renders the Uzbek segments
+ * separately, over the run of words each one covers.
  */
 export function wordGloss(word: GlossedWord, language: Language): string | null {
   if (language === "ru") return word.gloss_ru || word.gloss_en;
-  if (language === "uz") return word.gloss_uz || word.gloss_en;
   return word.gloss_en;
 }
 

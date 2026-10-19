@@ -61,28 +61,33 @@ export interface ScaffoldWord {
   arabic: string;
 }
 
-/** One gloss the vision model read off the page, keyed back to the word id. */
-export interface ExtractedGloss {
-  id: number;
+/**
+ * One phrase gloss the vision model read off the page, over the run of word ids
+ * it covers. The printed mushaf glosses runs of words, not single words, so a
+ * segment is the unit; a single-word gloss is just `ids` of length one.
+ */
+export interface ExtractedSegment {
+  ids: number[];
   gloss: string;
 }
 
 /**
  * Reads the Uzbek word-by-word glosses off photographed mushaf page(s).
  *
- * `words` is the ordered scaffold built from `quran_words`; the model fills a
- * gloss per id and the caller aligns by id. `images` are base64 strings WITHOUT
- * the `data:` URL prefix. Desktop only — the Ollama key lives in the backend.
- * Unlike the other generators this is never cached: it is a one-off transcription
- * a human then edits, not a shared result.
+ * `words` is the ordered scaffold built from `quran_words`; the model groups
+ * consecutive words that share one printed gloss, and the backend reconciles the
+ * groups into a clean ordered partition of the scaffold. `images` are base64
+ * strings WITHOUT the `data:` URL prefix. Desktop only — the Ollama key lives in
+ * the backend. Unlike the other generators this is never cached: it is a one-off
+ * transcription a human then adjusts, not a shared result.
  */
 export async function extractGlosses(
   words: ScaffoldWord[],
   images: string[],
   language: Language,
-): Promise<ExtractedGloss[]> {
+): Promise<ExtractedSegment[]> {
   if (!isTauri()) throw new AiUnavailableError(NOT_IN_TAURI);
-  return invoke<ExtractedGloss[]>("ai_extract_glosses", { words, images, language });
+  return invoke<ExtractedSegment[]>("ai_extract_glosses", { words, images, language });
 }
 
 // --- word context ----------------------------------------------------------
