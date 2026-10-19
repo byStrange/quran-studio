@@ -303,6 +303,34 @@ jobs:
           # runs anywhere. Drop the flag to publish the .deb alongside it.
           args: --bundles appimage
 
+      # linuxdeploy copies libwayland-* from this 22.04 runner into the
+      # AppImage, and they load ahead of the host's. Against a newer Mesa on a
+      # Wayland session that mismatch kills WebKit before the window opens
+      # ("Could not create default EGL display: EGL_BAD_PARAMETER"). Every
+      # desktop that runs Wayland already has these libraries, so they are
+      # taken out and the AppImage repacked around the host's copies.
+      - name: Drop the bundled Wayland libraries from the AppImage
+        env:
+          APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage
+          APPIMAGETOOL_SHA256: 46fdd785094c7f6e545b61afcfb0f3d98d8eab243f644b4b17698c01d06083d1
+        run: |
+          set -euo pipefail
+          appimage="$(realpath src-tauri/target/release/bundle/appimage/*.AppImage)"
+          work="$(mktemp -d)"
+          curl -sSLfo "$work/appimagetool" "$APPIMAGETOOL_URL"
+          echo "$APPIMAGETOOL_SHA256  $work/appimagetool" | sha256sum -c -
+          chmod +x "$work/appimagetool"
+
+          (cd "$work" && "$appimage" --appimage-extract >/dev/null)
+          ls "$work"/squashfs-root/usr/lib/libwayland-* \
+            || { echo "::error::no bundled libwayland found — has the bundler changed?"; exit 1; }
+          rm -f "$work"/squashfs-root/usr/lib/libwayland-*
+
+          # No FUSE on the runner, so the tool runs from its own extraction.
+          APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 \
+            "$work/appimagetool" --no-appstream "$work/squashfs-root" "$appimage"
+          ls -lh "$appimage"
+
       - uses: actions/upload-artifact@v4
         with:
           name: linux
