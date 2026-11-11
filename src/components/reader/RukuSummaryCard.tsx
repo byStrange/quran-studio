@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { GraduationCap, RefreshCw, Sparkles, WandSparkles } from "lucide-react";
@@ -60,10 +61,48 @@ export function RukuSummaryCard({
   const summary = cached.data;
   const busy = generate.isPending;
 
+  /**
+   * Keeps the ayahs where they were when the stored summary arrives.
+   *
+   * The card sits above the first ayah and opens on a four-line skeleton; a
+   * stored summary is several times taller, so without this every ayah drops
+   * by the difference (130px in a full column, over 250px beside the tafsir
+   * panel) a moment after the ruku opens — under a reader who has already
+   * started on the first ayah. WebKit, which the desktop app renders with on
+   * Linux and macOS, has no scroll anchoring to absorb it, and Chromium's
+   * would not either, since the growing card is itself the anchor. So the
+   * column is scrolled by the change instead: the summary unfolds upwards and
+   * the Quran stays put. Only the load is compensated; generating is
+   * something the reader asked for while looking at the card.
+   */
+  const sectionRef = useRef<HTMLElement>(null);
+  const loadingHeight = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+    if (cached.isLoading) {
+      loadingHeight.current = section.offsetHeight;
+      return;
+    }
+    const before = loadingHeight.current;
+    loadingHeight.current = null;
+    if (before === null) return;
+    const delta = section.offsetHeight - before;
+    const scroller = section.closest<HTMLElement>("[data-verse-scroll]");
+    if (!scroller || delta === 0) return;
+    // Scrolled wholly past the card, an engine with scroll anchoring has
+    // already held the ayah in view; adjusting again would overshoot.
+    if (scroller.scrollTop >= before && CSS.supports("overflow-anchor", "auto")) return;
+    scroller.scrollTop += delta;
+  }, [cached.isLoading]);
+
   return (
     // Flush like everything else in the reading column; the tint alone marks
     // it out as the one block here that is not the Quran.
-    <section className="reader-gutter border-b border-border bg-accent-soft/20 py-5">
+    <section
+      ref={sectionRef}
+      className="reader-gutter border-b border-border bg-accent-soft/20 py-5"
+    >
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-2 text-[0.6875rem] font-medium uppercase tracking-wider text-accent-soft-fg">
           <Sparkles className="size-3.5" aria-hidden />
