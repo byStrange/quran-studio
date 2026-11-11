@@ -167,16 +167,28 @@ function Question({
 }) {
   const t = useT();
   const item = insight.questions[at]!;
-  // The wrong answers are the right answers to the lesson's other questions:
-  // all true statements from the same tafsir, so nothing false is ever put in
-  // front of the child, even as a decoy.
-  const choices = useMemo(
-    () =>
-      insight.questions.length >= MIN_FOR_CHOICES
-        ? shuffle(insight.questions.map((q, i) => ({ id: i, text: q.answer })))
-        : null,
-    [insight.questions],
-  );
+  // A lesson written for children brings its own choices. The borrowed form
+  // has only a question and its answer, so there the wrong answers are the
+  // right answers to the lesson's other questions — all true statements from
+  // the same tafsir, so nothing false is put in front of the child even as a
+  // decoy — and with too few questions for that, it is think-then-check.
+  // Either way `id` names a choice and `correct` is the id to find.
+  const { choices, correct } = useMemo(() => {
+    if (item.options) {
+      const own = item.options.map((text, id) => ({ id, text }));
+      return {
+        choices: shuffle(own),
+        correct: own.find((choice) => choice.text === item.answer)?.id ?? -1,
+      };
+    }
+    if (insight.questions.length >= MIN_FOR_CHOICES) {
+      return {
+        choices: shuffle(insight.questions.map((q, id) => ({ id, text: q.answer }))),
+        correct: at,
+      };
+    }
+    return { choices: null, correct: -1 };
+  }, [item, insight.questions, at]);
   const [states, setStates] = useState<Record<number, TileState>>({});
   const [solved, setSolved] = useState(false);
   const mistakes = useRef(0);
@@ -185,11 +197,11 @@ function Question({
 
   const pick = (id: number) => {
     if (solved || states[id]) return;
-    if (id === at) {
+    if (id === correct) {
       setSolved(true);
       setStates(
         Object.fromEntries(
-          (choices ?? []).map((c) => [c.id, c.id === at ? "correct" : "done"]),
+          (choices ?? []).map((c) => [c.id, c.id === correct ? "correct" : "done"]),
         ) as Record<number, TileState>,
       );
       return;
@@ -245,6 +257,15 @@ function Question({
                 </Tile>
               </div>
             ))}
+            {solved && item.why ? (
+              <p
+                dir="auto"
+                data-selectable
+                className="journey-pop rounded-2xl bg-accent-soft px-4 py-3 text-[0.9375rem] leading-relaxed text-accent-soft-fg"
+              >
+                {item.why}
+              </p>
+            ) : null}
           </div>
         ) : solved ? (
           <p

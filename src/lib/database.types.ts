@@ -843,6 +843,47 @@ export type Database = {
           },
         ]
       }
+      journey_ai_lesson: {
+        Row: {
+          ayah_end: number
+          ayah_start: number
+          edition: string
+          generated_at: string
+          language: string
+          lesson: Json
+          model_used: string
+          surah_number: number
+        }
+        Insert: {
+          ayah_end: number
+          ayah_start: number
+          edition: string
+          generated_at?: string
+          language: string
+          lesson: Json
+          model_used: string
+          surah_number: number
+        }
+        Update: {
+          ayah_end?: number
+          ayah_start?: number
+          edition?: string
+          generated_at?: string
+          language?: string
+          lesson?: Json
+          model_used?: string
+          surah_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journey_ai_lesson_edition_fkey"
+            columns: ["edition"]
+            isOneToOne: false
+            referencedRelation: "tafsir_editions"
+            referencedColumns: ["slug"]
+          },
+        ]
+      }
       tafsir_ai_summary: {
         Row: {
           ayah_start: number

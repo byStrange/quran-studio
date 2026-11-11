@@ -335,6 +335,124 @@ export async function getTafsirSummary(
   return { summary: generated.summary, model_used: row.model_used, generated_at: row.generated_at };
 }
 
+// --- journey lessons ---------------------------------------------------------
+
+/**
+ * What a Journey stop teaches, written for a child from the tafsir. Every
+ * point and question carries a `quote` the backend found in the tafsir itself;
+ * one it could not find was dropped before this was returned.
+ */
+export interface JourneyLessonBody {
+  gist: string;
+  points: Array<{ point: string; ayah: number | null; quote: string }>;
+  questions: Array<{
+    question: string;
+    /** Three, the right one at `answer`. */
+    options: string[];
+    answer: number;
+    why: string;
+    quote: string;
+  }>;
+}
+
+export interface JourneyLessonKey {
+  edition: string;
+  surahNumber: number;
+  ayahStart: number;
+  ayahEnd: number;
+}
+
+/**
+ * The cached lesson for a stop, or null when there is none.
+ *
+ * Also null when the cache cannot be read at all — in particular on a
+ * database the `journey_ai_lesson` migration has not reached yet. A missing
+ * cache is a reason to generate or to fall back, never to fail a lesson.
+ */
+export async function fetchCachedJourneyLesson(
+  key: JourneyLessonKey,
+  language: Language,
+): Promise<JourneyLessonBody | null> {
+  const { data, error } = await supabase
+    .from("journey_ai_lesson")
+    .select("lesson")
+    .eq("edition", key.edition)
+    .eq("surah_number", key.surahNumber)
+    .eq("ayah_start", key.ayahStart)
+    .eq("ayah_end", key.ayahEnd)
+    .eq("language", language)
+    .maybeSingle();
+  if (error) return null;
+  return data ? (data.lesson as unknown as JourneyLessonBody) : null;
+}
+
+/** Which of a surah's stops already have a lesson, as "ayahStart-ayahEnd". */
+export async function fetchCachedJourneyLessonRanges(
+  edition: string,
+  surahNumber: number,
+  language: Language,
+): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("journey_ai_lesson")
+    .select("ayah_start, ayah_end")
+    .eq("edition", edition)
+    .eq("surah_number", surahNumber)
+    .eq("language", language);
+  if (error) return new Set();
+  return new Set((data ?? []).map((row) => `${row.ayah_start}-${row.ayah_end}`));
+}
+
+/**
+ * Writes the lesson for a stop and caches it for every reader.
+ *
+ * Needs the Rust backend and a configured key; throws `AiUnavailableError`
+ * (or whatever the model returned) otherwise, and the caller decides what a
+ * lesson does without it.
+ */
+export async function generateJourneyLesson(
+  input: JourneyLessonKey & {
+    tafsirName: string;
+    surahName: string;
+    /** The ayahs, one per line as "N. translation". */
+    ayahs: string;
+    content: string;
+  },
+  language: Language,
+): Promise<JourneyLessonBody> {
+  if (!isTauri()) throw new AiUnavailableError(NOT_IN_TAURI);
+
+  const generated = await invoke<{ lesson: JourneyLessonBody; model_used: string }>(
+    "ai_generate_journey_lesson",
+    {
+      tafsirName: input.tafsirName,
+      surahName: input.surahName,
+      surahNumber: input.surahNumber,
+      ayahStart: input.ayahStart,
+      ayahEnd: input.ayahEnd,
+      ayahs: input.ayahs,
+      content: input.content,
+      language,
+    },
+  );
+
+  const { error } = await supabase.from("journey_ai_lesson").upsert(
+    {
+      edition: input.edition,
+      surah_number: input.surahNumber,
+      ayah_start: input.ayahStart,
+      ayah_end: input.ayahEnd,
+      language,
+      lesson: generated.lesson as unknown as Json,
+      model_used: generated.model_used,
+      generated_at: new Date().toISOString(),
+    },
+    { onConflict: "edition,surah_number,ayah_start,ayah_end,language" },
+  );
+  if (error) console.warn("could not cache journey lesson:", error.message);
+
+  return generated.lesson;
+}
+
 /**
  * Turns any thrown value into something worth showing a user.
  *

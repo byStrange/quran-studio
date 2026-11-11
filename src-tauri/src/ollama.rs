@@ -1970,9 +1970,455 @@ pub async fn ai_generate_tafsir_summary(
     Ok(TafsirSummary { summary, model_used })
 }
 
+// --- journey lessons ---------------------------------------------------------
+
+/// What a Journey stop teaches, written for a child.
+///
+/// The tafsir summary above is for the adult who has just read the passage:
+/// its points assume the vocabulary of tafsir and its questions can turn on a
+/// word's etymology. A Journey lesson is for a reader of eleven or fifteen who
+/// has read none of it and will not: the same source, but only what the ayahs
+/// of one stop say and ask of them, in sentences a child reads once.
+///
+/// It is held to the tafsir the same way the summary's narrations are. Every
+/// point and every question carries a `quote` copied from the passage, and one
+/// whose quote cannot be found there is dropped — which matters more here
+/// than anywhere, because this is the only form of the tafsir its reader will
+/// see, and they are in no position to notice an invention.
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct LessonPoint {
+    pub point: String,
+    #[serde(default)]
+    pub ayah: Option<i32>,
+    /// Where the tafsir says it, in the tafsir's own spelling.
+    pub quote: String,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct LessonQuestion {
+    pub question: String,
+    /// Exactly three, the right one at `answer`.
+    pub options: Vec<String>,
+    pub answer: usize,
+    /// One sentence shown after answering: why that is the answer.
+    pub why: String,
+    pub quote: String,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct JourneyLessonBody {
+    pub gist: String,
+    pub points: Vec<LessonPoint>,
+    pub questions: Vec<LessonQuestion>,
+}
+
+#[derive(Serialize)]
+pub struct JourneyLesson {
+    pub lesson: JourneyLessonBody,
+    pub model_used: String,
+}
+
+const LESSON_MAX_POINTS: usize = 4;
+const LESSON_MAX_QUESTIONS: usize = 3;
+const LESSON_OPTIONS: usize = 3;
+
+fn journey_lesson_system(
+    language: &str,
+    guidance: &str,
+    source_note: &str,
+    tafsir_name: &str,
+) -> String {
+    format!(
+        "ROLE\n\
+You are preparing a short lesson for a child of about eleven who has memorized some ayahs \
+of the Quran and recites them, but does not yet know what they are about. You are given \
+those ayahs and what the tafsir of {tafsir_name} says about them. From the tafsir you \
+write the few things the child should know about these ayahs, and questions to check \
+they understood.\n\n\
+GROUNDING — these rules come before everything else\n\
+1. Use only the tafsir text supplied. If the tafsir says it, you may say it in simpler \
+words; if it does not, leave it out — even if you know it to be true.\n\
+2. Add no hadith, ruling, story, name, number or detail that is not in the text.\n\
+3. Simplify the wording, never the meaning. If a point cannot be said simply without \
+changing what the tafsir says, choose a different point.\n\
+4. Stay with the ayahs named. The tafsir text may run on to later ayahs; ignore those \
+parts.\n\n\
+WRITING FOR A CHILD\n\
+- Short sentences, everyday words. No scholarly terms, no chains of narrators, no \
+discussion of grammar or of differing opinions.\n\
+- Speak about what the ayahs mean and what they ask of the one reciting them.\n\
+- Respectful and plain. No baby talk, no exclamation marks, no emoji.\n\
+- Do not frighten: where the tafsir describes punishment, say what was done and why in \
+one calm sentence.\n\n\
+GIST\n\
+One sentence, at most twenty words: what these ayahs are about.\n\n\
+POINTS\n\
+- Three or four points, the most important first.\n\
+- Each is one thing worth knowing: who is speaking or spoken to, what a phrase means, \
+what happened, what we are asked to do. One or two short sentences, at most thirty \
+words.\n\
+- Set `ayah` to the ayah number the point is about when it is about one ayah; otherwise \
+null.\n\
+- `quote`: six to fifteen consecutive words copied character for character from the \
+tafsir, from the place this point comes from, in the tafsir's own language and script. \
+Do not translate it and do not shorten it with '…'.\n\n\
+QUESTIONS\n\
+- Three questions, each about one of the points, answerable by a child who read the \
+points.\n\
+- `options`: exactly three short answers, at most twelve words each. Exactly one is \
+right. The two wrong ones must be clearly wrong to someone who read the points, but \
+not silly, and must never say anything untrue or disrespectful about Allah, the \
+prophets or the Quran — make them wrong by being about a different thing, not by \
+being a false belief.\n\
+- `answer`: the position of the right option, 0, 1 or 2. Vary it between questions.\n\
+- `why`: one short sentence saying why, as the tafsir explains it.\n\
+- `quote`: as for a point — six to fifteen words copied verbatim from the tafsir where \
+the answer is found.\n\
+- Do not ask about the origin of a word, about a narrator, or for a number or name \
+that the points did not mention.\n\n\
+LANGUAGE\n\
+Write everything except `quote` and quoted Arabic in {language}.{guidance}{source_note}\n\n\
+OUTPUT\n\
+Return JSON only — no explanation, no markdown fence:\n\
+{{\"gist\":\"…\",\"points\":[{{\"point\":\"…\",\"ayah\":null,\"quote\":\"…\"}}],\
+\"questions\":[{{\"question\":\"…\",\"options\":[\"…\",\"…\",\"…\"],\"answer\":0,\
+\"why\":\"…\",\"quote\":\"…\"}}]}}\n\n\
+BEFORE YOU ANSWER, check:\n\
+- Is every point and every right answer actually in the supplied tafsir?\n\
+- Is every `quote` copied verbatim from it?\n\
+- Would an eleven-year-old understand every sentence on first reading?\n\
+- Is everything but the quotes and Arabic in {language}?"
+    )
+}
+
+fn journey_lesson_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "gist": { "type": "string" },
+            "points": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "point": { "type": "string" },
+                        "ayah": { "type": ["integer", "null"] },
+                        "quote": { "type": "string" }
+                    },
+                    "required": ["point", "ayah", "quote"]
+                }
+            },
+            "questions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "question": { "type": "string" },
+                        "options": { "type": "array", "items": { "type": "string" } },
+                        "answer": { "type": "integer" },
+                        "why": { "type": "string" },
+                        "quote": { "type": "string" }
+                    },
+                    "required": ["question", "options", "answer", "why", "quote"]
+                }
+            }
+        },
+        "required": ["gist", "points", "questions"]
+    })
+}
+
+/// Reads a lesson reply field by field, taking what it can — the same
+/// tolerance, for the same reason, as `summary_from_value`.
+fn lesson_from_value(value: &serde_json::Value) -> JourneyLessonBody {
+    use serde_json::Value;
+
+    fn text(value: Option<&Value>) -> String {
+        match value {
+            Some(Value::String(s)) => s.clone(),
+            Some(Value::Number(n)) => n.to_string(),
+            _ => String::new(),
+        }
+    }
+    fn number(value: Option<&Value>) -> Option<i64> {
+        match value {
+            Some(Value::Number(n)) => n.as_i64(),
+            Some(Value::String(s)) => s.trim().parse().ok(),
+            _ => None,
+        }
+    }
+    fn list<'a>(value: &'a Value, key: &str) -> &'a [Value] {
+        value.get(key).and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    JourneyLessonBody {
+        gist: text(value.get("gist")),
+        points: list(value, "points")
+            .iter()
+            .map(|p| LessonPoint {
+                point: text(p.get("point")),
+                ayah: number(p.get("ayah")).and_then(|n| i32::try_from(n).ok()),
+                quote: text(p.get("quote")),
+            })
+            .collect(),
+        questions: list(value, "questions")
+            .iter()
+            .map(|q| LessonQuestion {
+                question: text(q.get("question")),
+                options: list(q, "options").iter().map(|o| text(Some(o))).collect(),
+                // An answer that is missing or negative becomes an index no
+                // option has, and the question is dropped by validation.
+                answer: number(q.get("answer"))
+                    .and_then(|n| usize::try_from(n).ok())
+                    .unwrap_or(usize::MAX),
+                why: text(q.get("why")),
+                quote: text(q.get("quote")),
+            })
+            .collect(),
+    }
+}
+
+/// Tidies a generated lesson and drops what cannot be trusted.
+///
+/// A point or question stays only if its `quote` is found in the tafsir. A
+/// question must also be well formed — three distinct options, one of them
+/// marked — because a malformed one is not a harder question, it is a broken
+/// screen in front of a child. None when nothing usable is left.
+fn validate_lesson(
+    mut body: JourneyLessonBody,
+    content: &str,
+    ayah_start: i32,
+    ayah_end: i32,
+) -> Option<JourneyLessonBody> {
+    body.gist = body.gist.trim().to_string();
+
+    body.points = body
+        .points
+        .into_iter()
+        .filter_map(|mut p| {
+            p.point = p.point.trim().to_string();
+            if p.point.is_empty() {
+                return None;
+            }
+            p.quote = locate_prose(content, &p.quote)?;
+            p.ayah = p.ayah.filter(|a| (ayah_start..=ayah_end).contains(a));
+            Some(p)
+        })
+        .take(LESSON_MAX_POINTS)
+        .collect();
+
+    body.questions = body
+        .questions
+        .into_iter()
+        .filter_map(|mut q| {
+            q.question = q.question.trim().to_string();
+            q.why = q.why.trim().to_string();
+            q.options = q.options.iter().map(|o| o.trim().to_string()).collect();
+            if q.question.is_empty()
+                || q.options.len() != LESSON_OPTIONS
+                || q.options.iter().any(String::is_empty)
+                || q.answer >= LESSON_OPTIONS
+            {
+                return None;
+            }
+            // Two options that read the same make the question unanswerable.
+            for (i, option) in q.options.iter().enumerate() {
+                if q.options[..i].iter().any(|other| other.to_lowercase() == option.to_lowercase()) {
+                    return None;
+                }
+            }
+            q.quote = locate_prose(content, &q.quote)?;
+            Some(q)
+        })
+        .take(LESSON_MAX_QUESTIONS)
+        .collect();
+
+    if body.gist.is_empty() || body.points.is_empty() {
+        return None;
+    }
+    Some(body)
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn ai_generate_journey_lesson(
+    state: tauri::State<'_, AiState>,
+    tafsir_name: String,
+    surah_name: String,
+    surah_number: i32,
+    ayah_start: i32,
+    ayah_end: i32,
+    // The ayahs themselves, one per line as "N. translation", so the model
+    // knows which part of a longer tafsir passage the lesson is about.
+    ayahs: String,
+    content: String,
+    language: String,
+) -> Result<JourneyLesson, AiError> {
+    generate_journey_lesson(
+        &state,
+        &tafsir_name,
+        &surah_name,
+        surah_number,
+        ayah_start,
+        ayah_end,
+        &ayahs,
+        &content,
+        &language,
+    )
+    .await
+}
+
+/// The command's body, apart from the command so a test can call it without a
+/// running app.
+#[allow(clippy::too_many_arguments)]
+async fn generate_journey_lesson(
+    state: &AiState,
+    tafsir_name: &str,
+    surah_name: &str,
+    surah_number: i32,
+    ayah_start: i32,
+    ayah_end: i32,
+    ayahs: &str,
+    content: &str,
+    language: &str,
+) -> Result<JourneyLesson, AiError> {
+    let content = prepare_tafsir(content);
+    if content.trim().is_empty() {
+        return Err(AiError::BadResponse);
+    }
+    let guidance = language_guidance(language);
+    let source_note = tafsir_source_note(language);
+    let reminder = tafsir_script_reminder(language);
+    let language = language_name(language);
+    let tafsir_name = tafsir_name.trim();
+
+    let range = if ayah_start == ayah_end {
+        format!("{surah_number}:{ayah_start}")
+    } else {
+        format!("{surah_number}:{ayah_start}-{ayah_end}")
+    };
+    let prompt = format!(
+        "Surah {surah_name}, ayahs {range}.\n\n\
+         THE AYAHS:\n{ayahs}\n\n\
+         TAFSIR of {tafsir_name}:\n{content}\n\n\
+         Write the lesson for a child about ayahs {range} only, in {language}.{reminder}",
+        ayahs = ayahs.trim(),
+    );
+
+    let (reply, model_used) = chat_with(
+        state,
+        &journey_lesson_system(language, guidance, source_note, tafsir_name),
+        &prompt,
+        4_000,
+        0.3,
+        Some(journey_lesson_schema()),
+        Some(SUMMARY_TIMEOUT),
+    )
+    .await?;
+
+    let json = extract_json(&reply).ok_or(AiError::BadResponse)?;
+    let value: serde_json::Value = serde_json::from_str(json).map_err(|_| AiError::BadResponse)?;
+    let lesson = validate_lesson(lesson_from_value(&value), &content, ayah_start, ayah_end)
+        .ok_or(AiError::BadResponse)?;
+
+    Ok(JourneyLesson { lesson, model_used })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const LESSON_TAFSIR: &str = "Allah the Exalted commands His Messenger to seek refuge with the \
+Lord of the daybreak. Ibn Abbas said that al-falaq means the morning. He is to seek refuge \
+from the evil of everything that Allah has created.";
+
+    fn lesson_value(answer: serde_json::Value, quote: &str) -> serde_json::Value {
+        serde_json::json!({
+            "gist": " We ask Allah to protect us. ",
+            "points": [
+                { "point": "Al-falaq means the morning.", "ayah": "1",
+                  "quote": "Ibn Abbas said that al-falaq means the morning" },
+                { "point": "Made up.", "ayah": 2, "quote": "this sentence is nowhere in the tafsir at all" },
+                { "point": "We ask for safety from harm.", "ayah": 9,
+                  "quote": "seek refuge from the evil of everything that Allah has created" }
+            ],
+            "questions": [
+                { "question": "What does al-falaq mean?", "options": ["The night", "The morning", "The sea"],
+                  "answer": answer, "why": "Ibn Abbas said so.", "quote": quote }
+            ]
+        })
+    }
+
+    #[test]
+    fn lesson_keeps_only_what_the_tafsir_says() {
+        let value = lesson_value(serde_json::json!(1), "al-falaq means the morning. He is to seek refuge");
+        let lesson = validate_lesson(lesson_from_value(&value), LESSON_TAFSIR, 1, 5).unwrap();
+        assert_eq!(lesson.gist, "We ask Allah to protect us.");
+        // The invented point is gone; a string ayah is read; one outside the stop is cleared.
+        assert_eq!(lesson.points.len(), 2);
+        assert_eq!(lesson.points[0].ayah, Some(1));
+        assert_eq!(lesson.points[1].ayah, None);
+        assert_eq!(lesson.questions.len(), 1);
+        assert_eq!(lesson.questions[0].answer, 1);
+    }
+
+    #[test]
+    fn lesson_drops_a_question_it_cannot_stand_behind() {
+        // The answer index points at no option.
+        let value = lesson_value(serde_json::json!(3), "Ibn Abbas said that al-falaq means the morning");
+        let lesson = validate_lesson(lesson_from_value(&value), LESSON_TAFSIR, 1, 5).unwrap();
+        assert!(lesson.questions.is_empty());
+        // The quote is not in the tafsir.
+        let value = lesson_value(serde_json::json!(1), "a quotation that the tafsir does not contain");
+        let lesson = validate_lesson(lesson_from_value(&value), LESSON_TAFSIR, 1, 5).unwrap();
+        assert!(lesson.questions.is_empty());
+        // Two options that read the same.
+        let mut value = lesson_value(serde_json::json!(1), "Ibn Abbas said that al-falaq means the morning");
+        value["questions"][0]["options"] = serde_json::json!(["The morning", "the morning", "The sea"]);
+        let lesson = validate_lesson(lesson_from_value(&value), LESSON_TAFSIR, 1, 5).unwrap();
+        assert!(lesson.questions.is_empty());
+    }
+
+    /// Writes one real lesson and prints it, for reading a prompt change by eye.
+    ///
+    /// Ignored by default: it needs a key and spends tokens. Run with
+    /// `OLLAMA_API_KEY=… LESSON_TAFSIR=tafsir.txt LESSON_AYAHS=ayahs.txt
+    /// LESSON_SPEC="113 1 5 uz Falaq" cargo test --lib journey_lesson_live -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn journey_lesson_live() {
+        let read = |key: &str| std::fs::read_to_string(std::env::var(key).unwrap()).unwrap();
+        let spec = std::env::var("LESSON_SPEC").unwrap();
+        let parts: Vec<&str> = spec.split_whitespace().collect();
+        let state = AiState::default();
+        let result = tauri::async_runtime::block_on(generate_journey_lesson(
+            &state,
+            "Ibn Kathir",
+            parts[4],
+            parts[0].parse().unwrap(),
+            parts[1].parse().unwrap(),
+            parts[2].parse().unwrap(),
+            &read("LESSON_AYAHS"),
+            &read("LESSON_TAFSIR"),
+            parts[3],
+        ));
+        match result {
+            Ok(lesson) => {
+                println!("model: {}", lesson.model_used);
+                println!("{}", serde_json::to_string_pretty(&lesson.lesson).unwrap());
+            }
+            Err(error) => panic!("no usable lesson came back: {error}"),
+        }
+    }
+
+    #[test]
+    fn lesson_with_no_grounded_point_is_refused() {
+        let value = serde_json::json!({
+            "gist": "Something.",
+            "points": [{ "point": "Invented.", "ayah": null, "quote": "words that are not in the passage anywhere" }],
+            "questions": []
+        });
+        assert!(validate_lesson(lesson_from_value(&value), LESSON_TAFSIR, 1, 5).is_none());
+    }
 
     fn item(verse_id: i32, excerpt: &str) -> TafsirQuizItem {
         TafsirQuizItem {

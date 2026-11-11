@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/ui/feedback";
 import { VerseArabic } from "@/components/journey/kit";
 import { ListenStage } from "@/components/journey/ListenScene";
+import { PrepareLessons } from "@/components/journey/PrepareLessons";
 import { ayahRangeLabel, cn } from "@/lib/utils";
 import { useT } from "@/providers/I18nProvider";
 import { stopKey } from "@/lib/journey/plan";
@@ -121,6 +122,12 @@ export function JourneySurah() {
                 </span>
               </span>
             </button>
+
+            <PrepareLessons
+              stops={data.stops}
+              surahNumber={surahNumber}
+              surahName={surah?.name_english ?? String(surahNumber)}
+            />
 
             <ol className="mt-6 space-y-3">
               {data.stops.map((stop, position) => {
