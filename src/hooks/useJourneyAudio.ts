@@ -59,6 +59,31 @@ export interface JourneyAudio {
 const WORD_LEAD_MS = 40;
 const WORD_TAIL_MS = 90;
 
+/**
+ * quran.com's word-by-word recordings: every word of the Quran said on its
+ * own, clearly, one small file each ("wbw/112_001_001.mp3" — surah, ayah,
+ * word). These are what a single word is played from. Cutting a word out of a
+ * reciter's continuous recitation never sounds right however the edges are
+ * padded: the timing data marks where a word is *sung*, which bleeds into its
+ * neighbours, and a word lifted from mid-breath starts and ends mid-sound.
+ *
+ * The reciter's own recording is still the fallback — offline with a
+ * downloaded surah, or if this host cannot be reached.
+ */
+const WORD_AUDIO_ORIGIN = "https://audio.qurancdn.com/wbw/";
+
+function wordAudioUrl(surah: number, ayah: number, position: number): string {
+  const part = (n: number) => String(n).padStart(3, "0");
+  return `${WORD_AUDIO_ORIGIN}${part(surah)}_${part(ayah)}_${part(position)}.mp3`;
+}
+
+/**
+ * Set when a word recording last failed to load, cleared when one plays. While
+ * set, words go straight to the reciter's recording instead of each waiting on
+ * a host that is not answering.
+ */
+let wordAudioDown = false;
+
 /** How long the CDN gets to produce the recording's header before the relay is tried. */
 const CDN_PATIENCE_MS = 4000;
 
@@ -75,7 +100,16 @@ interface Clip {
   resolve: (finished: boolean) => void;
 }
 
-export function useJourneyAudio(surahNumber: number | null, verseIds: number[]): JourneyAudio {
+export function useJourneyAudio(
+  surahNumber: number | null,
+  /** The passage's ayahs, in recitation order. */
+  verses: ReadonlyArray<{ id: number; ayah: number }>,
+): JourneyAudio {
+  const verseIds = useMemo(() => verses.map((verse) => verse.id), [verses]);
+  const versesRef = useRef(verses);
+  versesRef.current = verses;
+  const surahRef = useRef(surahNumber);
+  surahRef.current = surahNumber;
   const prefs = useUiPrefs();
   const reciter = useActiveReciter(prefs.reciterId);
   const reciterId = reciter?.id ?? null;
@@ -282,6 +316,38 @@ export function useJourneyAudio(surahNumber: number | null, verseIds: number[]):
     return () => cancelAnimationFrame(frame);
   }, [playing, finish]);
 
+  // --- single words -------------------------------------------------------
+
+  const wordAudioRef = useRef<HTMLAudioElement | null>(null);
+  /** Ends the word being said, if any, telling its caller how it went. */
+  const wordDoneRef = useRef<((finished: boolean) => void) | null>(null);
+
+  const endWord = useCallback((finished: boolean) => {
+    const done = wordDoneRef.current;
+    wordDoneRef.current = null;
+    if (!done) return;
+    wordAudioRef.current?.pause();
+    setPlaying(false);
+    setLoading(false);
+    setCurrentVerseId(null);
+    setCurrentWordPosition(null);
+    done(finished);
+  }, []);
+
+  useEffect(() => {
+    const audio = new Audio();
+    audio.preload = "auto";
+    wordAudioRef.current = audio;
+    return () => {
+      audio.pause();
+      audio.removeAttribute("src");
+      wordAudioRef.current = null;
+      const done = wordDoneRef.current;
+      wordDoneRef.current = null;
+      done?.(false);
+    };
+  }, []);
+
   // --- clips ---------------------------------------------------------------
 
   const start = useCallback(
@@ -289,6 +355,7 @@ export function useJourneyAudio(surahNumber: number | null, verseIds: number[]):
       const audio = audioRef.current;
       if (!audio || !sourcesRef.current.activeSrc) return Promise.resolve(false);
       // A new clip replaces the one in flight, which reports "not finished".
+      endWord(false);
       const previous = clipRef.current;
       clipRef.current = null;
       if (previous) {
@@ -310,7 +377,7 @@ export function useJourneyAudio(surahNumber: number | null, verseIds: number[]):
         begin();
       });
     },
-    [begin],
+    [begin, endWord],
   );
 
   const playVerses = useCallback(
@@ -337,10 +404,11 @@ export function useJourneyAudio(surahNumber: number | null, verseIds: number[]):
     return span && segment ? { span, segment } : null;
   }, []);
 
-  const playWord = useCallback(
+  /** The word cut out of the reciter's recording — the fallback. */
+  const playWordFromRecitation = useCallback(
     (verseId: number, position: number): Promise<boolean> => {
       const found = findWord(verseId, position);
-      if (!found) return Promise.resolve(false);
+      if (!found || !sourcesRef.current.activeSrc) return Promise.resolve(false);
       return start({
         // Padded, but never out of the ayah: the neighbouring ayah's last
         // syllable is not part of this word.
@@ -353,15 +421,86 @@ export function useJourneyAudio(surahNumber: number | null, verseIds: number[]):
     [findWord, start],
   );
 
+  const playWord = useCallback(
+    (verseId: number, position: number): Promise<boolean> => {
+      const audio = wordAudioRef.current;
+      const ayah = versesRef.current.find((verse) => verse.id === verseId)?.ayah;
+      const surah = surahRef.current;
+      if (!audio || ayah === undefined || surah === null || wordAudioDown || !navigator.onLine) {
+        return playWordFromRecitation(verseId, position);
+      }
+
+      // Whatever is sounding stops: a recital, or the word before this one.
+      endWord(false);
+      const previous = clipRef.current;
+      clipRef.current = null;
+      if (previous) {
+        audioRef.current?.pause();
+        previous.resolve(false);
+        setPlaying(false);
+      }
+
+      return new Promise<boolean>((resolve) => {
+        let settled = false;
+        const cleanup = () => {
+          audio.removeEventListener("playing", onPlaying);
+          audio.removeEventListener("ended", onEnded);
+          audio.removeEventListener("error", onError);
+        };
+        const settle = (finished: boolean) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve(finished);
+        };
+        const onPlaying = () => {
+          wordAudioDown = false;
+          setLoading(false);
+          setPlaying(true);
+        };
+        const onEnded = () => endWord(true);
+        const onError = () => {
+          // Not reachable (or no such file): say it from the recitation
+          // instead, and stop asking this host until something works again.
+          wordAudioDown = true;
+          wordDoneRef.current = null;
+          settled = true;
+          cleanup();
+          setLoading(false);
+          void playWordFromRecitation(verseId, position).then(resolve);
+        };
+        audio.addEventListener("playing", onPlaying);
+        audio.addEventListener("ended", onEnded);
+        audio.addEventListener("error", onError);
+        wordDoneRef.current = settle;
+        setCurrentVerseId(verseId);
+        setCurrentWordPosition(position);
+        setLoading(true);
+        audio.src = wordAudioUrl(surah, ayah, position);
+        void audio.play().catch(() => {
+          // Refused, or replaced before it began. A load failure arrives as
+          // an error event and is handled there.
+          if (wordDoneRef.current === settle && !audio.error) endWord(false);
+        });
+      });
+    },
+    [endWord, playWordFromRecitation],
+  );
+
   const hasWord = useCallback(
-    (verseId: number, position: number) => findWord(verseId, position) !== null,
+    (verseId: number, position: number) =>
+      // Every word has a recording of its own; the reciter's timing is only
+      // needed when that cannot be reached.
+      (!wordAudioDown && navigator.onLine && versesRef.current.some((v) => v.id === verseId)) ||
+      (Boolean(sourcesRef.current.activeSrc) && findWord(verseId, position) !== null),
     [findWord],
   );
 
   const stop = useCallback(() => {
     audioRef.current?.pause();
     if (clipRef.current) finish(false);
-  }, [finish]);
+    endWord(false);
+  }, [finish, endWord]);
 
   const setRate = useCallback((next: number) => {
     setRateState(next);

@@ -100,6 +100,16 @@ check("a lesson opens by listening and closes by reciting", () => {
   }
 });
 
+check("the tafsir scene is planned only when asked for, just before reciting", () => {
+  const verses = surah(105, [5, 5, 4, 4, 3]);
+  const stop = planStops(verses)[0]!;
+  const without = planLesson(stop, verses, seededRng(3)).map((s) => s.kind);
+  const withTafsir = planLesson(stop, verses, seededRng(3), { tafsir: true }).map((s) => s.kind);
+  assert.ok(!without.includes("understand"));
+  assert.equal(withTafsir.at(-2), "understand");
+  assert.equal(withTafsir.at(-1), "recite");
+});
+
 check("the same seed gives the same lesson; scenes only reference the surah", () => {
   const verses = surah(93, [2, 3, 5, 6, 4, 4, 4, 4, 5, 5, 5]);
   const stop = planStops(verses)[1]!;

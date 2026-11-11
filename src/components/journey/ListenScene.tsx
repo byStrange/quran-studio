@@ -168,7 +168,7 @@ export function ListenStage({
   const tapWord = (verse: JourneyVerse, position: number) => {
     if (running) return;
     setRevealed((current) => new Set(current).add(`${verse.id}:${position}`));
-    if (audio.available) void audio.playWord(verse.id, position);
+    if (audio.hasWord(verse.id, position)) void audio.playWord(verse.id, position);
   };
 
   return (
@@ -271,7 +271,7 @@ export function ListenStage({
                     <span
                       dir="auto"
                       className={cn(
-                        "max-w-[9.5rem] text-[0.875rem] font-medium leading-snug transition-all duration-300",
+                        "mt-1 max-w-[9.5rem] text-[0.875rem] font-medium leading-snug transition-all duration-300",
                         active ? "text-gold-soft-fg" : "text-fg-muted",
                         // Invisible rather than absent until it is revealed,
                         // so the line is laid out once and a meaning arriving
@@ -292,7 +292,7 @@ export function ListenStage({
               lang={verse.translationTag}
               data-selectable
               className={cn(
-                "mx-auto mt-4 max-w-xl text-center text-[1.0625rem] leading-relaxed text-fg transition-all duration-500",
+                "mx-auto mt-7 max-w-xl text-center text-[1.0625rem] leading-relaxed text-fg transition-all duration-500",
                 finished.has(verse.id) ? "opacity-100" : "translate-y-1 opacity-0",
               )}
               aria-hidden={!finished.has(verse.id)}

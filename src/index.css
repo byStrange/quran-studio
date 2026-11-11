@@ -524,6 +524,11 @@
     line-height: 2;
     font-size: clamp(1.85rem, 1.2rem + 2.6vw, 2.75rem);
     letter-spacing: 0;
+    /* Amiri Quran draws below its line box: the tails of ن ي ح and the marks
+       under a word hang past it, into whatever is stacked beneath — which in
+       a lesson is always that word's meaning. Room is reserved here, in `em`
+       so it grows with the text, rather than as a gap on each thing below. */
+    padding-bottom: 0.38em;
   }
 
   /* The same, on a tile or a card. */
@@ -533,6 +538,7 @@
     line-height: 1.9;
     font-size: clamp(1.45rem, 1.2rem + 1vw, 1.8rem);
     letter-spacing: 0;
+    padding-bottom: 0.3em;
   }
 
   /* Anything in a lesson that is tapped to answer. The thick bottom edge is

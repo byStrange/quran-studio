@@ -994,6 +994,22 @@ no prose, and the meaning tied to the *sound* of each word.
   ended. It gives the CDN four seconds before trying the relay: on a network
   where the CDN hangs rather than refuses, the audio element waits most of a
   minute to report an error.
+- **Single words are played from quran.com's word-by-word recordings**
+  (`audio.qurancdn.com/wbw/SSS_AAA_WWW.mp3`), not cut from the reciter. A word
+  lifted out of continuous recitation starts and ends mid-sound however it is
+  padded. The reciter's recording remains the fallback (offline with a
+  downloaded surah, or the host unreachable). The files are served publicly
+  and used by quran.com's own apps, but no licence is published for them;
+  quran.com is credited on the About screen like the other sources.
+- **The tafsir scene reuses the reader's AI tafsir summaries** rather than
+  generating anything of its own. Each tafsir entry a stop touches is condensed
+  by the existing backend command (gist, key points, recall questions, checked
+  against the entry's text and cached for every reader in
+  `tafsir_ai_summary`); Journey shows the points one tap at a time and turns
+  the questions into something to answer. Wrong choices are the right answers
+  to the lesson's other questions, so nothing false is shown even as a decoy.
+  Where no summary is cached and there is no AI on the device, the scene steps
+  aside silently.
 - **Progress lives in `profiles.ui_prefs.journey`**, mirrored in localStorage
   and merged (best result per stop wins). No migration, follows the account
   across devices, and a stop finished offline is not lost. The cost is that it

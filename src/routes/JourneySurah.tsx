@@ -6,7 +6,7 @@
  * plays, run across the entire surah, which is what a child will want to show
  * someone once they have finished it.
  */
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Headphones, Star, X } from "lucide-react";
 import { useJourneyProgress, useJourneySurah, type JourneySurah as SurahData } from "@/hooks/useJourney";
@@ -214,8 +214,7 @@ function WatchSurah({
   onClose: () => void;
 }) {
   const t = useT();
-  const verseIds = useMemo(() => data.verses.map((verse) => verse.id), [data.verses]);
-  const audio = useJourneyAudio(surahNumber, verseIds);
+  const audio = useJourneyAudio(surahNumber, data.verses);
   useReadingTimer(data.verses[0]?.ruku ?? null);
 
   return (
