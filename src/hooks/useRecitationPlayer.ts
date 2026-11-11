@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { mirrorAudioUrl } from "@/lib/audioMirror";
 import type { RecitationTiming, RepeatMode } from "@/lib/types";
 
 export interface RecitationPlayer {
@@ -28,6 +29,21 @@ export interface RecitationPlayer {
 }
 
 /**
+ * Set once the CDN has failed and the relay worked around it, so later surahs
+ * go straight to the relay rather than each waiting on a connection that is
+ * going to be refused (Chromium takes about five seconds to give up on one).
+ * Cleared again if the relay fails and the CDN then works, so neither an
+ * outage of the relay nor moving to an unblocked network strands the reader.
+ * Module-level so it lasts the session rather than one reader.
+ */
+let preferRelay = false;
+
+const LOAD_FAILED = "Couldn't load this recitation. Check your connection and try again.";
+
+/** MediaError.MEDIA_ERR_DECODE: the file arrived but is broken — the relay serves the same bytes. */
+const MEDIA_ERR_DECODE = 3;
+
+/**
  * Plays a passage out of one continuous surah recording.
  *
  * The recording is the whole surah, but a lesson is a ruku, so "the passage"
@@ -50,6 +66,10 @@ export function useRecitationPlayer({
   repeatUnmemorizedVerseIds,
   onVerseChange,
 }: {
+  /**
+   * The recording: a CDN URL, or a local file. A CDN URL that fails to load
+   * is retried through the relay (see `mirrorAudioUrl`).
+   */
   src: string | null;
   /**
    * Names the recording `src` points at, independent of where it is served
@@ -77,6 +97,45 @@ export function useRecitationPlayer({
   const [currentMs, setCurrentMs] = useState(0);
   const [currentVerseId, setCurrentVerseId] = useState<number | null>(null);
   const [currentWordPosition, setCurrentWordPosition] = useState<number | null>(null);
+
+  // --- which source --------------------------------------------------------
+
+  // Which `src` each route has already failed for. Keyed by `src` so a new
+  // surah starts with a clean slate.
+  const [cdnFailedFor, setCdnFailedFor] = useState<string | null>(null);
+  const [relayFailedFor, setRelayFailedFor] = useState<string | null>(null);
+  // Bumped by pressing play after a failed load, to reload the same source.
+  const [retry, setRetry] = useState(0);
+  const relay = useMemo(() => mirrorAudioUrl(src), [src]);
+  const useRelay =
+    relay !== null && relayFailedFor !== src && (cdnFailedFor === src || preferRelay);
+  const activeSrc = useRelay ? relay : src;
+
+  // Read by the element's handlers, which are attached once.
+  const sourcesRef = useRef({ src, relay, activeSrc, cdnFailedFor, relayFailedFor });
+  sourcesRef.current = { src, relay, activeSrc, cdnFailedFor, relayFailedFor };
+  // Set between one route failing and the other being loaded, so the failure
+  // is not reported and a play that was under way carries on.
+  const switchingRef = useRef(false);
+  // Bumped whenever a route fails over. A `play()` promise rejects a moment
+  // after the error event that caused it — sometimes after React has already
+  // loaded the other route — so a rejection is only acted on if no failover
+  // has happened since that `play()` was called.
+  const failoverRef = useRef(0);
+  const playAttempt = useCallback((onRejected: () => void) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const attempt = failoverRef.current;
+    void audio.play().catch(() => {
+      if (failoverRef.current === attempt) onRejected();
+    });
+  }, []);
+  // Whether the current source has delivered metadata. An error after that is
+  // a stream dropping mid-recitation, not a host that can't be reached, and
+  // switching routes would not be the fix.
+  const metadataRef = useRef(false);
+  const playingRef = useRef(false);
+  playingRef.current = playing;
 
   /** The passage's timings in play order, with any missing ayah dropped. */
   const ordered = useMemo(() => {
@@ -129,6 +188,10 @@ export function useRecitationPlayer({
     audioRef.current = audio;
 
     const onLoaded = () => {
+      metadataRef.current = true;
+      const { src: cdn, relay: alternate, activeSrc: current, cdnFailedFor: cdnFailed } =
+        sourcesRef.current;
+      if (alternate !== null && current === alternate && cdnFailed === cdn) preferRelay = true;
       setLoading(false);
       const pending = pendingSeekRef.current;
       if (pending !== null) {
@@ -138,8 +201,37 @@ export function useRecitationPlayer({
     };
     const onWaiting = () => setLoading(true);
     const onPlaying = () => setLoading(false);
-    const onError = () =>
-      setError("Couldn't load this recitation. Check your connection and try again.");
+    const onError = () => {
+      const {
+        src: cdn,
+        relay: alternate,
+        activeSrc: current,
+        cdnFailedFor: cdnFailed,
+        relayFailedFor: relayFailed,
+      } = sourcesRef.current;
+      const unreachable = !metadataRef.current && audio.error?.code !== MEDIA_ERR_DECODE;
+      if (unreachable && cdn !== null && alternate !== null) {
+        // The CDN failed: try the relay, unless it has already failed too.
+        if (current === cdn && relayFailed !== cdn) {
+          switchingRef.current = true;
+          failoverRef.current += 1;
+          setCdnFailedFor(cdn);
+          return;
+        }
+        // The relay failed without the CDN having been tried for this surah
+        // (it was skipped on the session's say-so): try the CDN after all.
+        if (current === alternate && cdnFailed !== cdn) {
+          preferRelay = false;
+          switchingRef.current = true;
+          failoverRef.current += 1;
+          setRelayFailedFor(cdn);
+          return;
+        }
+      }
+      switchingRef.current = false;
+      setLoading(false);
+      setError(LOAD_FAILED);
+    };
 
     audio.addEventListener("loadedmetadata", onLoaded);
     audio.addEventListener("waiting", onWaiting);
@@ -163,8 +255,12 @@ export function useRecitationPlayer({
   const loadedRef = useRef<{ sourceKey: string | undefined; start: number } | null>(null);
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !src) return;
+    if (!audio || !activeSrc) return;
     const previous = loadedRef.current;
+    // A play that was cut short by one route failing should resume on the
+    // other.
+    const resume = switchingRef.current && playingRef.current;
+    switchingRef.current = false;
     loadedRef.current = { sourceKey, start };
     setError(null);
 
@@ -175,15 +271,16 @@ export function useRecitationPlayer({
       previous.sourceKey === sourceKey &&
       previous.start === start
     ) {
-      const wasPlaying = !audio.paused;
+      const wasPlaying = !audio.paused || resume;
       // Before metadata, currentTime is a meaningless 0 and the real target
       // is the seek still waiting for it (the passage start, or the reader's).
       if (audio.readyState > 0) pendingSeekRef.current = audio.currentTime * 1000;
-      audio.src = src;
+      metadataRef.current = false;
+      audio.src = activeSrc;
       audio.load();
       if (wasPlaying) {
         setLoading(true);
-        void audio.play().catch(() => setPlaying(false));
+        playAttempt(() => setPlaying(false));
       }
       return;
     }
@@ -191,13 +288,14 @@ export function useRecitationPlayer({
     setLoading(true);
     setPlaying(false);
     audio.pause();
-    audio.src = src;
+    metadataRef.current = false;
+    audio.src = activeSrc;
     audio.load();
     pendingSeekRef.current = start;
     setCurrentMs(start);
     setCurrentVerseId(null);
     setCurrentWordPosition(null);
-  }, [src, start, sourceKey]);
+  }, [activeSrc, start, sourceKey, retry, playAttempt]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -340,12 +438,26 @@ export function useRecitationPlayer({
     } else if (ms < from || ms >= to) {
       seekMs(from);
     }
-    void audio.play().catch(() => {
-      setError("Playback was blocked. Try pressing play again.");
+    // After a failed load, pressing play is the "try again" the error asks
+    // for: forget which routes failed and have the source effect load afresh
+    // and resume, rather than calling play() on an element that can only
+    // reject. Loading here directly would race that effect, which may be
+    // about to swap routes and would abort this play.
+    if (audio.error) {
+      setCdnFailedFor(null);
+      setRelayFailedFor(null);
+      switchingRef.current = true;
+      failoverRef.current += 1;
+      setRetry((n) => n + 1);
+      setPlaying(true);
+      return;
+    }
+    playAttempt(() => {
+      setError(audio.error ? LOAD_FAILED : "Playback was blocked. Try pressing play again.");
       setPlaying(false);
     });
     setPlaying(true);
-  }, [available, seekMs, unmemorizedSpans]);
+  }, [available, seekMs, unmemorizedSpans, playAttempt]);
 
   const pause = useCallback(() => {
     audioRef.current?.pause();
@@ -367,10 +479,10 @@ export function useRecitationPlayer({
       seekMs(span.startMs);
       const audio = audioRef.current;
       if (!audio) return;
-      void audio.play().catch(() => setPlaying(false));
+      playAttempt(() => setPlaying(false));
       setPlaying(true);
     },
-    [seekMs],
+    [seekMs, playAttempt],
   );
 
   const step = useCallback(

@@ -11,6 +11,7 @@
 //! which source to use by asking whether a local copy exists.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -24,6 +25,11 @@ use tokio::sync::watch;
 /// frontend, so without this check it would fetch (and write to disk) anything
 /// it was handed.
 const RECITATION_HOST: &str = "download.quranicaudio.com";
+
+/// A relay serving the same paths as `RECITATION_HOST` (`workers/audio-proxy`),
+/// for networks that block the CDN by name. Never accepted from the frontend:
+/// it is only reached by rewriting an allowed CDN URL after the CDN fails.
+const MIRROR_HOST: &str = "audio.bombaclat.uz";
 
 /// How long to wait for a connection before giving up.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -49,6 +55,12 @@ pub enum AudioError {
     NoDataDir,
     #[error("network error: {0}")]
     Http(String),
+    /// No response at all — refused, reset, timed out connecting. Kept apart
+    /// from `Http` because it is the one failure the relay can fix: a network
+    /// that blocks the CDN fails here, while a stream that drops mid-download
+    /// would fail the same way through the relay.
+    #[error("network error: {0}")]
+    Unreachable(String),
     #[error("the server returned {0}")]
     Status(u16),
     #[error("filesystem error: {0}")]
@@ -101,6 +113,21 @@ fn is_allowed_url(url: &reqwest::Url) -> bool {
     url.scheme() == "https"
         && url.host_str() == Some(RECITATION_HOST)
         && matches!(url.port(), None | Some(443))
+}
+
+/// Set once the CDN was unreachable and the relay worked, so later downloads
+/// go to the relay first instead of waiting out the CDN's connect timeout
+/// again. Cleared when the relay is the one that can't be reached.
+static PREFER_RELAY: AtomicBool = AtomicBool::new(false);
+
+/// The relay's copy of an allowed CDN URL.
+fn mirror_url(url: &reqwest::Url) -> Option<reqwest::Url> {
+    if !is_allowed_url(url) {
+        return None;
+    }
+    let mut mirror = url.clone();
+    mirror.set_host(Some(MIRROR_HOST)).ok()?;
+    Some(mirror)
 }
 
 /// The HTTP client shared by every download.
@@ -279,7 +306,35 @@ pub async fn recitation_download(
     }
 
     let part = path.with_extension("part");
-    match fetch_to_file(&app, &id, url, &part, &path, &mut cancel).await {
+    // Two routes to the same file. Only a failure to connect moves on to the
+    // other one: an HTTP status means the host answered, and a drop
+    // mid-download is the network, which the other route shares. The `.part`
+    // file is truncated by a second attempt, so nothing from the first leaks
+    // into it.
+    let relay = mirror_url(&url);
+    let relay_first = relay.is_some() && PREFER_RELAY.load(Ordering::Relaxed);
+    let routes: Vec<(reqwest::Url, bool)> = match relay {
+        Some(relay) if relay_first => vec![(relay, true), (url, false)],
+        Some(relay) => vec![(url, false), (relay, true)],
+        None => vec![(url, false)],
+    };
+    let mut result = Err(AudioError::DisallowedUrl);
+    for (route, is_relay) in routes {
+        result = fetch_to_file(&app, &id, route, &part, &path, &mut cancel).await;
+        match &result {
+            Err(AudioError::Unreachable(_)) => {
+                if is_relay {
+                    PREFER_RELAY.store(false, Ordering::Relaxed);
+                }
+            }
+            Ok(_) if is_relay && !relay_first => {
+                PREFER_RELAY.store(true, Ordering::Relaxed);
+                break;
+            }
+            _ => break,
+        }
+    }
+    match result {
         Ok(received) => {
             let _ = app.emit(
                 "recitation-download-progress",
@@ -318,7 +373,7 @@ async fn fetch_to_file(
 ) -> Result<u64, AudioError> {
     let request = http_client()?.get(url).send();
     let response = tokio::select! {
-        response = request => response.map_err(|e| AudioError::Http(e.to_string()))?,
+        response = request => response.map_err(|e| AudioError::Unreachable(e.to_string()))?,
         _ = cancelled(cancel) => return Err(AudioError::Cancelled),
     };
 
@@ -411,5 +466,35 @@ impl Drop for CancelGuard<'_> {
         if let Ok(mut cancels) = self.state.cancels.lock() {
             cancels.remove(&self.id);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn url(s: &str) -> reqwest::Url {
+        reqwest::Url::parse(s).unwrap()
+    }
+
+    #[test]
+    fn mirror_keeps_the_path_including_double_slashes() {
+        let mirrored = mirror_url(&url("https://download.quranicaudio.com/quran/yasser_ad-dussary//001.mp3"));
+        assert_eq!(
+            mirrored.unwrap().as_str(),
+            "https://audio.bombaclat.uz/quran/yasser_ad-dussary//001.mp3"
+        );
+    }
+
+    #[test]
+    fn mirror_only_rewrites_cdn_urls() {
+        assert!(mirror_url(&url("https://example.com/qdc/a/b/1.mp3")).is_none());
+        assert!(mirror_url(&url("http://download.quranicaudio.com/qdc/a/b/1.mp3")).is_none());
+        assert!(mirror_url(&url("https://audio.bombaclat.uz/qdc/a/b/1.mp3")).is_none());
+    }
+
+    #[test]
+    fn frontend_cannot_name_the_mirror_directly() {
+        assert!(!is_allowed_url(&url("https://audio.bombaclat.uz/qdc/a/b/1.mp3")));
     }
 }

@@ -1,0 +1,9 @@
+{
+  // Relays recitation audio from download.quranicaudio.com through Cloudflare,
+  // for networks that block that host. Deploy: `npx wrangler deploy` from here.
+  "name": "quran-studio-audio-proxy",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": false,
+  "routes": [{ "pattern": "audio.bombaclat.uz", "custom_domain": true }]
+}
