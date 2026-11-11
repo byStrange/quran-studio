@@ -172,7 +172,7 @@ export function selectedVerseTranslations(
   language: Language,
 ): RenderedTranslation[] {
   const english = translationEdition("en")!;
-  return resolveTranslationKeys(keys, language).map((key) => {
+  const rendered = resolveTranslationKeys(keys, language).map((key) => {
     const edition = translationEdition(key)!;
     const own = verse[edition.column];
     // The edition that actually supplied the text — the selected one when it
@@ -184,6 +184,18 @@ export function selectedVerseTranslations(
       tag: source.tag,
       text: own || verse.translation_en,
     };
+  });
+  // A fallback that lands on text already shown is dropped rather than printed
+  // twice: with Saheeh International selected beside an edition whose import
+  // has not reached this verse (or two such editions), each would otherwise
+  // repeat the same English block under the same label. The first is always
+  // kept, so the result is still never empty.
+  const seen = new Set<string>();
+  return rendered.filter((tr) => {
+    const id = `${tr.translator}\u0000${tr.text}`;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
   });
 }
 

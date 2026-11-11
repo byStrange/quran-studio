@@ -15,6 +15,13 @@ import { loadManifest } from "./lib/offline/packs";
 // Which offline packs are installed, read before the first content query asks.
 void loadManifest();
 
+// The Quran face, fetched now rather than when the first ayah is laid out.
+// Its unicode-range keeps it from loading until Arabic is on screen, so a
+// session that went straight to a reader set the ayahs in the fallback Arabic
+// font and reflowed them all a moment later when Amiri swapped in (140px on
+// Ayat al-Kursi alone). Started here, it is in before any ayah has loaded.
+void document.fonts.load('1em "Amiri Quran"', "ب").catch(() => {});
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <PersistQueryClientProvider
