@@ -207,6 +207,13 @@ export type Scene =
   | { kind: "which"; rounds: Array<{ verseId: number; choiceVerseIds: number[] }> }
   /** Put the stop's ayahs back in order. */
   | { kind: "order"; verseIds: number[] }
+  /**
+   * What the passage teaches, drawn from the tafsir: a few points revealed one
+   * at a time, then questions about them. Carries no content — the scene
+   * fetches it — because it is written by the AI from the tafsir and may not
+   * exist yet when the lesson is planned.
+   */
+  | { kind: "understand" }
   /** The reader recites; the meaning follows their own pace. */
   | { kind: "recite" };
 
@@ -303,7 +310,12 @@ function pick<T>(items: readonly T[], count: number, rng: Rng): T[] {
  * `surah` is the whole surah, which is where "which ayah says this?" finds
  * wrong answers once the stop's own ayahs run out.
  */
-export function planLesson(stop: Stop, surah: readonly JourneyVerse[], rng: Rng): Scene[] {
+export function planLesson(
+  stop: Stop,
+  surah: readonly JourneyVerse[],
+  rng: Rng,
+  options: { tafsir?: boolean } = {},
+): Scene[] {
   const scenes: Scene[] = [{ kind: "listen" }];
   const teachable = teachableWords(stop);
   const groups = wordGroups(teachable);
@@ -337,6 +349,10 @@ export function planLesson(stop: Stop, surah: readonly JourneyVerse[], rng: Rng)
   if (stop.verses.length >= 3) {
     scenes.push({ kind: "order", verseIds: scrambled(stop.verses.map((v) => v.id), rng) });
   }
+
+  // After the words and the ayahs, and before reciting: the recital that ends
+  // the lesson should be the first one made knowing what the passage is about.
+  if (options.tafsir) scenes.push({ kind: "understand" });
 
   scenes.push({ kind: "recite" });
   return scenes;

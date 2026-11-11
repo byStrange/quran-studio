@@ -994,6 +994,30 @@ no prose, and the meaning tied to the *sound* of each word.
   ended. It gives the CDN four seconds before trying the relay: on a network
   where the CDN hangs rather than refuses, the audio element waits most of a
   minute to report an error.
+- **Single words are played from quran.com's word-by-word recordings**
+  (`audio.qurancdn.com/wbw/SSS_AAA_WWW.mp3`), not cut from the reciter. A word
+  lifted out of continuous recitation starts and ends mid-sound however it is
+  padded. The reciter's recording remains the fallback (offline with a
+  downloaded surah, or the host unreachable). The files are served publicly
+  and used by quran.com's own apps, but no licence is published for them;
+  quran.com is credited on the About screen like the other sources.
+- **The tafsir scene is written for a child, from the tafsir, and held to it.**
+  `ai_generate_journey_lesson` gives the model the stop's ayahs and every
+  tafsir entry that touches them, and asks for a one-sentence gist, three or
+  four points and three multiple-choice questions in a child's words. Each
+  point and question must carry a `quote` copied from the tafsir; the backend
+  drops any whose quote it cannot find (`validate_lesson`), and any question
+  that is not three distinct options with one marked. This is the only form
+  of the tafsir its reader sees, so the grounding rule is the same one the
+  summary's narrations live by, applied to everything. Wrong options are
+  asked to be about a different thing rather than a false belief.
+- **Lessons are cached per stop in `journey_ai_lesson`** (edition, surah, ayah
+  range, language), shared by every reader, so one prepared on a device with
+  the AI is there on a child's phone without it. The surah page has a "prepare
+  all" control for exactly that. Where there is no cached lesson and no AI,
+  the scene borrows the study reader's cached tafsir summary if one exists
+  (written for an adult; better than nothing) and otherwise steps aside. The
+  same fallback covers a database the migration has not reached.
 - **Progress lives in `profiles.ui_prefs.journey`**, mirrored in localStorage
   and merged (best result per stop wins). No migration, follows the account
   across devices, and a stop finished offline is not lost. The cost is that it

@@ -11,9 +11,10 @@ import { Link, useParams } from "react-router-dom";
 import { X } from "lucide-react";
 import { useJourneyProgress, useJourneySurah, type JourneySurah } from "@/hooks/useJourney";
 import { useJourneyAudio } from "@/hooks/useJourneyAudio";
+import { useJourneyInsight, useJourneyTafsir } from "@/hooks/useJourneyInsight";
 import { useUiPrefs } from "@/hooks/useProfile";
 import { useSetWordsStatus, useWordProgress } from "@/hooks/useProgress";
-import { useSurahs } from "@/hooks/useQuranData";
+import { useSurahs, useTafsirEditions } from "@/hooks/useQuranData";
 import { useReadingTimer } from "@/hooks/useReadingTimer";
 import { useAuth } from "@/providers/AuthProvider";
 import { useT } from "@/providers/I18nProvider";
@@ -39,6 +40,7 @@ import { HearScene } from "@/components/journey/HearScene";
 import { BuildScene } from "@/components/journey/BuildScene";
 import { WhichScene } from "@/components/journey/WhichScene";
 import { OrderScene } from "@/components/journey/OrderScene";
+import { UnderstandScene } from "@/components/journey/UnderstandScene";
 import { ReciteScene } from "@/components/journey/ReciteScene";
 import { RewardScreen } from "@/components/journey/RewardScreen";
 
@@ -58,9 +60,14 @@ export function JourneyLesson() {
   const { data, isLoading, error, refetch } = useJourneySurah(valid ? surahNumber : null);
   // A replay is a fresh lesson: new shuffles, a clean score.
   const [attempt, setAttempt] = useState(0);
+  // Whether there is a tafsir to draw on is settled before the lesson starts:
+  // a scene joining the plan halfway through would move the progress bar
+  // under the child.
+  const editions = useTafsirEditions();
+  const tafsir = useJourneyTafsir();
 
   if (!valid) return <NotFound />;
-  if (isLoading || (!data && !error)) {
+  if (isLoading || (!data && !error) || editions.isPending) {
     return (
       <div className="journey-stage grid h-full place-items-center">
         <LoadingBlock label={t("common.loading")} />
@@ -84,6 +91,7 @@ export function JourneyLesson() {
       key={`${stopKey(stop)}:${attempt}`}
       surah={data}
       stop={stop}
+      hasTafsir={tafsir !== null}
       onReplay={() => setAttempt((n) => n + 1)}
     />
   );
@@ -108,10 +116,13 @@ function NotFound() {
 function LessonPlayer({
   surah,
   stop,
+  hasTafsir,
   onReplay,
 }: {
   surah: JourneySurah;
   stop: Stop;
+  /** There is a tafsir in the reader's language for the lesson to draw on. */
+  hasTafsir: boolean;
   onReplay: () => void;
 }) {
   const t = useT();
@@ -123,15 +134,18 @@ function LessonPlayer({
   // reading and so toward the streak, the same as the reader does.
   useReadingTimer(stop.verses[0]?.ruku ?? null);
 
-  const verseIds = useMemo(() => stop.verses.map((verse) => verse.id), [stop]);
-  const audio = useJourneyAudio(stop.surah, verseIds);
+  const audio = useJourneyAudio(stop.surah, stop.verses);
   const index = useMemo(() => indexVerses(surah.verses), [surah.verses]);
 
   // Drawn once per mount: the plan must not reshuffle on a re-render.
   const [seed] = useState(() => Math.floor(Math.random() * 0x7fffffff));
+  // The tafsir scene's content is asked for now, so that by the time the
+  // lesson reaches the scene — several minutes in — the summary has usually
+  // been fetched, or written.
+  useJourneyInsight(stop);
   const scenes = useMemo(
-    () => planLesson(stop, surah.verses, seededRng(seed)),
-    [stop, surah.verses, seed],
+    () => planLesson(stop, surah.verses, seededRng(seed), { tafsir: hasTafsir }),
+    [stop, surah.verses, seed, hasTafsir],
   );
 
   const [step, setStep] = useState(0);
@@ -281,6 +295,8 @@ function SceneView({ scene, ...rest }: Omit<SceneProps, "scene"> & { scene: Scen
       return <WhichScene scene={scene} {...rest} />;
     case "order":
       return <OrderScene scene={scene} {...rest} />;
+    case "understand":
+      return <UnderstandScene scene={scene} {...rest} />;
     case "recite":
       return <ReciteScene scene={scene} {...rest} />;
   }

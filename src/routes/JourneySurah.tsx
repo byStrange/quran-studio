@@ -6,7 +6,7 @@
  * plays, run across the entire surah, which is what a child will want to show
  * someone once they have finished it.
  */
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Headphones, Star, X } from "lucide-react";
 import { useJourneyProgress, useJourneySurah, type JourneySurah as SurahData } from "@/hooks/useJourney";
@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/ui/feedback";
 import { VerseArabic } from "@/components/journey/kit";
 import { ListenStage } from "@/components/journey/ListenScene";
+import { PrepareLessons } from "@/components/journey/PrepareLessons";
 import { ayahRangeLabel, cn } from "@/lib/utils";
 import { useT } from "@/providers/I18nProvider";
 import { stopKey } from "@/lib/journey/plan";
@@ -122,6 +123,12 @@ export function JourneySurah() {
               </span>
             </button>
 
+            <PrepareLessons
+              stops={data.stops}
+              surahNumber={surahNumber}
+              surahName={surah?.name_english ?? String(surahNumber)}
+            />
+
             <ol className="mt-6 space-y-3">
               {data.stops.map((stop, position) => {
                 const record = state.stops[stopKey(stop)];
@@ -214,8 +221,7 @@ function WatchSurah({
   onClose: () => void;
 }) {
   const t = useT();
-  const verseIds = useMemo(() => data.verses.map((verse) => verse.id), [data.verses]);
-  const audio = useJourneyAudio(surahNumber, verseIds);
+  const audio = useJourneyAudio(surahNumber, data.verses);
   useReadingTimer(data.verses[0]?.ruku ?? null);
 
   return (

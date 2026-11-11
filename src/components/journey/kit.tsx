@@ -218,10 +218,11 @@ export function SpeakerButton({
 /**
  * Whether a word can be heard on its own.
  *
- * False without a recording, and for the occasional word the reciter's timing
- * data has no span for. Scenes use it to decide between "hear it" and a silent
- * way of asking the same question — never to hide a word.
+ * Nearly always: each word has its own recording, and failing that it is cut
+ * from the reciter's. False only with neither — offline without a downloaded
+ * surah. Scenes use it to decide between "hear it" and a silent way of asking
+ * the same question — never to hide a word.
  */
 export function canHear(audio: JourneyAudio, verse: JourneyVerse, word: JourneyWord): boolean {
-  return audio.available && audio.hasWord(verse.id, word.position);
+  return audio.hasWord(verse.id, word.position);
 }
