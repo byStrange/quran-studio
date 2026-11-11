@@ -4,6 +4,7 @@ import { Dialog } from "radix-ui";
 import {
   BookOpen,
   BookMarked,
+  Compass,
   Flame,
   GraduationCap,
   Info,
@@ -35,6 +36,7 @@ interface NavItem {
 const primaryNav = (t: TFunction): NavItem[] => [
   { to: "/", label: t("nav.dashboard"), icon: <LayoutDashboard className="size-[1.125rem]" /> },
   { to: "/browse", label: t("nav.read"), icon: <BookOpen className="size-[1.125rem]" /> },
+  { to: "/journey", label: t("nav.journey"), icon: <Compass className="size-[1.125rem]" /> },
   { to: "/vocabulary", label: t("nav.vocabulary"), icon: <Library className="size-[1.125rem]" /> },
   { to: "/quiz", label: t("nav.quiz"), icon: <GraduationCap className="size-[1.125rem]" /> },
   {
@@ -404,7 +406,10 @@ export function AppShell({ children }: { children: ReactNode }) {
    * so the shell's bar on top of it would be a second row of chrome above the
    * Quran saying only the app's name. The edge swipe still reaches the menu.
    */
-  const immersive = location.pathname.startsWith("/read/");
+  // A Journey surah and its lessons draw their own way back as well; the map
+  // itself is an ordinary page and keeps the bar.
+  const immersive =
+    location.pathname.startsWith("/read/") || location.pathname.startsWith("/journey/");
 
   // Tapping a destination should leave the menu behind.
   useEffect(() => setNavOpen(false), [location.pathname]);

@@ -11,6 +11,9 @@ import { SurahReader } from "./routes/SurahReader";
 import { Vocabulary } from "./routes/Vocabulary";
 import { Quiz } from "./routes/Quiz";
 import { Memorization } from "./routes/Memorization";
+import { Journey } from "./routes/Journey";
+import { JourneySurah } from "./routes/JourneySurah";
+import { JourneyLesson } from "./routes/JourneyLesson";
 import { Settings } from "./routes/Settings";
 import { GlossContribute } from "./routes/GlossContribute";
 import { About } from "./routes/About";
@@ -42,6 +45,9 @@ export default function App() {
             <Route path="/vocabulary" element={<Vocabulary />} />
             <Route path="/quiz" element={<Quiz />} />
             <Route path="/memorization" element={<Memorization />} />
+            <Route path="/journey" element={<Journey />} />
+            <Route path="/journey/:surahNumber" element={<JourneySurah />} />
+            <Route path="/journey/:surahNumber/:ayahStart" element={<JourneyLesson />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/contribute/gloss" element={<GlossContribute />} />
             <Route path="/about" element={<About />} />

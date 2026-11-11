@@ -961,6 +961,53 @@ costs about 60 MB unpacked. Building the AppImage locally needs `patchelf` on
 
 ---
 
+## Journey
+
+A second way through the Quran, for a younger reader who already recites and
+does not yet know what the words mean. The study reader is built around tafsir
+and long reading; Journey is built around the opposite: short sittings, almost
+no prose, and the meaning tied to the *sound* of each word.
+
+- **A surah is cut into stops by word count, not ayah count** (about two dozen
+  words, at most four ayahs, never splitting an ayah). Ayahs are not a unit of
+  effort: Al-Ikhlas is four ayahs and fifteen words; one ayah of Al-Baqarah can
+  be a page. `lib/journey/plan.ts`.
+- **A stop is a fixed arc of scenes**: listen (each word lights up as it is
+  recited and its meaning arrives with it), meet the words, match them, hear
+  one and pick it, build an ayah's meaning word by word, pick the ayah that
+  says a given meaning, put the ayahs in order, then recite it yourself with
+  the meaning following your own taps. Scenes the passage cannot support are
+  left out rather than played hollow. The planner is pure and seeded, so it is
+  tested offline (`pnpm test:journey`) and a lesson never reshuffles mid-play.
+- **The last scene is silent and cannot be failed.** The app cannot hear a
+  recitation, and pretending to grade one would teach tapping instead of
+  reciting. Stars come from the games before it; finishing always earns one.
+- **Nothing is locked.** Children arrive already reciting whichever surahs
+  their teacher chose. The map suggests an order (Al-Fatiha, then An-Nas
+  backwards) and lets any surah be opened.
+- **The Arabic of an ayah is never scrambled or distorted.** Games rearrange
+  meanings, whole words and whole ayahs; wrong answers get a shake, not a
+  penalty screen.
+- **Clips, not a transport.** `useJourneyAudio` plays ranges out of the same
+  continuous surah recording the reader uses (a word, an ayah, a passage) and
+  answers each request with a promise, because scenes need to know when a clip
+  ended. It gives the CDN four seconds before trying the relay: on a network
+  where the CDN hangs rather than refuses, the audio element waits most of a
+  minute to report an error.
+- **Progress lives in `profiles.ui_prefs.journey`**, mirrored in localStorage
+  and merged (best result per stop wins). No migration, follows the account
+  across devices, and a stop finished offline is not lost. The cost is that it
+  cannot be queried across accounts; a parent or older-sibling view would need
+  real tables.
+- **It feeds the existing systems rather than duplicating them.** Lesson time
+  goes through the reading timer (so it counts toward the streak), and words
+  met in a stop that have no review history join the spaced-repetition deck as
+  "learning".
+- **Word meanings in Uzbek do not exist yet** (the Uzbek glosses are
+  phrase-level and still being contributed), so an Uzbek reader picks Russian
+  or English for word meanings on the Journey map; ayah translations stay
+  Uzbek.
+
 ## Deliberately not built (v1)
 
 - **OAuth providers.** Email/password only; adding providers is Supabase

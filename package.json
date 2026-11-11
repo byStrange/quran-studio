@@ -31,6 +31,7 @@
     "typecheck": "tsc --noEmit",
     "test:streak": "tsx scripts/test/streak.ts",
     "test:smoke": "tsx scripts/test/smoke.ts",
+    "test:journey": "tsx scripts/test/journey.ts",
     "test:mushaf": "tsx scripts/test/mushaf-check.ts",
     "test:mushaf-fonts": "tsx scripts/test/mushaf-fonts.ts",
     "test": "tsx scripts/test/streak.ts && tsx scripts/test/smoke.ts",

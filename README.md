@@ -19,6 +19,12 @@ quiz button beside it. The app opens with the next tafsir you haven't read for
 an ayah you have memorized, and a whole surah can be read end to end in one
 continuous scroll.
 
+**Journey** is a second way in, for younger readers who already recite and want
+to know what they are saying: each surah is a path of short stops, and a stop is
+a few minutes of scenes — the reciter recites while each word lights up with its
+meaning, the words are met and played with, and then you recite it yourself
+with the meaning following your own pace.
+
 Recitation plays from the reciter's own continuous surah recording — the reader
 follows the ayah, and the word, as it is sung — with 13 reciters, per-surah
 offline downloads, and separate markers for what you have memorized and what
