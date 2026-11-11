@@ -466,3 +466,149 @@
     color: var(--fg);
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Journey
+   The lesson mode for younger readers. It borrows the app's palette — emerald
+   for "yours", gold for "earned" — and adds only what a lesson needs that a
+   reading view does not: a stage, tiles that answer a tap, and a little motion
+   to say right, wrong and done. Every animation here is decoration on top of a
+   state that is also shown by colour, so the reduced-motion rule above can
+   flatten all of it without hiding anything.
+   --------------------------------------------------------------------------- */
+@keyframes journey-pop {
+  0% { transform: scale(0.92); }
+  60% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+@keyframes journey-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+@keyframes journey-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes journey-star {
+  0% { opacity: 0; transform: scale(0.2) rotate(-30deg); }
+  70% { opacity: 1; transform: scale(1.18) rotate(6deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+@keyframes journey-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 45%, transparent); }
+  50% { box-shadow: 0 0 0 0.6rem transparent; }
+}
+
+@layer components {
+  /* The lesson's backdrop: the page colour with the accent rising behind the
+     top of it, so the stage reads as a place rather than as another page. */
+  .journey-stage {
+    background:
+      radial-gradient(120% 70% at 50% -10%, color-mix(in oklch, var(--accent) 13%, transparent), transparent 70%),
+      radial-gradient(90% 50% at 100% 100%, color-mix(in oklch, var(--gold) 9%, transparent), transparent 70%),
+      var(--bg);
+  }
+
+  /* Quran text on the stage: larger than the reader's, because here a single
+     ayah has the screen to itself. */
+  .journey-arabic {
+    font-family: var(--font-arabic);
+    direction: rtl;
+    line-height: 2;
+    font-size: clamp(1.85rem, 1.2rem + 2.6vw, 2.75rem);
+    letter-spacing: 0;
+  }
+
+  /* The same, on a tile or a card. */
+  .journey-arabic-sm {
+    font-family: var(--font-arabic);
+    direction: rtl;
+    line-height: 1.9;
+    font-size: clamp(1.45rem, 1.2rem + 1vw, 1.8rem);
+    letter-spacing: 0;
+  }
+
+  /* Anything in a lesson that is tapped to answer. The thick bottom edge is
+     the affordance: it is what makes a tile look pressable on a touch screen,
+     where there is no hover to say so. State comes from `data-state`, set by
+     the scene: idle (absent), selected, correct, wrong, done. */
+  .journey-tile {
+    border: 1.5px solid var(--border-strong);
+    border-bottom-width: 4px;
+    border-radius: 1rem;
+    background-color: var(--surface);
+    color: var(--fg);
+    transition:
+      transform 0.08s ease,
+      border-color 0.15s ease,
+      background-color 0.15s ease,
+      opacity 0.2s ease;
+  }
+  .journey-tile:not(:disabled):active {
+    transform: translateY(2px);
+    border-bottom-width: 2px;
+    margin-bottom: 2px;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .journey-tile:not(:disabled):not([data-state]):hover {
+      background-color: var(--surface-2);
+    }
+  }
+  .journey-tile[data-state="selected"] {
+    border-color: var(--accent);
+    background-color: var(--accent-soft);
+    color: var(--accent-soft-fg);
+  }
+  .journey-tile[data-state="correct"] {
+    border-color: var(--success);
+    background-color: color-mix(in oklch, var(--success) 16%, var(--surface));
+    animation: journey-pop 0.32s ease-out;
+  }
+  .journey-tile[data-state="wrong"] {
+    border-color: var(--danger);
+    background-color: var(--danger-soft);
+    color: var(--danger-soft-fg);
+    animation: journey-shake 0.38s ease-in-out;
+  }
+  /* Answered and out of play. */
+  .journey-tile[data-state="done"] {
+    border-color: var(--border);
+    border-bottom-width: 1.5px;
+    background-color: var(--surface-2);
+    opacity: 0.5;
+  }
+
+  /* The word being recited, by the reciter or by the reader. */
+  .journey-word {
+    border-radius: 0.75rem;
+    transition:
+      background-color 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+  .journey-word[data-active] {
+    background-color: var(--gold-soft);
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--gold) 55%, transparent);
+  }
+
+  .journey-rise {
+    animation: journey-rise 0.36s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 60ms);
+  }
+  .journey-pop {
+    animation: journey-pop 0.32s ease-out;
+  }
+  .journey-star {
+    animation: journey-star 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) backwards;
+    animation-delay: calc(var(--i, 0) * 180ms + 150ms);
+  }
+  .journey-pulse {
+    animation: journey-pulse 1.6s ease-in-out infinite;
+  }
+}

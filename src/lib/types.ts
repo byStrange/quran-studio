@@ -1,6 +1,7 @@
 import type { Database } from "./database.types";
 import type { Language } from "./i18n";
 import type { TajweedSpan } from "./tajweed";
+import type { JourneyState } from "./journey/progress";
 
 type Tables = Database["public"]["Tables"];
 
@@ -162,6 +163,13 @@ export interface UiPrefs {
   followRecitation: boolean;
   /** Tint the word currently being recited inside the word-by-word row. */
   highlightWords: boolean;
+  /**
+   * Journey progress — stars per stop, surahs finished — which is not a
+   * preference at all but lives here so it follows the account without a table
+   * of its own. Absent until the first stop is finished. Read through
+   * `parseJourney`, never directly: see `lib/journey/progress.ts`.
+   */
+  journey?: JourneyState;
 }
 
 export const DEFAULT_TAFSIR_EDITION = "en-tafisr-ibn-kathir";
