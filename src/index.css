@@ -306,6 +306,13 @@
      out of the way until the ayah is pointed at or something inside it takes
      focus; a touch screen has nothing to point with, so there they are simply
      always on. The progress markers are not chrome and never carry this. */
+  /* Rows far off screen skip layout and paint, so a long surah scrolls like a
+     short one. The remembered size keeps the scrollbar steady. */
+  .verse-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 260px;
+  }
+
   .verse-quiet {
     transition: opacity 0.18s ease;
   }
