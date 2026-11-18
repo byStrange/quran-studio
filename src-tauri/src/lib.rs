@@ -29,7 +29,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             ollama::ai_status,
-            ollama::ai_set_api_key,
+            ollama::ai_set_config,
             ollama::ai_generate_word_context,
             ollama::ai_generate_ruku_summary,
             ollama::ai_generate_knowledge_quiz,
@@ -50,7 +50,7 @@ pub fn run() {
 /// In development the working directory is `src-tauri/`, so the project root
 /// `.env` lives one level up. A bundled build has no project tree and finds
 /// nothing here, which is fine — the key then comes from the environment or
-/// from the per-user config file written by `ai_set_api_key`.
+/// from the per-user config file written by the old Settings key box.
 fn load_project_dotenv() {
     for candidate in [".env", "../.env"] {
         if dotenvy::from_filename(candidate).is_ok() {
@@ -59,7 +59,7 @@ fn load_project_dotenv() {
     }
 }
 
-/// Applies the per-user config file written by `ai_set_api_key`.
+/// Applies the per-user config file written by the old Settings key box.
 ///
 /// Precedence, strongest first: the real process environment, the per-user
 /// config file, then the project `.env`. The per-user file has to beat the

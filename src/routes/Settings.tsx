@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Check, KeyRound, LogOut, Monitor, Moon, Sun } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTheme } from "@/providers/ThemeProvider";
@@ -7,7 +7,9 @@ import { useProfile, useUiPrefs, useUpdateProfile } from "@/hooks/useProfile";
 import { useActiveReciter, useReciters } from "@/hooks/useRecitation";
 import { useTafsirEditions } from "@/hooks/useQuranData";
 import { useDownloadedSurahs } from "@/hooks/useAudioDownloads";
-import { describeAiError, getAiStatus, isTauri, setAiApiKey } from "@/lib/ai";
+import { getAiStatus, isTauri } from "@/lib/ai";
+import { useAiAccess } from "@/hooks/useAiAccess";
+import { AiAdminCard } from "@/components/settings/AiAdminCard";
 import {
   editionMatchesLanguage,
   resolveTranslationKeys,
@@ -20,9 +22,7 @@ import { Page } from "@/components/layout/AppShell";
 import { OfflineCard } from "@/components/settings/OfflineCard";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/field";
 import { SelectField, Toggle } from "@/components/ui/primitives";
-import { useToast } from "@/components/ui/toast";
 import { cn, detectTimezone } from "@/lib/utils";
 
 const themes = (t: TFunction) =>
@@ -62,7 +62,6 @@ export function Settings() {
   // Resolved rather than read straight from prefs, so the picker shows the
   // reciter that will actually play when nothing has been chosen yet.
   const reciter = useActiveReciter(prefs.reciterId);
-  const toast = useToast();
 
   // Resolved so the checkboxes show what the reader actually renders — a reader
   // who has chosen nothing still sees their language's translation ticked, and
@@ -81,30 +80,12 @@ export function Settings() {
     });
   };
 
-  const [apiKey, setApiKey] = useState("");
+  const { hasAccess, isAdmin } = useAiAccess();
 
   const aiStatus = useQuery({
     queryKey: ["ai-status"],
     queryFn: getAiStatus,
     retry: false,
-  });
-
-  const saveKey = useMutation({
-    mutationFn: () => setAiApiKey(apiKey.trim()),
-    onSuccess: (status) => {
-      setApiKey("");
-      void aiStatus.refetch();
-      toast(
-        status.model
-          ? t("settings.connectedToast", { model: status.model })
-          : (status.error ?? t("settings.keySaved")),
-        status.model ? "success" : "error",
-      );
-    },
-    // A rejected `invoke` throws the serialized Rust error as a plain string,
-    // not an Error, so an `instanceof` check would discard every backend
-    // message and report a useless generic failure.
-    onError: (error) => toast(describeAiError(error, t), "error"),
   });
 
   // Offer to correct a profile timezone that no longer matches the machine.
@@ -460,8 +441,8 @@ export function Settings() {
 
         <Card>
           <CardHeader
-            title={t("settings.ollama")}
-            description={t("settings.ollamaDescription")}
+            title={t("settings.ai")}
+            description={t("settings.aiDescription")}
           />
           <CardBody className="space-y-3">
             <div
@@ -480,31 +461,19 @@ export function Settings() {
                   : (aiStatus.data?.error ?? t("settings.notConfigured"))}
             </div>
 
-            {isTauri() ? (
-              <div className="flex gap-2">
-                <Input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={t("settings.apiKeyPlaceholder")}
-                  autoComplete="off"
-                />
-                <Button
-                  variant="primary"
-                  disabled={!apiKey.trim()}
-                  loading={saveKey.isPending}
-                  onClick={() => saveKey.mutate()}
-                >
-                  {t("common.save")}
-                </Button>
-              </div>
-            ) : (
+            {!hasAccess ? (
+              <p className="text-[0.75rem] leading-relaxed text-fg-subtle">
+                {t("settings.aiNoAccess")}
+              </p>
+            ) : !isTauri() ? (
               <p className="text-[0.75rem] leading-relaxed text-fg-subtle">
                 {t("settings.keyNeedsDesktop")}
               </p>
-            )}
+            ) : null}
           </CardBody>
         </Card>
+
+        {isAdmin ? <AiAdminCard /> : null}
 
         <Card>
           <CardHeader title={t("settings.account")} />

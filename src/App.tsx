@@ -18,6 +18,13 @@ import { Settings } from "./routes/Settings";
 import { GlossContribute } from "./routes/GlossContribute";
 import { About } from "./routes/About";
 import { Spinner } from "./components/ui/feedback";
+import { useAiConfigSync } from "./hooks/useAiAccess";
+
+/** Renders nothing; keeps the backend's AI credentials in step with Supabase. */
+function AiConfigSync() {
+  useAiConfigSync();
+  return null;
+}
 
 export default function App() {
   const { session, loading } = useAuth();
@@ -34,6 +41,7 @@ export default function App() {
         <AuthScreen />
       ) : (
         <AppShell>
+          <AiConfigSync />
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/browse" element={<Browse />} />

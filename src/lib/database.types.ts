@@ -1317,6 +1317,51 @@ export type Database = {
         }[]
       }
       approve_gloss_batch: { Args: { p_batch: string }; Returns: number }
+      ai_access_status: {
+        Args: never
+        Returns: { has_access: boolean; is_admin: boolean }[]
+      }
+      get_ai_config: {
+        Args: never
+        Returns: {
+          provider: string
+          api_key: string
+          base_url: string | null
+          model: string | null
+          vision_model: string | null
+        }[]
+      }
+      admin_list_ai_providers: {
+        Args: never
+        Returns: {
+          provider: string
+          has_key: boolean
+          base_url: string | null
+          model: string | null
+          vision_model: string | null
+          is_active: boolean
+        }[]
+      }
+      admin_save_ai_provider: {
+        Args: {
+          p_provider: string
+          p_api_key: string
+          p_base_url: string
+          p_model: string
+          p_vision_model: string
+          p_is_active: boolean
+        }
+        Returns: undefined
+      }
+      admin_delete_ai_provider: { Args: { p_provider: string }; Returns: undefined }
+      admin_list_ai_users: {
+        Args: never
+        Returns: { user_id: string; email: string; has_access: boolean; is_admin: boolean }[]
+      }
+      admin_set_ai_access: {
+        Args: { p_user: string; p_granted: boolean }
+        Returns: undefined
+      }
       gloss_contributor_status: {
         Args: never
         Returns: { is_contributor: boolean; can_review: boolean }[]

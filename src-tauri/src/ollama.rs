@@ -13,6 +13,7 @@ use std::time::Duration;
 use tauri::Manager;
 
 const DEFAULT_BASE_URL: &str = "https://ollama.com";
+const DEFAULT_CURIALY_BASE_URL: &str = "https://api.curialy.tech/v1";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(90);
 /// Vision requests carry image data up and read a dense page, so they run well
 /// past the text timeout.
@@ -34,7 +35,7 @@ const MODEL_PREFERENCES: &[&str] = &[
 
 #[derive(Debug, thiserror::Error)]
 pub enum AiError {
-    #[error("Ollama Cloud is not configured. Add OLLAMA_API_KEY in Settings or your .env file.")]
+    #[error("AI is not set up for this account. Ask an admin to grant you AI access.")]
     NotConfigured,
     #[error("network error talking to Ollama Cloud: {0}")]
     Network(String),
@@ -48,8 +49,6 @@ pub enum AiError {
     BadGlossShape(String),
     #[error("the model's reply was cut off before it finished; try again")]
     Truncated,
-    #[error("could not persist the API key: {0}")]
-    Persist(String),
 }
 
 // Tauri commands must return a serializable error.
@@ -66,6 +65,45 @@ type AiResult<T> = Result<T, AiError>;
 #[derive(Default)]
 pub struct AiState {
     resolved_model: Mutex<Option<String>>,
+    /// Provider credentials handed over by the frontend after it fetched them
+    /// from Supabase (only accounts with AI access can). Held in memory only —
+    /// nothing is written to disk.
+    config: Mutex<Option<AiConfig>>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Provider {
+    /// Ollama Cloud's native `/api/chat` surface.
+    Ollama,
+    /// Curialy AI, spoken to through its OpenAI-compatible `/v1` surface.
+    Curialy,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiConfig {
+    pub provider: Provider,
+    #[serde(default)]
+    pub base_url: Option<String>,
+    pub api_key: String,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub vision_model: Option<String>,
+}
+
+impl AiConfig {
+    fn base_url(&self) -> String {
+        self.base_url
+            .as_deref()
+            .map(|u| u.trim().trim_end_matches('/').to_string())
+            .filter(|u| !u.is_empty())
+            .unwrap_or_else(|| match self.provider {
+                Provider::Ollama => DEFAULT_BASE_URL.to_string(),
+                Provider::Curialy => DEFAULT_CURIALY_BASE_URL.to_string(),
+            })
+    }
 }
 
 #[derive(Serialize)]
@@ -90,34 +128,29 @@ pub struct RukuSummary {
 
 // --- configuration ---------------------------------------------------------
 
-fn api_key() -> Option<String> {
-    std::env::var("OLLAMA_API_KEY")
+fn env_nonempty(name: &str) -> Option<String> {
+    std::env::var(name)
         .ok()
-        .map(|k| k.trim().to_string())
-        .filter(|k| !k.is_empty())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
-fn base_url() -> String {
-    std::env::var("OLLAMA_BASE_URL")
-        .ok()
-        .map(|u| u.trim().trim_end_matches('/').to_string())
-        .filter(|u| !u.is_empty())
-        .unwrap_or_else(|| DEFAULT_BASE_URL.to_string())
+/// The credentials in force: what the signed-in account was given through
+/// Supabase, else (development only) the `OLLAMA_*` environment variables.
+fn active_config(state: &AiState) -> Option<AiConfig> {
+    if let Some(cfg) = state.config.lock().ok().and_then(|c| c.clone()) {
+        return Some(cfg);
+    }
+    env_nonempty("OLLAMA_API_KEY").map(|api_key| AiConfig {
+        provider: Provider::Ollama,
+        base_url: env_nonempty("OLLAMA_BASE_URL"),
+        api_key,
+        model: env_nonempty("OLLAMA_MODEL"),
+        vision_model: env_nonempty("OLLAMA_VISION_MODEL"),
+    })
 }
 
-/// A vision-capable model, pinned explicitly. The default catalog picks are all
-/// text-only, so gloss extraction reads `OLLAMA_VISION_MODEL` and falls back to
-/// the normal resolved model only when it is unset (which then needs to be a
-/// multimodal one, or the request fails with the provider's own error).
-fn vision_model() -> Option<String> {
-    std::env::var("OLLAMA_VISION_MODEL")
-        .ok()
-        .map(|m| m.trim().to_string())
-        .filter(|m| !m.is_empty())
-}
-
-/// Where `ai_set_api_key` stores the key for bundled builds that have no
-/// project tree to read a `.env` from.
+/// Per-user `.env` location, read at startup as a development fallback.
 ///
 /// The path has to come from Tauri rather than from `XDG_CONFIG_HOME`/`HOME`:
 /// an Android app process is given neither, so a hand-built `~/.config` path
@@ -176,22 +209,22 @@ fn base_name(name: &str) -> &str {
 /// Resolves a usable hosted model, preferring an explicit `OLLAMA_MODEL`, then
 /// our preference list, then whatever the catalog lists first.
 async fn resolve_model(state: &AiState) -> AiResult<String> {
-    if let Ok(pinned) = std::env::var("OLLAMA_MODEL") {
-        let pinned = pinned.trim().to_string();
-        if !pinned.is_empty() {
-            return Ok(pinned);
-        }
+    let cfg = active_config(state).ok_or(AiError::NotConfigured)?;
+    if let Some(pinned) = cfg.model.as_deref().map(str::trim).filter(|m| !m.is_empty()) {
+        return Ok(pinned.to_string());
     }
 
     if let Some(cached) = state.resolved_model.lock().ok().and_then(|m| m.clone()) {
         return Ok(cached);
     }
 
-    let key = api_key().ok_or(AiError::NotConfigured)?;
-    let url = format!("{}/api/tags", base_url());
+    let url = match cfg.provider {
+        Provider::Ollama => format!("{}/api/tags", cfg.base_url()),
+        Provider::Curialy => format!("{}/models", cfg.base_url()),
+    };
     let resp = client()?
         .get(&url)
-        .bearer_auth(&key)
+        .bearer_auth(&cfg.api_key)
         .send()
         .await
         .map_err(|e| AiError::Network(e.to_string()))?;
@@ -208,20 +241,39 @@ async fn resolve_model(state: &AiState) -> AiResult<String> {
         });
     }
 
-    let tags: TagsResponse = serde_json::from_str(&body).map_err(|_| AiError::BadResponse)?;
-    let names: Vec<String> = tags
-        .models
-        .into_iter()
-        .map(|m| if m.name.is_empty() { m.model } else { m.name })
-        .filter(|n| !n.is_empty())
-        .collect();
+    let value: serde_json::Value = serde_json::from_str(&body).map_err(|_| AiError::BadResponse)?;
+    let names: Vec<String> = match cfg.provider {
+        Provider::Ollama => {
+            let tags: TagsResponse = serde_json::from_value(value).map_err(|_| AiError::BadResponse)?;
+            tags.models
+                .into_iter()
+                .map(|m| if m.name.is_empty() { m.model } else { m.name })
+                .filter(|n| !n.is_empty())
+                .collect()
+        }
+        // OpenAI shape: { "data": [ { "id": "..." } ] }
+        Provider::Curialy => value
+            .get("data")
+            .and_then(|d| d.as_array())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|m| m.get("id").and_then(|i| i.as_str()))
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default(),
+    };
 
-    let chosen = MODEL_PREFERENCES
-        .iter()
-        .find(|pref| names.iter().any(|n| base_name(n) == base_name(pref)))
-        .map(|s| s.to_string())
-        .or_else(|| names.first().cloned())
-        .ok_or(AiError::NoModel)?;
+    let chosen = match cfg.provider {
+        Provider::Ollama => MODEL_PREFERENCES
+            .iter()
+            .find(|pref| names.iter().any(|n| base_name(n) == base_name(pref)))
+            .map(|s| s.to_string())
+            .or_else(|| names.first().cloned()),
+        Provider::Curialy => names.first().cloned(),
+    }
+    .ok_or(AiError::NoModel)?;
 
     if let Ok(mut slot) = state.resolved_model.lock() {
         *slot = Some(chosen.clone());
@@ -297,29 +349,97 @@ async fn chat_with(
     // summary of a twenty-paragraph tafsir passage is slow to read and write.
     timeout: Option<Duration>,
 ) -> AiResult<(String, String)> {
-    let key = api_key().ok_or(AiError::NotConfigured)?;
+    let cfg = active_config(state).ok_or(AiError::NotConfigured)?;
     let model = resolve_model(state).await?;
+    let content = send_chat(
+        &cfg,
+        &model,
+        system,
+        user,
+        None,
+        max_tokens,
+        temperature,
+        format,
+        timeout.unwrap_or(REQUEST_TIMEOUT),
+    )
+    .await?;
+    Ok((content, model))
+}
+
+/// One chat round trip against whichever provider is configured, returning the
+/// cleaned reply text. Ollama gets its native request (`images`, `format`,
+/// `options`); Curialy gets the OpenAI-compatible one (image parts,
+/// `response_format`, `max_tokens`).
+#[allow(clippy::too_many_arguments)]
+async fn send_chat(
+    cfg: &AiConfig,
+    model: &str,
+    system: &str,
+    user: &str,
+    images: Option<Vec<String>>,
+    max_tokens: u32,
+    temperature: f32,
+    format: Option<serde_json::Value>,
+    timeout: Duration,
+) -> AiResult<String> {
     let format_requested = format.is_some();
 
-    let request = ChatRequest {
-        model: &model,
-        messages: vec![
-            ChatMessage { role: "system", content: system, images: None },
-            ChatMessage { role: "user", content: user, images: None },
-        ],
-        stream: false,
-        options: ChatOptions { temperature, num_predict: max_tokens },
-        format,
+    let (url, payload) = match cfg.provider {
+        Provider::Ollama => {
+            let request = ChatRequest {
+                model,
+                messages: vec![
+                    ChatMessage { role: "system", content: system, images: None },
+                    ChatMessage { role: "user", content: user, images },
+                ],
+                stream: false,
+                options: ChatOptions { temperature, num_predict: max_tokens },
+                format,
+            };
+            (
+                format!("{}/api/chat", cfg.base_url()),
+                serde_json::to_value(&request).map_err(|_| AiError::BadResponse)?,
+            )
+        }
+        Provider::Curialy => {
+            let user_content = match images {
+                Some(images) => {
+                    let mut parts = vec![serde_json::json!({ "type": "text", "text": user })];
+                    for image in images {
+                        parts.push(serde_json::json!({
+                            "type": "image_url",
+                            "image_url": { "url": format!("data:image/jpeg;base64,{image}") }
+                        }));
+                    }
+                    serde_json::Value::Array(parts)
+                }
+                None => serde_json::Value::String(user.to_string()),
+            };
+            let mut body = serde_json::json!({
+                "model": model,
+                "messages": [
+                    { "role": "system", "content": system },
+                    { "role": "user", "content": user_content },
+                ],
+                "stream": false,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            });
+            if let Some(schema) = format {
+                body["response_format"] = serde_json::json!({
+                    "type": "json_schema",
+                    "json_schema": { "name": "reply", "schema": schema }
+                });
+            }
+            (format!("{}/chat/completions", cfg.base_url()), body)
+        }
     };
 
-    let mut builder = client()?
-        .post(format!("{}/api/chat", base_url()))
-        .bearer_auth(&key)
-        .json(&request);
-    if let Some(timeout) = timeout {
-        builder = builder.timeout(timeout);
-    }
-    let resp = builder
+    let resp = client()?
+        .post(url)
+        .bearer_auth(&cfg.api_key)
+        .timeout(timeout)
+        .json(&payload)
         .send()
         .await
         .map_err(|e| AiError::Network(e.to_string()))?;
@@ -333,23 +453,43 @@ async fn chat_with(
         return Err(AiError::Api { status: status.as_u16(), body: truncate(&body, 300) });
     }
 
-    let parsed: ChatResponse = serde_json::from_str(&body).map_err(|_| AiError::BadResponse)?;
+    let (content, truncated) = match cfg.provider {
+        Provider::Ollama => {
+            let parsed: ChatResponse =
+                serde_json::from_str(&body).map_err(|_| AiError::BadResponse)?;
+            (
+                parsed.message.map(|m| m.content),
+                parsed.done_reason.as_deref() == Some("length"),
+            )
+        }
+        Provider::Curialy => {
+            let parsed: serde_json::Value =
+                serde_json::from_str(&body).map_err(|_| AiError::BadResponse)?;
+            let choice = parsed.get("choices").and_then(|c| c.get(0));
+            (
+                choice
+                    .and_then(|c| c.get("message"))
+                    .and_then(|m| m.get("content"))
+                    .and_then(|c| c.as_str())
+                    .map(str::to_string),
+                choice.and_then(|c| c.get("finish_reason")).and_then(|r| r.as_str())
+                    == Some("length"),
+            )
+        }
+    };
     // A structured reply that ran out of tokens is half an object, which no
     // amount of extraction recovers. Saying so is more use to the reader (and
     // to whoever tunes the budget) than "unexpected response shape".
-    if format_requested && parsed.done_reason.as_deref() == Some("length") {
+    if format_requested && truncated {
         return Err(AiError::Truncated);
     }
-    let content = parsed
-        .message
-        .map(|m| m.content)
-        .ok_or(AiError::BadResponse)?;
+    let content = content.ok_or(AiError::BadResponse)?;
 
     let cleaned = clean_output(&content);
     if cleaned.is_empty() {
         return Err(AiError::BadResponse);
     }
-    Ok((cleaned, model))
+    Ok(cleaned)
 }
 
 /// Hosted reasoning models sometimes wrap output in `<think>` blocks or
@@ -372,30 +512,6 @@ fn clean_output(raw: &str) -> String {
     text.trim().to_string()
 }
 
-/// Rewrites one assignment in a `.env` body, leaving every other line alone —
-/// the file may also carry `OLLAMA_MODEL` or a hand-added setting.
-fn upsert_env_var(existing: &str, key: &str, value: &str) -> String {
-    let prefix = format!("{key}=");
-    let mut replaced = false;
-    let mut out: Vec<String> = existing
-        .lines()
-        .map(|line| {
-            if line.trim_start().starts_with(&prefix) {
-                replaced = true;
-                format!("{prefix}{value}")
-            } else {
-                line.to_string()
-            }
-        })
-        .collect();
-    if !replaced {
-        out.push(format!("{prefix}{value}"));
-    }
-    let mut body = out.join("\n");
-    body.push('\n');
-    body
-}
-
 fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         s.to_string()
@@ -413,56 +529,37 @@ fn truncate(s: &str, max: usize) -> String {
 
 // --- commands --------------------------------------------------------------
 
-#[tauri::command]
-pub async fn ai_status(state: tauri::State<'_, AiState>) -> Result<AiStatus, AiError> {
-    if api_key().is_none() {
-        return Ok(AiStatus { configured: false, model: None, error: None });
+async fn status_of(state: &AiState) -> AiStatus {
+    if active_config(state).is_none() {
+        return AiStatus { configured: false, model: None, error: None };
     }
-    match resolve_model(&state).await {
-        Ok(model) => Ok(AiStatus { configured: true, model: Some(model), error: None }),
-        Err(e) => Ok(AiStatus { configured: true, model: None, error: Some(e.to_string()) }),
+    match resolve_model(state).await {
+        Ok(model) => AiStatus { configured: true, model: Some(model), error: None },
+        Err(e) => AiStatus { configured: true, model: None, error: Some(e.to_string()) },
     }
 }
 
-/// Persists the key to the per-user config file and applies it to the running
-/// process, so Settings can configure AI without editing files by hand.
 #[tauri::command]
-pub async fn ai_set_api_key(
-    app: tauri::AppHandle,
+pub async fn ai_status(state: tauri::State<'_, AiState>) -> Result<AiStatus, AiError> {
+    Ok(status_of(&state).await)
+}
+
+/// Installs the provider credentials the frontend fetched from Supabase for a
+/// signed-in account with AI access (or clears them with `None` on sign-out).
+/// Memory only; nothing is persisted locally.
+#[tauri::command]
+pub async fn ai_set_config(
     state: tauri::State<'_, AiState>,
-    api_key: String,
+    config: Option<AiConfig>,
 ) -> Result<AiStatus, AiError> {
-    let trimmed = api_key.trim().to_string();
-    let path = user_config_path(&app).ok_or_else(|| {
-        AiError::Persist("could not determine a config directory".to_string())
-    })?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| AiError::Persist(e.to_string()))?;
+    let config = config.filter(|c| !c.api_key.trim().is_empty());
+    if let Ok(mut slot) = state.config.lock() {
+        *slot = config;
     }
-    let existing = std::fs::read_to_string(&path).unwrap_or_default();
-    std::fs::write(&path, upsert_env_var(&existing, "OLLAMA_API_KEY", &trimmed))
-        .map_err(|e| AiError::Persist(e.to_string()))?;
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
-    }
-
-    // SAFETY: single-threaded startup-style mutation; Tauri commands are
-    // serialized on the async runtime and nothing else reads env concurrently.
-    unsafe { std::env::set_var("OLLAMA_API_KEY", &trimmed) };
     if let Ok(mut slot) = state.resolved_model.lock() {
         *slot = None; // force re-discovery with the new credentials
     }
-
-    if trimmed.is_empty() {
-        return Ok(AiStatus { configured: false, model: None, error: None });
-    }
-    match resolve_model(&state).await {
-        Ok(model) => Ok(AiStatus { configured: true, model: Some(model), error: None }),
-        Err(e) => Ok(AiStatus { configured: true, model: None, error: Some(e.to_string()) }),
-    }
+    Ok(status_of(&state).await)
 }
 
 /// The language an explanation is written in.
@@ -612,50 +709,25 @@ async fn chat_vision(
     max_tokens: u32,
     format: Option<serde_json::Value>,
 ) -> AiResult<(String, String)> {
-    let key = api_key().ok_or(AiError::NotConfigured)?;
-    let model = match vision_model() {
-        Some(m) => m,
+    let cfg = active_config(state).ok_or(AiError::NotConfigured)?;
+    let model = match cfg.vision_model.as_deref().map(str::trim).filter(|m| !m.is_empty()) {
+        Some(m) => m.to_string(),
         None => resolve_model(state).await?,
     };
-    let format_requested = format.is_some();
-
-    let request = ChatRequest {
-        model: &model,
-        messages: vec![
-            ChatMessage { role: "system", content: system, images: None },
-            // Low temperature: this is transcription, not composition.
-            ChatMessage { role: "user", content: user, images: Some(images) },
-        ],
-        stream: false,
-        options: ChatOptions { temperature: 0.1, num_predict: max_tokens },
+    // Low temperature: this is transcription, not composition.
+    let content = send_chat(
+        &cfg,
+        &model,
+        system,
+        user,
+        Some(images),
+        max_tokens,
+        0.1,
         format,
-    };
-
-    let resp = client()?
-        .post(format!("{}/api/chat", base_url()))
-        .bearer_auth(&key)
-        .timeout(VISION_TIMEOUT)
-        .json(&request)
-        .send()
-        .await
-        .map_err(|e| AiError::Network(e.to_string()))?;
-
-    let status = resp.status();
-    let body = resp.text().await.map_err(|e| AiError::Network(e.to_string()))?;
-    if !status.is_success() {
-        return Err(AiError::Api { status: status.as_u16(), body: truncate(&body, 300) });
-    }
-
-    let parsed: ChatResponse = serde_json::from_str(&body).map_err(|_| AiError::BadResponse)?;
-    if format_requested && parsed.done_reason.as_deref() == Some("length") {
-        return Err(AiError::Truncated);
-    }
-    let content = parsed.message.map(|m| m.content).ok_or(AiError::BadResponse)?;
-    let cleaned = clean_output(&content);
-    if cleaned.is_empty() {
-        return Err(AiError::BadResponse);
-    }
-    Ok((cleaned, model))
+        VISION_TIMEOUT,
+    )
+    .await?;
+    Ok((content, model))
 }
 
 /// One Arabic word to be glossed, with the id it is known by in `quran_words`.

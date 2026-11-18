@@ -1,8 +1,9 @@
 /**
  * AI generation, cached in Supabase.
  *
- * Generation always goes through a Rust Tauri command so the Ollama Cloud key
- * stays in the backend process. Results are cached in shared tables and reused
+ * Generation always goes through a Rust Tauri command. The provider key is
+ * stored in Supabase and only handed to accounts an admin granted AI access;
+ * the backend holds it in memory. Results are cached in shared tables and reused
  * by every user, so each word explanation and ruku summary is produced once.
  */
 import { invoke } from "@tauri-apps/api/core";
@@ -48,9 +49,22 @@ export async function getAiStatus(): Promise<AiStatus> {
   return invoke<AiStatus>("ai_status");
 }
 
-export async function setAiApiKey(apiKey: string): Promise<AiStatus> {
+/** Provider credentials as stored in Supabase and handed to the backend. */
+export interface AiConfig {
+  provider: "ollama" | "curialy";
+  apiKey: string;
+  baseUrl: string | null;
+  model: string | null;
+  visionModel: string | null;
+}
+
+/**
+ * Gives the backend the credentials this account was granted (or clears them
+ * with `null`). They live in the backend's memory only.
+ */
+export async function setAiConfig(config: AiConfig | null): Promise<AiStatus> {
   if (!isTauri()) throw new AiUnavailableError(NOT_IN_TAURI);
-  return invoke<AiStatus>("ai_set_api_key", { apiKey });
+  return invoke<AiStatus>("ai_set_config", { config });
 }
 
 // --- word-by-word gloss extraction (vision) --------------------------------
