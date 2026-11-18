@@ -41,7 +41,7 @@ import { useUiPrefs, useUpdateProfile } from "@/hooks/useProfile";
 import { useReadingTimer } from "@/hooks/useReadingTimer";
 import { useIsDesktop } from "@/hooks/useMediaQuery";
 import { useTafsirLayout } from "@/hooks/useTafsirLayout";
-import type { RepeatMode } from "@/lib/types";
+import type { RepeatMode, WordStatus } from "@/lib/types";
 import { ayahRangeLabel, cn, formatClock } from "@/lib/utils";
 import { useT, type TFunction } from "@/providers/I18nProvider";
 import { AudioBar } from "@/components/reader/AudioBar";
@@ -70,6 +70,8 @@ const TOTAL_SURAHS = 114;
  * megabytes of waiting. The scroll position is what drives it, so reading
  * straight down never blocks.
  */
+const EMPTY_STATUSES = new Map<number, WordStatus>();
+
 export function SurahReader() {
   const t = useT();
   const params = useParams<{ surahNumber: string }>();
@@ -124,7 +126,9 @@ export function SurahReader() {
   const [expandedVerses, setExpandedVerses] = useState<Set<number>>(new Set());
   const [tafsirOpen, setTafsirOpen] = useState(false);
   /** Topmost ayah on screen, used to attribute reading time to a ruku. */
-  const [visibleVerseId, setVisibleVerseId] = useState<number | null>(null);
+  // Tracks the ruku, not the ayah: state that changes on every ayah crossed while
+  // scrolling re-renders the whole list. A ruku changes far less often.
+  const [visibleRuku, setVisibleRuku] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [searchParams] = useSearchParams();
@@ -192,9 +196,11 @@ export function SurahReader() {
    * player's ayah wins while it is playing, so listening counts even when the
    * reader has scrolled away.
    */
-  const currentVerseId = player.currentVerseId ?? visibleVerseId;
-  const currentRuku =
-    verses.find((v) => v.id === currentVerseId)?.ruku_number ?? verses[0]?.ruku_number ?? null;
+  const playerRuku =
+    player.currentVerseId === null
+      ? undefined
+      : verses.find((v) => v.id === player.currentVerseId)?.ruku_number;
+  const currentRuku = playerRuku ?? visibleRuku ?? verses[0]?.ruku_number ?? null;
   const { sessionSeconds, idle } = useReadingTimer(valid ? currentRuku : null);
 
   const loadedVerseIds = useMemo(() => new Set(verseIds), [verseIds]);
@@ -243,7 +249,7 @@ export function SurahReader() {
           else onScreen.delete(id);
         }
         const first = verses.find((verse) => onScreen.has(verse.id));
-        if (first) setVisibleVerseId(first.id);
+        if (first) setVisibleRuku(first.ruku_number);
       },
       // A band near the top of the viewport: what counts as "the ayah being
       // read" is the one at the top, not any of the several on screen.
@@ -280,7 +286,7 @@ export function SurahReader() {
     scrollRef.current?.scrollTo({ top: 0 });
     setSelectedAyah(null);
     setExpandedVerses(new Set());
-    setVisibleVerseId(null);
+    setVisibleRuku(null);
   }, [surahNumber]);
 
   useEffect(() => setPendingAnchor(anchorAyah), [surahNumber, anchorAyah]);
@@ -700,7 +706,7 @@ export function SurahReader() {
                         wordsExpanded={expandedVerses.has(verse.id)}
                         onToggleWords={() => toggleWords(verse.id)}
                         translations={prefs.translations}
-                        wordStatuses={wordStatuses ?? new Map()}
+                        wordStatuses={wordStatuses ?? EMPTY_STATUSES}
                         tajweed={prefs.tajweed}
                         reciting={player.currentVerseId === verse.id}
                         recitingWordPosition={
