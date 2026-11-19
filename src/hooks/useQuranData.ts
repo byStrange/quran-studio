@@ -176,6 +176,41 @@ export function useSurahVerseIds(surahNumber: number | null) {
   });
 }
 
+/** An ayah without its word breakdown: text, tajweed and translations only. */
+export type PlainVerse = Omit<VerseWithWords, "words">;
+
+/**
+ * Every ayah of a surah as plain text, for the mistakes practice page.
+ *
+ * A practice passage needs a few ayahs either side of the flagged one, and the
+ * flagged ayahs of a surah are scattered through it — fetching the surah once
+ * (286 rows at most, without words) serves every passage in it.
+ */
+export function useSurahAyahs(surahNumber: number | null) {
+  return useQuery({
+    ...CONTENT_QUERY,
+    queryKey: ["surah-ayahs", surahNumber],
+    enabled: surahNumber !== null,
+    queryFn: async (): Promise<PlainVerse[]> => {
+      return offlineFirst(
+        async () => {
+          const rows = await local.surahVerses(surahNumber!, null, Infinity);
+          return rows?.map(({ words: _words, ...verse }) => verse);
+        },
+        async () => {
+          const { data, error } = await supabase
+            .from("quran_verses")
+            .select("*")
+            .eq("surah_number", surahNumber!)
+            .order("ayah_number");
+          if (error) throw error;
+          return (data ?? []) as unknown as PlainVerse[];
+        },
+      );
+    },
+  });
+}
+
 /** One word of a chosen ayah range, for the gloss contribution tool's scaffold. */
 export interface AyahRangeWord {
   id: number;

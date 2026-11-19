@@ -5,6 +5,7 @@ import {
   BookOpen,
   BookMarked,
   Compass,
+  Flag,
   Flame,
   GraduationCap,
   Info,
@@ -44,6 +45,7 @@ const primaryNav = (t: TFunction): NavItem[] => [
     label: t("nav.memorization"),
     icon: <BookMarked className="size-[1.125rem]" />,
   },
+  { to: "/mistakes", label: t("nav.mistakes"), icon: <Flag className="size-[1.125rem]" /> },
 ];
 
 // `contribute` is gated on the gloss-contributor allowlist, so the tool's
