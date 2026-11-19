@@ -15,6 +15,7 @@ import { Journey } from "./routes/Journey";
 import { JourneySurah } from "./routes/JourneySurah";
 import { JourneyLesson } from "./routes/JourneyLesson";
 import { Settings } from "./routes/Settings";
+import { Mistakes } from "./routes/Mistakes";
 import { GlossContribute } from "./routes/GlossContribute";
 import { About } from "./routes/About";
 import { Spinner } from "./components/ui/feedback";
@@ -53,6 +54,7 @@ export default function App() {
             <Route path="/vocabulary" element={<Vocabulary />} />
             <Route path="/quiz" element={<Quiz />} />
             <Route path="/memorization" element={<Memorization />} />
+            <Route path="/mistakes" element={<Mistakes />} />
             <Route path="/journey" element={<Journey />} />
             <Route path="/journey/:surahNumber" element={<JourneySurah />} />
             <Route path="/journey/:surahNumber/:ayahStart" element={<JourneyLesson />} />

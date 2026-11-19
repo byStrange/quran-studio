@@ -5,6 +5,7 @@ import { useSurahs } from "@/hooks/useQuranData";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { LoadingBlock } from "@/components/ui/feedback";
 import { Tooltip } from "@/components/ui/primitives";
+import { Button } from "@/components/ui/button";
 import { verseKey } from "@/lib/utils";
 import { useT } from "@/providers/I18nProvider";
 
@@ -27,6 +28,13 @@ export function MistakesCard() {
       <CardHeader
         title={t("mistakes.title")}
         description={t("mistakes.description")}
+        action={
+          mistakes && mistakes.length > 0 ? (
+            <Button asChild size="sm" variant="outline">
+              <Link to="/mistakes">{t("mistakes.practise")}</Link>
+            </Button>
+          ) : undefined
+        }
       />
       <CardBody>
         {isLoading ? (
