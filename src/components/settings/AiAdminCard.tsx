@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { describeAiError } from "@/lib/ai";
@@ -10,6 +10,13 @@ import { SelectField, Toggle } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 
 type Provider = "ollama" | "curialy";
+
+/**
+ * How many accounts the access list draws at once. Every account in the
+ * system comes back from the RPC, and each row is a live switch — drawing them
+ * all made the whole Settings page heavy. Search narrows to anyone else.
+ */
+const USER_LIMIT = 30;
 
 const PROVIDER_LABEL: Record<Provider, string> = {
   ollama: "Ollama Cloud",
@@ -96,9 +103,11 @@ export function AiAdminCard() {
     onError: (e) => toast(describeAiError(e, t), "error"),
   });
 
-  const visibleUsers = (users.data ?? []).filter((u) =>
-    u.email.toLowerCase().includes(filter.trim().toLowerCase()),
-  );
+  const matchingUsers = useMemo(() => {
+    const needle = filter.trim().toLowerCase();
+    return (users.data ?? []).filter((u) => u.email.toLowerCase().includes(needle));
+  }, [users.data, filter]);
+  const visibleUsers = matchingUsers.slice(0, USER_LIMIT);
 
   return (
     <Card>
@@ -204,6 +213,14 @@ export function AiAdminCard() {
               </li>
             ))}
           </ul>
+          {matchingUsers.length > visibleUsers.length ? (
+            <p className="text-[0.75rem] text-fg-subtle">
+              {t("settings.aiAdmin.moreUsers", {
+                shown: visibleUsers.length,
+                total: matchingUsers.length,
+              })}
+            </p>
+          ) : null}
         </div>
       </CardBody>
     </Card>
