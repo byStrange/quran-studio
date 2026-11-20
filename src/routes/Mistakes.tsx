@@ -145,8 +145,14 @@ export function Mistakes() {
       setParams({}, { replace: true });
     }
   }, [navigate, setParams]);
+  // The session is set a render before the router reflects the param, so only
+  // a param that was present and then went away (back button) ends a session.
+  const wasPractisingRef = useRef(false);
   useEffect(() => {
-    if (!practising && session) {
+    if (practising) {
+      wasPractisingRef.current = true;
+    } else if (wasPractisingRef.current) {
+      wasPractisingRef.current = false;
       pushedRef.current = false;
       setSession(null);
     }
